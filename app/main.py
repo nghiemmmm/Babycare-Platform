@@ -13,6 +13,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from app.modules.auth import auth_router
+from app.modules.baby import baby_router
+from app.modules.growth_tracking import growth_router
+from app.modules.vaccination import vaccination_router
+from app.modules.health_records import health_records_router
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="BabyCare AI Backend Services",
@@ -20,6 +26,14 @@ app = FastAPI(
     debug=settings.DEBUG,
     lifespan=lifespan,
 )
+
+app.include_router(auth_router, prefix="/api")
+app.include_router(baby_router, prefix="/api")
+app.include_router(growth_router, prefix="/api")
+app.include_router(vaccination_router, prefix="/api")
+app.include_router(health_records_router, prefix="/api")
+
+
 
 @app.get("/")
 async def root():
