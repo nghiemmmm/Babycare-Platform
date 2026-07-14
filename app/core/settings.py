@@ -1,0 +1,22 @@
+import os
+from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    APP_NAME: str = "BabyCare AI"
+    APP_ENV: str = "local"
+    DEBUG: bool = True
+    PORT: int = 8000
+    HOST: str = "0.0.0.0"
+
+    # Firebase Configuration
+    FIREBASE_CREDENTIALS_PATH: Optional[str] = None
+    FIREBASE_CREDENTIALS_JSON: Optional[str] = None
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
+
+settings = Settings()

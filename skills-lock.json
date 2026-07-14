@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "django-expert": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/django-expert/SKILL.md",
+      "computedHash": "f64e47ac397e308dde77144592cfc2fc2b60815c7ee653ef8bdc8cf860de3c27"
+    }
+  }
+}
