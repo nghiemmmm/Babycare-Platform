@@ -38,15 +38,6 @@ class BabyService:
         )
         created_baby = self.repository.create(baby_obj)
 
-        # Tự động sinh lịch tiêm chủng dự kiến cho bé
-        try:
-            from app.modules.vaccination.service import VaccinationService
-            vaccination_service = VaccinationService(baby_service=self)
-            vaccination_service.generate_default_schedule(created_baby.id, created_baby.birth_date)
-        except Exception as e:
-            logger.error(f"Failed to generate default vaccine schedule for baby {created_baby.id}: {e}")
-            raise e
-
         return created_baby
 
     def get_baby_by_id(self, baby_id: str, user_id: str) -> BabyResponse:

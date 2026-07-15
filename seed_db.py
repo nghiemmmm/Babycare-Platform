@@ -21,144 +21,8 @@ def seed_database():
         print(f"Error connecting to Firebase: {e}")
         return
 
-    # 1. Seed Master Vaccines Collection
-    print("\n[1/3] Seeding master 'vaccines' collection...")
-    vaccines = [
-        # Sơ sinh
-        {
-            "code": "BCG",
-            "name": "Vắc xin phòng bệnh Lao",
-            "disease": "Bệnh Lao",
-            "recommended_age_months": 0,
-            "description": "Tiêm trong vòng 24 giờ đầu sau sinh hoặc càng sớm càng tốt."
-        },
-        {
-            "code": "HepB-sosinhi",
-            "name": "Vắc xin Viêm gan B (sơ sinh)",
-            "disease": "Viêm gan B",
-            "recommended_age_months": 0,
-            "description": "Tiêm trong vòng 24 giờ đầu sau sinh."
-        },
-        # 2 tháng tuổi
-        {
-            "code": "DPT-HepB-Hib-1",
-            "name": "Vắc xin 5 trong 1 (Mũi 1)",
-            "disease": "Bạch hầu, Ho gà, Uốn ván, Viêm gan B, Viêm phổi/Viêm màng não mủ do Hib",
-            "recommended_age_months": 2,
-            "description": "Vắc xin phối hợp phòng 5 bệnh nguy hiểm ở trẻ nhỏ."
-        },
-        {
-            "code": "OPV-1",
-            "name": "Vắc xin Bại liệt đường uống (Lần 1)",
-            "disease": "Bệnh Bại liệt",
-            "recommended_age_months": 2,
-            "description": "Nhỏ 2 giọt vào miệng trẻ."
-        },
-        # 3 tháng tuổi
-        {
-            "code": "DPT-HepB-Hib-2",
-            "name": "Vắc xin 5 trong 1 (Mũi 2)",
-            "disease": "Bạch hầu, Ho gà, Uốn ván, Viêm gan B, Viêm phổi/Viêm màng não mủ do Hib",
-            "recommended_age_months": 3,
-            "description": "Mũi thứ hai nhắc lại."
-        },
-        {
-            "code": "OPV-2",
-            "name": "Vắc xin Bại liệt đường uống (Lần 2)",
-            "disease": "Bệnh Bại liệt",
-            "recommended_age_months": 3,
-            "description": "Nhỏ 2 giọt vào miệng trẻ."
-        },
-        # 4 tháng tuổi
-        {
-            "code": "DPT-HepB-Hib-3",
-            "name": "Vắc xin 5 trong 1 (Mũi 3)",
-            "disease": "Bạch hầu, Ho gà, Uốn ván, Viêm gan B, Viêm phổi/Viêm màng não mủ do Hib",
-            "recommended_age_months": 4,
-            "description": "Mũi thứ ba hoàn thành phác đồ cơ bản."
-        },
-        {
-            "code": "OPV-3",
-            "name": "Vắc xin Bại liệt đường uống (Lần 3)",
-            "disease": "Bệnh Bại liệt",
-            "recommended_age_months": 4,
-            "description": "Nhỏ 2 giọt vào miệng trẻ."
-        },
-        # 5 tháng tuổi
-        {
-            "code": "IPV-1",
-            "name": "Vắc xin Bại liệt dạng tiêm (Mũi 1)",
-            "disease": "Bệnh Bại liệt",
-            "recommended_age_months": 5,
-            "description": "Tiêm bắp đùi để củng cố miễn dịch bại liệt."
-        },
-        # 9 tháng tuổi
-        {
-            "code": "Measles-1",
-            "name": "Vắc xin Sởi đơn (Mũi 1)",
-            "disease": "Bệnh Sởi",
-            "recommended_age_months": 9,
-            "description": "Tiêm dưới da phòng bệnh Sởi đơn."
-        },
-        # 12 tháng tuổi
-        {
-            "code": "JEV-1",
-            "name": "Vắc xin Viêm não Nhật Bản (Mũi 1)",
-            "disease": "Bệnh Viêm não Nhật Bản",
-            "recommended_age_months": 12,
-            "description": "Mũi khởi đầu tiêm phòng viêm não."
-        },
-        {
-            "code": "JEV-2",
-            "name": "Vắc xin Viêm não Nhật Bản (Mũi 2)",
-            "disease": "Bệnh Viêm não Nhật Bản",
-            "recommended_age_months": 12.5,
-            "description": "Tiêm sau mũi 1 khoảng 1 đến 2 tuần."
-        },
-        # 18 tháng tuổi
-        {
-            "code": "DPT-4",
-            "name": "Vắc xin Bạch hầu - Ho gà - Uốn ván (Mũi 4)",
-            "disease": "Bạch hầu, Ho gà, Uốn ván",
-            "recommended_age_months": 18,
-            "description": "Tiêm nhắc lại phòng 3 bệnh truyền nhiễm."
-        },
-        {
-            "code": "MR-1",
-            "name": "Vắc xin Sởi - Rubella (Mũi nhắc)",
-            "disease": "Bệnh Sởi, Bệnh Rubella",
-            "recommended_age_months": 18,
-            "description": "Tiêm nhắc sởi và bổ sung phòng ngừa bệnh Rubella."
-        },
-        # 24 tháng tuổi
-        {
-            "code": "JEV-3",
-            "name": "Vắc xin Viêm não Nhật Bản (Mũi 3)",
-            "disease": "Bệnh Viêm não Nhật Bản",
-            "recommended_age_months": 24,
-            "description": "Tiêm nhắc lại sau mũi thứ 2 khoảng 1 năm."
-        }
-    ]
-
-    try:
-        batch = db.batch()
-        for v in vaccines:
-            doc_ref = db.collection("vaccines").document(v["code"])
-            batch.set(doc_ref, {
-                "name": v["name"],
-                "disease": v["disease"],
-                "recommended_age_months": v["recommended_age_months"],
-                "description": v["description"],
-                "created_at": datetime.now(timezone.utc).isoformat()
-            })
-        batch.commit()
-        print(f"-> Successfully seeded {len(vaccines)} vaccines.")
-    except Exception as e:
-        print(f"Error seeding vaccines: {e}")
-        return
-
-    # 2. Seed Healthcare Tips Collection
-    print("\n[2/3] Seeding master 'healthcare_tips' collection...")
+    # 1. Seed Healthcare Tips Collection
+    print("\n[1/2] Seeding master 'healthcare_tips' collection...")
     tips = [
         {
             "slug": "cho-con-bu-dung-tu-the",
@@ -204,8 +68,8 @@ def seed_database():
         print(f"Error seeding tips: {e}")
         return
 
-    # 3. Seed Alert Rules
-    print("\n[3/3] Seeding master 'alert_rules' collection...")
+    # 2. Seed Alert Rules
+    print("\n[2/2] Seeding master 'alert_rules' collection...")
     rules = [
         {
             "rule_code": "FEVER_ALERT",
@@ -220,10 +84,10 @@ def seed_database():
             "severity": "medium"
         },
         {
-            "rule_code": "SLEEP_DEPRIVATION_ALERT",
-            "name": "Cảnh báo Thiếu ngủ",
-            "condition": "daily_sleep_hours <= 10",
-            "severity": "low"
+            "rule_code": "ALLERGY_ALERT",
+            "name": "Cảnh báo Dị ứng Ăn dặm",
+            "condition": "reaction == 'allergic'",
+            "severity": "high"
         }
     ]
 

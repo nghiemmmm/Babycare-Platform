@@ -1,125 +1,79 @@
-# 🍼 BabyCare AI
+# 🍼 BabyCare AI - Tài liệu Hệ thống (System Documentation)
 
 ## Tổng quan
 
-BabyCare AI là nền tảng web ứng dụng AI hỗ trợ phụ huynh chăm sóc và
-theo dõi sức khỏe trẻ sơ sinh.
+BabyCare AI là nền tảng ứng dụng AI hỗ trợ phụ huynh chăm sóc, ghi nhận nhật ký và theo dõi sức khỏe trẻ sơ sinh theo cách cá nhân hóa.
 
-## Chức năng
+---
+
+## Danh sách Chức năng chính
 
 ### 1. Authentication & User Management
+* Đăng ký, đăng nhập tài khoản phụ huynh.
+* Đổi mật khẩu, khôi phục mật khẩu qua email.
+* JWT Authentication phục vụ bảo mật kết nối API.
+* Quản lý thông tin hồ sơ cá nhân của phụ huynh.
 
--   Đăng ký/Đăng nhập
--   JWT Authentication
--   Quản lý hồ sơ phụ huynh
--   Phân quyền
--   Đổi/Quên mật khẩu
+### 2. Baby Profile & Caregiver Sync
+* Quản lý thông tin cơ bản của bé: Họ tên, ngày sinh, giới tính, nhóm máu, tiền sử bệnh án, ghi chú y khoa.
+* Hỗ trợ quản lý đồng thời nhiều hồ sơ bé trong cùng một tài khoản.
+* **Caregiver Sync (Đồng bộ nhiều người chăm sóc):** Phân quyền và đồng bộ hóa thời gian thực (Real-time Sync) giữa các thành viên (Bố, Mẹ, Ông bà, Người giúp trẻ) cùng chăm sóc bé.
 
-### 2. Baby Profile
+### 3. Theo dõi Chiều cao & Cân nặng (Growth Tracking)
+* Ghi chép định kỳ: Chiều cao, cân nặng, vòng đầu của bé.
+* Vẽ biểu đồ tăng trưởng tự động.
+* So sánh trực quan chỉ số phát triển của bé với chuẩn chuẩn mực của Tổ chức Y tế Thế giới (WHO).
 
--   Họ tên
--   Ngày sinh
--   Tuổi
--   Chiều cao
--   Cân nặng
--   Nhóm máu
--   Nơi sinh
--   Tiền sử bệnh
--   Ghi chú y tế
--   Bác sĩ theo dõi
--   Quản lý nhiều hồ sơ bé
+### 4. Hồ sơ Sức khỏe & Triệu chứng (Symptom Tracking)
+* Ghi nhận diễn biến và triệu chứng sức khỏe hàng ngày của bé (ho, sốt, nôn trớ, phát ban...).
+* Lưu trữ lịch sử khám bệnh, bác sĩ điều trị và chẩn đoán y khoa.
 
-### 3. AI Chatbot (GraphRAG + LLM)
+### 5. Theo dõi sử dụng Thuốc (Medication Tracking)
+* Nhật ký dùng thuốc độc lập giúp ghi nhận chi tiết tên thuốc, liều lượng, giờ cho uống và người kê đơn.
+* Đánh giá hiệu quả đợt điều trị và giảm thiểu việc quên liều hoặc quá liều.
 
--   Hỏi đáp chăm sóc trẻ
--   Tư vấn dinh dưỡng
--   Hướng dẫn cho bú
--   Giấc ngủ
--   Chăm sóc hằng ngày
--   Giải thích dấu hiệu bất thường
--   Cá nhân hóa theo hồ sơ
--   Truy xuất tri thức y khoa
--   Không thay thế chẩn đoán bác sĩ
+### 6. Theo dõi & Đề xuất Dinh dưỡng Ăn dặm (Nutrition & Solid Food AI)
+* **Theo dõi ăn dặm:** Ghi nhận thực đơn ăn dặm, lượng ăn (gram) và phản ứng của bé (yêu thích, trớ, dị ứng...).
+* **AI Recommendation:** Đề xuất thực phẩm phù hợp, thực phẩm cần tránh dựa trên tuổi, cân nặng và chiều cao của bé.
 
-### 4. AI Cry Detection
+### 7. Phân tích Tiếng khóc & Vỗ về Tự động (AI Cry Detection & Sound Conditioning)
+* **Dự đoán nguyên nhân tiếng khóc:** Phân tích bản thu âm tiếng khóc trực tiếp kết hợp với dữ liệu ngữ cảnh (lịch sử bú, thời gian thức, tã bẩn) để tìm nguyên nhân (đói, mệt, đau đớn, khó chịu).
+* **AI Voice Mom (Mẹ ảo):** Sử dụng công nghệ nhân bản giọng nói để phát tiếng nói vỗ về ấm áp của mẹ khi bé khóc.
+* **Automated Sound Conditioning:** Tự động phát âm thanh thích hợp (Tiếng ồn trắng, Tiếng ồn hồng, Nhạc ru) để xoa dịu giúp bé tự ngủ lại.
+* Thu thập phản hồi độ chính xác từ phụ huynh để cải thiện mô hình AI.
 
--   Hungry
--   Burping
--   Belly Pain
--   Discomfort
--   Tired
--   Lonely
--   Cold/Hot
--   Scared
--   Unknown
+### 8. AI Chatbot (GraphRAG + LLM)
+* Chatbot tư vấn giải đáp nhanh các thắc mắc thường gặp của phụ huynh về giấc ngủ, dinh dưỡng, cách cho bú, và xử trí các dấu hiệu bất thường.
+* Sử dụng công nghệ **GraphRAG** để truy xuất thông tin chính xác từ cơ sở tri thức y khoa uy tín.
+* Cá nhân hóa câu trả lời dựa trên hồ sơ sức khỏe thực tế của bé.
 
-### 5. Vaccination Management
+### 9. Hệ thống Nhắc nhở & Thông báo (Reminder & Notification)
+* Gửi thông báo nhắc lịch khám bệnh định kỳ.
+* Cảnh báo sức khỏe sớm từ AI (cảnh báo sốt cao kéo dài, ngủ bất thường, hoặc sụt giảm lượng bú đột ngột).
 
--   Tự động tạo lịch tiêm
--   Theo dõi đã/chưa tiêm
--   Lịch sử tiêm chủng
+### 10. Cơ sở Tri thức Y khoa (Medical Knowledge Base)
+* Lưu trữ và tra cứu các bài viết y khoa được kiểm duyệt về cách chăm sóc trẻ sơ sinh.
+* Làm nguồn dữ liệu nền tảng cho hệ thống GraphRAG.
 
-### 6. Reminder & Notification
+### 11. Quản lý Dữ liệu Huấn luyện AI (Dataset Management)
+* Quản lý bộ dữ liệu âm thanh tiếng khóc (ví dụ: Donate-a-Cry Corpus) dùng để huấn luyện và kiểm thử mô hình dự đoán.
 
--   Nhắc tiêm chủng
--   Nhắc tái khám
--   Nhắc vitamin
--   Cảnh báo sốt cao
--   Cảnh báo bỏ bú
--   Cảnh báo ngủ bất thường
+---
 
-### 7. Nutrition Recommendation AI
+## Kiến trúc Chức năng (System Architecture Tree)
 
--   Lịch bú
--   Ăn dặm
--   Thực phẩm phù hợp
--   Thực phẩm cần tránh
--   Cá nhân hóa theo tuổi, cân nặng, chiều cao
-
-### 8. Google Calendar Integration
-
--   Đồng bộ lịch
--   Tiêm chủng
--   Tái khám
--   Theo dõi sức khỏe
--   Nhắc lịch
-
-### 9. Medical Knowledge Base
-
--   Tài liệu y khoa
--   GraphRAG Knowledge Base
--   Hồ sơ sức khỏe
-
-### 10. Notification System
-
--   Thông báo lịch tiêm
--   Thông báo lịch khám
--   Nhắc vitamin
--   Cảnh báo sức khỏe
-
-### 11. AI Personalization Engine
-
--   Cá nhân hóa theo hồ sơ sức khỏe
--   Dùng cho Chatbot, Dinh dưỡng, Nhắc lịch và Cảnh báo
-
-### 12. Dataset Management
-
--   Donate-a-Cry Corpus
-
-## Kiến trúc chức năng
-
-``` text
+```text
 BabyCare AI
 ├── Authentication & User Management
-├── Baby Profile
+├── Baby Profile & Caregiver Sync
+├── Growth Tracking
+├── Symptom Tracking (Health Records)
+├── Medication Tracking
+├── Nutrition & Solid Food AI
+├── AI Cry Detection & Sound Conditioning
 ├── AI Chatbot (GraphRAG + LLM)
-├── AI Cry Detection
-├── Vaccination Management
-├── Reminder & Notification
-├── Nutrition Recommendation AI
-├── Google Calendar Integration
+├── Reminder & Notification System
 ├── Medical Knowledge Base
-├── Notification System
-├── AI Personalization Engine
 └── Dataset Management
 ```
+
