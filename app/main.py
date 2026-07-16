@@ -18,6 +18,7 @@ from app.modules.health_records import health_records_router
 from app.modules.medication import medication_router
 from app.modules.nutrition import nutrition_router
 from app.modules.cry import cry_router
+from app.modules.ai_agent import ai_agent_router
 
 # Configure logging
 def setup_logging():
@@ -63,6 +64,7 @@ api_router.include_router(health_records_router)
 api_router.include_router(medication_router)
 api_router.include_router(nutrition_router)
 api_router.include_router(cry_router)
+api_router.include_router(ai_agent_router)
 
 app.include_router(api_router, prefix="/api")
 

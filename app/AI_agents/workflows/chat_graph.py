@@ -1,0 +1,87 @@
+from langgraph.graph import StateGraph, START, END
+from app.AI_agents.orchestrator.state_manager import OverallState
+from app.AI_agents.core.reasoner import AIReasoner
+from app.AI_agents.memory.memory_manager import MemoryManager
+from app.modules.baby.service import BabyService
+from app.modules.growth_tracking.service import GrowthTrackingService
+from langchain_core.messages import AIMessage
+
+SYSTEM_PROMPT_TEMPLATE = """
+You are a highly experienced and professional pediatric assistant named "BabyCare AI".
+Your goal is to provide warm, scientific, and empathetic parenting advice to the parent.
+
+Baby context for this conversation:
+- Name: {baby_name}
+- Gender: {baby_gender}
+- Age: {baby_age} months
+- Birth Date: {baby_birth_date}
+- Latest Growth: {growth_info}
+
+Guidelines:
+1. Always address the parent warmly and refer to the baby by name: {baby_name}.
+2. Provide scientific information but write in an easy-to-understand tone.
+3. Remind the parent to consult a medical professional for severe conditions.
+"""
+
+class ChatGraph:
+    def __init__(self):
+        self.reasoner = AIReasoner(model_name="gemini-2.5-flash")
+        self.baby_service = BabyService()
+        self.growth_service = GrowthTrackingService(self.baby_service)
+        self.memory_manager = MemoryManager()
+
+    async def chat_node(self, state: OverallState) -> dict:
+        baby_id = state.get("baby_id")
+        user_id = state.get("current_user_id")
+        
+        baby_name = "Bé"
+        baby_gender = "chưa rõ"
+        baby_age = "chưa rõ"
+        baby_birth_date = "chưa rõ"
+        growth_info = "chưa có dữ liệu"
+
+        if baby_id and user_id:
+            try:
+                baby = self.baby_service.get_baby_by_id(baby_id, user_id)
+                baby_name = baby.name
+                baby_gender = baby.gender
+                baby_birth_date = baby.birth_date
+                
+                from datetime import date
+                birth = date.fromisoformat(baby.birth_date[:10])
+                today = date.today()
+                age_months = (today.year - birth.year) * 12 + today.month - birth.month
+                baby_age = str(age_months)
+                
+                history = self.growth_service.get_growth_history(baby_id, user_id)
+                if history:
+                    latest = history[0]
+                    growth_info = f"Chiều cao: {latest.height}cm, Cân nặng: {latest.weight}kg vào ngày {latest.logged_at[:10]}"
+            except Exception:
+                pass
+
+        system_instruction = SYSTEM_PROMPT_TEMPLATE.format(
+            baby_name=baby_name,
+            baby_gender=baby_gender,
+            baby_age=baby_age,
+            baby_birth_date=baby_birth_date,
+            growth_info=growth_info
+        )
+
+        user_message = state["messages"][-1].content
+        # Prune message history to stay within context window limits
+        pruned_messages = self.memory_manager.prune_messages(state["messages"], limit=15)
+        try:
+            response_content = await self.reasoner.areason(prompt=user_message, system_instruction=system_instruction)
+        except Exception as e:
+            response_content = f"Xin lỗi, tôi gặp lỗi kết nối với máy chủ AI: {str(e)}"
+
+        return {"messages": [AIMessage(content=response_content)]}
+
+    def compile(self, checkpointer=None):
+        """Compile the chat subgraph flow."""
+        builder = StateGraph(OverallState)
+        builder.add_node("chat_node", self.chat_node)
+        builder.add_edge(START, "chat_node")
+        builder.add_edge("chat_node", END)
+        return builder.compile(checkpointer=checkpointer)
