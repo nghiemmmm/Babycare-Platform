@@ -1,0 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Outfit', sans-serif;
+  --color-primary: #1c648e;
+  --color-accent-blue: #7cb9e8;
+  --color-accent-purple: #b19cd9;
+  --color-accent-gold: #fdfd96;
+  --color-accent-green: #b2e2f2;
+}
+
+/* Thiết lập font chữ đồng bộ cho toàn bộ giao diện */
+html, body, button, input, select, textarea {
+  font-family: 'Outfit', sans-serif;
+}

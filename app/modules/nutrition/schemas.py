@@ -18,3 +18,42 @@ class SolidFoodLogCreate(SolidFoodLogBase):
 
 class SolidFoodLogResponse(SolidFoodLogBase):
     id: Optional[str] = None
+
+
+# Schemas mới khớp giao diện Frontend
+class FeedCreate(BaseModel):
+    baby_id: str
+    type: str
+    details: str
+    amount: float
+    time: str
+
+class FeedResponse(BaseModel):
+    id: str
+    type: str
+    details: str
+    amount: float
+    time: str
+
+class FeedCreateResponse(BaseModel):
+    success: bool
+    feed_id: str
+
+class IngredientCreate(BaseModel):
+    baby_id: str
+    name: str
+    reaction: str
+
+class IngredientResponse(BaseModel):
+    id: str
+    name: str
+    reaction: str
+    date: str
+
+class IngredientCreateResponse(BaseModel):
+    success: bool
+    ingredient_log_id: str
+
+class SuccessResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None

@@ -3,7 +3,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from app.core.config import settings
 
 class AIReasoner:
-    def __init__(self, model_name: str = "gemini-1.5-flash", temperature: float = 0.0):
+    def __init__(self, model_name: str = "gemini-flash-latest", temperature: float = 0.0):
         self.model = ChatGoogleGenerativeAI(
             model=model_name,
             google_api_key=settings.GEMINI_API_KEY,
@@ -18,7 +18,10 @@ class AIReasoner:
         messages.append(HumanMessage(content=prompt))
         
         response = self.model.invoke(messages)
-        return response.content
+        content = response.content
+        if isinstance(content, list):
+            return "".join([block.get("text", "") if isinstance(block, dict) else str(block) for block in content])
+        return str(content)
 
     async def areason(self, prompt: str, system_instruction: str = None) -> str:
         """Asynchronously reason using the model."""
@@ -28,4 +31,7 @@ class AIReasoner:
         messages.append(HumanMessage(content=prompt))
         
         response = await self.model.ainvoke(messages)
-        return response.content
+        content = response.content
+        if isinstance(content, list):
+            return "".join([block.get("text", "") if isinstance(block, dict) else str(block) for block in content])
+        return str(content)

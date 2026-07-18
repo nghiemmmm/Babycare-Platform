@@ -10,6 +10,8 @@ class BabyBase(BaseModel):
     name: str
     birth_date: str  # Định dạng YYYY-MM-DD
     gender: str = "unknown"  # boy, girl, unknown
+    avatar_url: Optional[str] = None
+    is_active: bool = True
 
 
 class BabyCreate(BabyBase):
@@ -20,6 +22,8 @@ class BabyUpdate(BaseModel):
     name: Optional[str] = None
     birth_date: Optional[str] = None
     gender: Optional[str] = None
+    avatar_url: Optional[str] = None
+    is_active: Optional[bool] = None
     guardians: Optional[list[str]] = None
 
 

@@ -1,0 +1,6 @@
+{
+  "name": "BabyCare AI",
+  "description": "Interactive WHO Growth Tracker, Pediatric Health Dashboard, and AI Parenting Assistant powered by Gemini Flash.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

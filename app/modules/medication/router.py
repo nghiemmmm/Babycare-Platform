@@ -45,3 +45,108 @@ async def delete_medication_log(
     """
     med_service.delete_medication_log(baby_id, log_id, user_id=current_user.uid)
     return Message(message="Xóa nhật ký dùng thuốc thành công")
+
+
+# Router mới cho Sức khoẻ & Thuốc theo giao diện Frontend
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime, timedelta, timezone
+
+health_medication_router = APIRouter(prefix="/health", tags=["Health & Medication"])
+
+from app.modules.medication.schemas import (
+    SafetyAlert,
+    CountdownWidget,
+    HealthDashboardResponse,
+    AdministerMedicationRequest,
+    AdministerMedicationResponse
+)
+
+@health_medication_router.get("/dashboard", response_model=HealthDashboardResponse)
+async def get_health_dashboard(
+    baby_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Lấy trạng thái cảnh báo an toàn thuốc và đếm ngược liều dùng tiếp theo.
+    """
+    history = med_service.get_medication_history(baby_id, user_id=current_user.uid)
+    
+    # Tìm liều Paracetamol gần nhất
+    paracetamol_logs = [log for log in history if "paracetamol" in log.medication_name.lower() or "hapacol" in log.medication_name.lower()]
+    
+    if not paracetamol_logs:
+        # Mặc định bình thường nếu chưa uống thuốc gì
+        return HealthDashboardResponse(
+            safety_alert=SafetyAlert(level="NORMAL", message="Không có cảnh báo đặc biệt về thuốc. Hãy cho bé uống đúng theo hướng dẫn."),
+            countdown_widget=None
+        )
+        
+    last_log = paracetamol_logs[0]
+    try:
+        last_time = datetime.fromisoformat(last_log.logged_at.replace("Z", "+00:00"))
+    except Exception:
+        last_time = datetime.now(timezone.utc)
+        
+    next_eligible = last_time + timedelta(hours=4)
+    now = datetime.now(timezone.utc)
+    
+    is_disabled = now < next_eligible
+    
+    # Định dạng hiển thị giờ địa phương
+    last_time_str = last_time.astimezone().strftime("%I:%M %p")
+    next_eligible_str = next_eligible.isoformat()
+    
+    if is_disabled:
+        alert = SafetyAlert(
+            level="CRITICAL",
+            message=f"{last_log.medication_name} uống lúc {last_time_str}. Tuyệt đối không cho uống thêm trước {next_eligible.astimezone().strftime('%I:%M %p')}!"
+        )
+    else:
+        alert = SafetyAlert(
+            level="NORMAL",
+            message=f"Đã đủ 4 tiếng kể từ liều {last_log.medication_name} gần nhất. Bạn có thể cho uống liều tiếp theo nếu bé sốt lại."
+        )
+        
+    return HealthDashboardResponse(
+        safety_alert=alert,
+        countdown_widget=CountdownWidget(
+            medication_name=last_log.medication_name,
+            next_eligible_time=next_eligible_str,
+            is_administer_disabled=is_disabled
+        )
+    )
+
+@health_medication_router.post("/medications/administer", response_model=AdministerMedicationResponse)
+async def administer_medication(
+    req: AdministerMedicationRequest,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Ghi nhận lịch sử cho bé uống thuốc thực tế và trả về đếm ngược.
+    """
+    log_in = MedicationLogCreate(
+        logged_at=req.administered_at,
+        medication_name=req.medication_name,
+        dosage=req.amount,
+        prescribed_by="Bác sĩ Nhi kê đơn",
+        notes="Ghi nhận qua giao diện an toàn sức khỏe"
+    )
+    
+    med_service.add_medication_log(req.baby_id, log_in, user_id=current_user.uid)
+    
+    try:
+        admin_time = datetime.fromisoformat(req.administered_at.replace("Z", "+00:00"))
+    except Exception:
+        admin_time = datetime.now(timezone.utc)
+        
+    next_dose = admin_time + timedelta(hours=4)
+    now = datetime.now(timezone.utc)
+    
+    countdown = max(0, int((next_dose - now).total_seconds()))
+    
+    return AdministerMedicationResponse(
+        success=True,
+        next_scheduled_dosage=next_dose.isoformat(),
+        countdown_seconds=countdown
+    )

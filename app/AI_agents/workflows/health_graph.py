@@ -12,6 +12,9 @@ Bạn là trợ lý nhi khoa chuyên về theo dõi sức khỏe bé. Nhiệm v�
 3. Cảnh báo rõ ràng khi nào cần đưa bé đến gặp bác sĩ.
 4. Kiểm tra tính an toàn của thuốc nếu được hỏi.
 
+RÀNG BUỘC QUAN TRỌNG: Chỉ trả lời dựa trên thông tin y khoa được cung cấp trong phần "Tài liệu y khoa tham chiếu". 
+Nếu tài liệu y khoa không có thông tin hoặc không liên quan đến câu hỏi, hãy nói rõ: "Tôi không tìm thấy thông tin này trong tài liệu y tế chính thức, tuy nhiên bạn có thể tham khảo ý kiến bác sĩ nhi khoa..." và không tự ý đưa ra các hướng dẫn điều trị chi tiết không có trong tài liệu.
+
 Luôn ưu tiên sự an toàn của bé. Không chẩn đoán bệnh, chỉ tư vấn và hướng dẫn.
 """
 
@@ -24,7 +27,7 @@ class HealthGraph:
     - Cảnh báo khi cần gặp bác sĩ
     """
     def __init__(self):
-        self.reasoner = AIReasoner(model_name="gemini-2.5-flash")
+        self.reasoner = AIReasoner(model_name="gemini-flash-latest")
         self.health_tool = HealthRecordsTool()
         self._retriever = None  # lazy init to avoid embedding API call on startup
 

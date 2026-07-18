@@ -1,6 +1,9 @@
 import logging
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, APIRouter
+from fastapi.staticfiles import StaticFiles
+import os
+
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from google.cloud.firestore import Client
@@ -13,10 +16,15 @@ from app.infrastructure.database import get_firestore_db
 
 from app.modules.auth import auth_router
 from app.modules.baby import baby_router
+from app.modules.guardian import guardian_router
+from app.modules.dashboard import dashboard_router
 from app.modules.growth_tracking import growth_router
+from app.modules.growth_tracking.router import measurements_router
 from app.modules.health_records import health_records_router
 from app.modules.medication import medication_router
+from app.modules.medication.router import health_medication_router
 from app.modules.nutrition import nutrition_router
+from app.modules.nutrition.router import feeds_router
 from app.modules.cry import cry_router
 from app.modules.ai_agent import ai_agent_router
 
@@ -41,6 +49,10 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
+# Serve static files (baby photos, assets)
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 # Register Middlewares
 app.add_middleware(
     CORSMiddleware,
@@ -59,14 +71,19 @@ app.add_middleware(RequestLoggingMiddleware)
 api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(baby_router)
+api_router.include_router(guardian_router)
+api_router.include_router(dashboard_router)
 api_router.include_router(growth_router)
+api_router.include_router(measurements_router)
 api_router.include_router(health_records_router)
 api_router.include_router(medication_router)
+api_router.include_router(health_medication_router)
 api_router.include_router(nutrition_router)
+api_router.include_router(feeds_router)
 api_router.include_router(cry_router)
 api_router.include_router(ai_agent_router)
 
-app.include_router(api_router, prefix="/api")
+app.include_router(api_router, prefix="/api/v1")
 
 # Initialize custom exception handlers
 exception_handler.init_app(app)

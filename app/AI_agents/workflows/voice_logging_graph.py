@@ -33,7 +33,7 @@ Do not return any other text besides the JSON.
 
 class VoiceLoggingGraph:
     def __init__(self):
-        self.reasoner = AIReasoner(model_name="gemini-2.5-flash")
+        self.reasoner = AIReasoner(model_name="gemini-flash-latest")
         self.nutrition_tool = NutritionTrackingTool()
         self.health_tool = HealthRecordsTool()
         self.growth_tool = GrowthTrackingTool()

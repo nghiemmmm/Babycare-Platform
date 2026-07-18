@@ -1,123 +1,135 @@
-# 🍼 BabyCare AI - Backend Services
+# 🍼 BabyCare AI - Nền Tảng Chăm Sóc Trẻ Sơ Sinh Thông Minh
 
-BabyCare AI là nền tảng API Backend được xây dựng bằng **FastAPI (Python)** kết hợp với **Google Cloud Firestore (NoSQL)** và tích hợp Trí tuệ nhân tạo (AI) giúp phụ huynh chăm sóc, ghi nhận nhật ký và theo dõi sức khỏe trẻ sơ sinh một cách cá nhân hóa và thông minh.
+BabyCare AI là một nền tảng ứng dụng toàn diện (Full-Stack) được thiết kế nhằm giúp cha mẹ dễ dàng ghi chép nhật ký, theo dõi sức khỏe và nhận diện tiếng khóc của trẻ sơ sinh bằng trí tuệ nhân tạo (AI). 
 
----
-
-## 🚀 Các Tính Năng Chính
-
-* **Phân quyền & Đồng bộ (Caregiver Sync):** Phân quyền quản lý giữa nhiều người chăm sóc (Bố, Mẹ, Ông bà, Người giữ trẻ) trên cùng một hồ sơ bé theo thời gian thực.
-* **Theo dõi Phát triển (Growth Tracking):** Ghi nhận chiều cao, cân nặng, vòng đầu và đối chiếu trực quan với các chỉ số tiêu chuẩn của Tổ chức Y tế Thế giới (WHO).
-* **Nhật ký dùng thuốc (Medication Tracking):** Quản lý lịch trình, liều lượng uống thuốc và vitamin của bé nhằm tránh việc quên liều hoặc uống lặp.
-* **Nhật ký Ăn dặm (Solid Food Tracking):** Ghi chép thực đơn ăn dặm, lượng ăn (gram) và phản ứng của bé (yêu thích, trớ, dị ứng...).
-* **AI Cry Detection & Sound Conditioning:** Nhận diện và chẩn đoán nguyên nhân tiếng khóc của bé, tự động phát âm thanh xoa dịu (White Noise, Nhạc ru) và clone giọng mẹ ảo vỗ về bé.
-* **AI Chatbot (GraphRAG):** Trợ lý ảo hỗ trợ trả lời các câu hỏi chăm sóc trẻ dựa trên cơ sở tri thức y khoa đã được xác thực.
+Dự án tích hợp đầy đủ giao diện người dùng **React (TypeScript)** mượt mà, máy chủ trung gian **Node.js Express Proxy**, và API dịch vụ **FastAPI (Python)** kết nối trực tiếp với **Google Cloud Firestore**.
 
 ---
 
-## 🛠️ Công Nghệ Sử Dụng
+## 🚀 Các Tính Năng Bản Địa Hóa & Nổi Bật Hiện Tại
 
-* **Ngôn ngữ:** Python 3.11+
-* **Framework:** FastAPI (Cơ chế Asynchronous, Pydantic v2 cho validation)
-* **Database:** Google Cloud Firestore (NoSQL Document Database)
-* **Môi trường & Package Manager:** `uv` (Công cụ quản lý môi trường ảo và thư viện siêu tốc bằng Rust)
-* **Kiểm thử:** Pytest (Unit Testing & Mocks)
-* **Containerization:** Docker & Docker Compose
+* **Giao Diện Tiếng Việt Toàn Diện (UI Localization):** 100% các trang và nhãn chức năng (Dashboard, Dinh dưỡng, Tăng trưởng, Sức khỏe, Phòng chat AI, Hồ sơ) đã được Việt hóa chỉn chu, có tính thẩm mỹ và thân thiện với người dùng Việt.
+* **Lưu Trữ Ảnh Em Bé Cục Bộ (Local Static Assets):** Không còn tải ảnh đại diện từ các liên kết Unsplash bên ngoài. Ảnh đại diện của bé Leo và bé Bo được tạo trực tiếp bằng AI và phục vụ trực tiếp thông qua thư mục tĩnh cục bộ [app/static/img](file:///d:/ViT/BABYCARE/babycare-ai/app/static/img).
+* **Phân Tích Bách Phân Vị WHO Chuẩn:** Tự động tính toán bách phân vị về cân nặng, chiều cao và vòng đầu của trẻ theo biểu đồ tăng trưởng tiêu chuẩn thế giới của WHO.
+* **Cảnh Báo An Toàn Dùng Thuốc (Paracetamol Safety):** Cơ chế khóa nút và đếm ngược thời gian an toàn tự động (tối thiểu cách nhau 4 tiếng cho mỗi liều Paracetamol/Hapacol) để bảo vệ sức khỏe và lá gan của trẻ nhỏ.
+* **AI Chatbot & Phục Hồi Lịch Sử Trò Chuyện:** Trợ lý ảo tư vấn nhi khoa sử dụng Gemini Flash và đồ thị LangGraph orchestrator. Tin nhắn trò chuyện được tự động đồng bộ và nạp lại trực tiếp từ Firestore Checkpointer của LangGraph khi chuyển đổi phiên chat.
+* **Trích Xuất Nhật Ký Thông Minh (Smart Log Extraction):** Chatbot AI tự động nhận biết thông tin ăn uống (ví dụ: *"Bé uống 180ml sữa công thức lúc 10:30 SA"*) để xuất ra thẻ lưu nhanh giúp cha mẹ rảnh tay hơn.
+* **Bấm Giờ Giấc Ngủ (Sleep Timer):** Đo lường chi tiết giờ giấc ngủ của bé và lưu trữ nhật ký tự động.
 
 ---
 
-## 📁 Cấu Trúc Mã Nguồn (Modular Monolith)
-
-Dự án áp dụng cấu trúc Domain-Driven/Modular sạch sẽ, tách biệt rõ ràng các lớp trách nhiệm (Router - Service - Repository - Schema):
+## 📁 Cấu Trúc Mã Nguồn Workspace
 
 ```text
 babycare-ai/
-├── app/
-│   ├── core/                  # Cấu hình hệ thống, middleware, exception handler, cấu hình bảo mật
-│   ├── infrastructure/        # Khởi tạo kết nối database Firestore, email, storage
-│   ├── modules/               # Các mô-đun nghiệp vụ độc lập (CRUD)
-│   │   ├── auth/              # Đăng ký, đăng nhập và phân quyền JWT
-│   │   ├── baby/              # Quản lý hồ sơ bé và người giám hộ
-│   │   ├── growth_tracking/   # Nhật ký chiều cao, cân nặng
-│   │   ├── health_records/    # Nhật ký triệu chứng & hồ sơ bệnh án
-│   │   ├── medication/        # Nhật ký sử dụng thuốc
-│   │   ├── nutrition/         # Nhật ký ăn dặm & đề xuất dinh dưỡng
-│   │   └── cry/               # Nhật ký ghi nhận tiếng khóc của bé
-│   ├── ai/                    # Chứa mô hình phân loại tiếng khóc, dỗ bé tự động (Sound Conditioning)
-│   ├── rag/                   # Hệ thống Chatbot thông minh (GraphRAG + LLM)
-│   ├── shared/                # Các lớp Base Repository và Utilities dùng chung
-│   └── main.py                # Điểm khởi chạy FastAPI Application
-├── docker/                    # Dockerfile và tệp Docker Compose cấu hình chạy môi trường ảo
-├── tests/                     # Unit test phân tách theo unit/ và integration/
-├── seed_db.py                 # Script nạp dữ liệu mẫu khởi tạo (healthcare tips, alert rules)
-├── test_db.py                 # Script kiểm tra nhanh kết nối Firebase Firestore
-├── pyproject.toml             # Cấu hình dự án & linter
-└── requirements.txt           # Danh sách các thư viện phụ thuộc của dự án
+├── app/                        # 🐍 BACKEND LAYER (FastAPI)
+│   ├── core/                   # Cấu hình hệ thống, middleware, exception handler
+│   ├── infrastructure/         # Khởi tạo kết nối Firestore database
+│   ├── modules/                # Các mô-đun nghiệp vụ độc lập
+│   │   ├── auth/               # Đăng nhập giả lập & xác thực người dùng
+│   │   ├── baby/               # Quản lý hồ sơ bé và người giám hộ
+│   │   ├── growth_tracking/    # Nhật ký số đo chiều cao, cân nặng & bách phân vị WHO
+│   │   ├── health_records/     # Nhật ký triệu chứng & hồ sơ bệnh án
+│   │   ├── medication/         # Nhật ký và bộ kiểm soát an toàn dùng thuốc
+│   │   ├── nutrition/          # Ghi nhận cữ bú sữa, ăn dặm & nguyên liệu dị ứng
+│   │   └── cry/                # Phân tích âm thanh tiếng khóc của trẻ
+│   ├── static/                 # Phục vụ file tĩnh (chứa ảnh avatar em bé cục bộ)
+│   │   └── img/                # Thư mục lưu trữ leo.png và bo.png
+│   └── main.py                 # Điểm khởi chạy FastAPI chính (Mounter StaticFiles)
+│
+├── frontend/                   # ⚛️ FRONTEND LAYER (React + Vite + TypeScript)
+│   ├── src/
+│   │   ├── components/         # Các View giao diện đã Việt hóa (DashboardView, GrowthView, NutritionView...)
+│   │   ├── App.tsx             # Hợp nhất định tuyến, giao diện chính và nạp dữ liệu từ backend
+│   │   ├── data.ts             # Bộ mock dữ liệu khởi tạo bằng tiếng Việt và ảnh tĩnh cục bộ
+│   │   └── types.ts            # Định nghĩa các kiểu dữ liệu dùng trong dự án
+│   ├── server.ts               # Máy chủ Express Proxy trung gian (cổng 3000), định tuyến /api và /static
+│   ├── vite.config.ts          # Cấu hình xây dựng Vite
+│   └── package.json            # Thư viện phụ thuộc của React và các lệnh script chạy dev
+│
+├── scripts/                    # 🧪 KỊCH BẢN KIỂM THỬ VÀ ĐỒNG BỘ API
+│   ├── seed_demo_data.py       # Nạp cơ sở dữ liệu mẫu tiếng Việt vào Firestore cho bé Leo
+│   ├── update_db_avatar.py     # Cập nhật đường dẫn avatar của em bé trong Firestore sang ảnh tĩnh cục bộ
+│   ├── test_baby_api.py        # Kiểm thử các API tạo, đọc, sửa, xóa hồ sơ em bé
+│   ├── test_dashboard_api.py   # Kiểm thử API tổng hợp dữ liệu màn hình Dashboard chính
+│   ├── test_health_api.py      # Kiểm thử quy tắc cảnh báo nguy cấp 4 tiếng dùng thuốc
+│   ├── test_logs_api.py        # Kiểm thử API lưu triệu chứng bệnh án & bệnh trạng nhật ký
+│   ├── test_nutrition_api.py   # Kiểm thử API cữ ăn sữa, ăn dặm & thử dị ứng nguyên liệu
+│   └── test_ai_chat_api.py     # Kiểm thử luồng chat AI LangGraph & trích xuất log tự động
 ```
 
 ---
 
 ## 💻 Hướng Dẫn Cài Đặt & Khởi Chạy
 
-### 1. Chuẩn Bị Môi Trường
-1. Nhân bản dự án về máy:
+### 1. Chuẩn Bị Môi Trường Backend & Nạp Dữ Liệu
+1. Tạo môi trường ảo Python và kích hoạt:
    ```bash
-   git clone <repository_url>
-   cd babycare-ai
+   python -m venv venv
+   # Kích hoạt trên Windows PowerShell:
+   .\venv\Scripts\activate
    ```
-2. Tạo tệp cấu hình môi trường `.env` từ tệp mẫu:
-   * Copy tệp `.env.example` thành `.env`
-   * Điền đường dẫn tới tệp chứng thực Firebase Service Account (`FIREBASE_CREDENTIALS_PATH`) của bạn.
+2. Cài đặt các thư viện phụ thuộc:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Tạo tệp `.env` ở thư mục gốc và điền mã khóa API Gemini của bạn để sử dụng chatbot:
+   ```env
+   GEMINI_API_KEY=AIzaSy...
+   ```
+4. Khởi chạy máy chủ Backend (FastAPI):
+   ```bash
+   fastapi dev app/main.py
+   ```
+   *Backend sẽ chạy tại: `http://localhost:8000`*
 
-### 2. Thiết Lập Môi Trường Ảo Bằng `uv` (Khuyên dùng)
-Dự án được tối ưu hóa để chạy bằng `uv` (nhanh gấp nhiều lần pip thông thường):
-```powershell
-# Tạo môi trường ảo
-uv venv
+5. Nạp dữ liệu mẫu Tiếng Việt ban đầu & Cập nhật ảnh đại diện em bé:
+   ```bash
+   # Nạp dữ liệu cữ ăn, số đo và thuốc mẫu
+   python scripts/seed_demo_data.py
+   # Cập nhật liên kết avatar Firestore sang thư mục tĩnh cục bộ
+   python scripts/update_db_avatar.py
+   ```
 
-# Kích hoạt môi trường ảo (Windows PowerShell)
-.venv\Scripts\activate
+### 2. Chuẩn Bị Môi Trường Frontend & Khởi Chạy
+1. Di chuyển vào thư mục frontend:
+   ```bash
+   cd frontend
+   ```
+2. Cài đặt các gói phụ thuộc bằng npm hoặc yarn:
+   ```bash
+   npm install
+   ```
+3. Khởi chạy máy chủ phát triển Frontend (Node.js Express Proxy):
+   ```bash
+   npm run dev
+   ```
+   *Express Proxy và giao diện React sẽ chạy tại: `http://localhost:3000`*
 
-# Cài đặt toàn bộ dependencies từ requirements.txt
-uv pip install -r requirements.txt
-```
-
-### 3. Nạp Dữ Liệu Mẫu (Database Seeding)
-Chạy script để nạp các thông tin cấu hình luật cảnh báo (`alert_rules`) và mẹo y tế (`healthcare_tips`) vào Firestore:
-```bash
-python seed_db.py
-```
-
-### 4. Khởi Chạy API Server
-* **Bằng PowerShell script tiện ích:**
-  ```powershell
-  .\dev.ps1
-  ```
-* **Hoặc bằng lệnh trực tiếp:**
-  ```bash
-  fastapi dev app/main.py
-  ```
-Server sẽ chạy ở địa chỉ `http://localhost:8000`. 
-Truy cập tài liệu API tự động tại: `http://localhost:8000/api/docs` (Swagger UI).
-
----
-
-## 🧪 Chạy Kiểm Thử (Testing)
-
-Dự án tích hợp sẵn `pytest` để chạy các unit test kiểm tra chất lượng code và validation của các Pydantic Schemas/Repositories:
-```bash
-pytest
-```
-Để kiểm tra độ bao phủ hoặc xuất báo cáo chi tiết:
-```bash
-pytest -v
-```
+Bây giờ, bạn có thể truy cập thẳng vào `http://localhost:3000` trên trình duyệt để trải nghiệm toàn bộ nền tảng chăm sóc em bé bằng Tiếng Việt cực kỳ mượt mà!
 
 ---
 
-## 🐳 Khởi Chạy Bằng Docker
-Nếu bạn muốn chạy toàn bộ ứng dụng trong Docker container:
+## 🧪 Cách Chạy Các Tập Lệnh Kiểm Chứng API Cục Bộ
+
+Để chạy thử nghiệm và kiểm chứng độc lập tính chính xác của các API kết nối Firestore của hệ thống (trong khi server Backend vẫn đang chạy), bạn có thể chạy các tập lệnh Python sau:
+
 ```bash
-docker-compose -f docker/docker-compose.yml up --build
+# Kiểm tra API Hồ sơ em bé:
+python scripts/test_baby_api.py
+
+# Kiểm tra API Trang chủ (Dashboard):
+python scripts/test_dashboard_api.py
+
+# Kiểm tra logic An toàn dùng thuốc (Health Safety):
+python scripts/test_health_api.py
+
+# Kiểm tra nhật ký Nhật ký bệnh án (Diary/Logs):
+python scripts/test_logs_api.py
+
+# Kiểm tra cữ ăn uống & dị ứng nguyên liệu (Nutrition):
+python scripts/test_nutrition_api.py
+
+# Kiểm tra chatbot LangGraph & trích xuất log (AI Agent):
+python scripts/test_ai_chat_api.py
 ```
-Ứng dụng sẽ tự động tải các dependencies và khởi chạy ở cổng `8000`.

@@ -24,7 +24,7 @@ Guidelines:
 class CryAnalysisGraph:
     def __init__(self):
         self.classifier = CryClassifier()
-        self.reasoner = AIReasoner(model_name="gemini-2.5-flash")
+        self.reasoner = AIReasoner(model_name="gemini-flash-latest")
         self.nutrition_service = SolidFoodService()
 
     async def detect_cry_node(self, state: OverallState) -> dict:

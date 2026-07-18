@@ -25,7 +25,7 @@ Guidelines:
 
 class ChatGraph:
     def __init__(self):
-        self.reasoner = AIReasoner(model_name="gemini-2.5-flash")
+        self.reasoner = AIReasoner(model_name="gemini-flash-latest")
         self.baby_service = BabyService()
         self.growth_service = GrowthTrackingService(self.baby_service)
         self.memory_manager = MemoryManager()

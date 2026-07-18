@@ -9,14 +9,24 @@ logger = logging.getLogger(__name__)
 # Security scheme to extract Bearer token from Authorization header
 security_scheme = HTTPBearer(auto_error=False)
 
+from app.core.config import settings
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme)
 ) -> UserRecord:
     """
     FastAPI dependency to extract and verify the Firebase ID Token.
     Returns the verified UserRecord if successful, otherwise raises 401.
+    Supports a mock token bypass in local development environment.
     """
-    if not credentials:
+    if not credentials or credentials.credentials == "mock-token":
+        if settings.APP_ENV == "local":
+            return UserRecord(
+                uid="mock-user-id",
+                email="mock@family.com",
+                name="Elena Parent",
+                picture=None
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization credentials are required",

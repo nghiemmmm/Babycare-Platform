@@ -24,3 +24,33 @@ class GrowthLogResponse(GrowthLogBase):
     id: Optional[str] = None
     logged_at: str
     who_status: Optional[WhoGrowthStatus] = None  # Phân tích tự động từ chuẩn WHO
+
+
+# Schemas mới khớp giao diện Frontend
+class MeasurementCreate(BaseModel):
+    baby_id: str
+    weight: float
+    height: float
+    head_circumference: Optional[float] = None
+    date: str
+
+
+class Percentiles(BaseModel):
+    weight_percentile: str
+    height_percentile: str
+    head_percentile: Optional[str] = None
+
+
+class MeasurementCreateResponse(BaseModel):
+    success: bool
+    measurement_id: str
+    percentiles: Percentiles
+
+
+class MeasurementResponse(BaseModel):
+    id: str
+    age_months: float
+    weight: float
+    height: float
+    head_circumference: Optional[float] = None
+    date: str

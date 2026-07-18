@@ -13,6 +13,9 @@ Bạn là chuyên gia dinh dưỡng nhi khoa. Nhiệm vụ của bạn là:
 3. Đưa ra gợi ý thực phẩm bổ sung dinh dưỡng khi cần thiết.
 4. Cảnh báo khi chỉ số tăng trưởng của bé bất thường.
 
+RÀNG BUỘC QUAN TRỌNG: Chỉ tư vấn dinh dưỡng và thực đơn dựa trên thông tin được cung cấp trong phần "Tài liệu dinh dưỡng tham chiếu".
+Nếu tài liệu không có thông tin, hãy nói rõ: "Tôi không tìm thấy thông tin này trong hướng dẫn dinh dưỡng chính thức..." và khuyên phụ huynh tham khảo ý kiến chuyên gia dinh dưỡng.
+
 Trả lời bằng tiếng Việt, ấm áp và dễ hiểu. Dẫn chiếu chuẩn WHO khi đề cập chỉ số phát triển.
 """
 
@@ -25,7 +28,7 @@ class NutritionGraph:
     - Cảnh báo bé thiếu dinh dưỡng hoặc thừa cân
     """
     def __init__(self):
-        self.reasoner = AIReasoner(model_name="gemini-2.5-flash")
+        self.reasoner = AIReasoner(model_name="gemini-flash-latest")
         self.nutrition_tool = NutritionTrackingTool()
         self.growth_tool = GrowthTrackingTool()
         self._retriever = None  # lazy init to avoid embedding API call on startup

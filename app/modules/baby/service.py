@@ -32,6 +32,8 @@ class BabyService:
             name=baby_in.name,
             birth_date=baby_in.birth_date,
             gender=baby_in.gender,
+            avatar_url=baby_in.avatar_url,
+            is_active=baby_in.is_active,
             guardians=[creator_id],
             created_at=now,
             updated_at=now
@@ -67,14 +69,23 @@ class BabyService:
     def get_my_babies(self, user_id: str) -> list[BabyResponse]:
         """
         Lấy danh sách các bé thuộc quyền giám hộ của người dùng.
-
-        Args:
-            user_id: UID của người giám hộ.
-
-        Returns:
-            Danh sách các em bé.
+        Nếu chưa có bé nào, tự động tạo bé mặc định để UI có dữ liệu hiển thị.
         """
-        return self.repository.get_babies_by_guardian_id(user_id)
+        babies = self.repository.get_babies_by_guardian_id(user_id)
+        
+        if not babies:
+            logger.info(f"No babies found for user {user_id}, seeding default baby 'Leo'")
+            default_baby = BabyCreate(
+                name="Leo",
+                birth_date="2023-04-20",
+                gender="Boy",
+                avatar_url="/static/img/leo.png",
+                is_active=True
+            )
+            seeded = self.create_baby(default_baby, user_id)
+            babies = [seeded]
+            
+        return babies
 
     def update_baby(self, baby_id: str, baby_update: BabyUpdate, user_id: str) -> BabyResponse:
         """

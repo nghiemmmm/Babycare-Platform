@@ -1,5 +1,6 @@
 from app.AI_agents.models.llm_factory import LLMFactory
 from langchain_core.language_models import BaseChatModel
+from app.AI_agents.core import agent_config
 
 class ModelRouter:
     @staticmethod
@@ -9,6 +10,7 @@ class ModelRouter:
         """
         task_lower = task_description.lower()
         if "reasoning" in task_lower or "report" in task_lower or token_estimate > 10000:
-            return LLMFactory.get_model("gemini-1.5-pro")
+            return LLMFactory.get_model(agent_config.COMPLEX_REASONING_MODEL)
         
-        return LLMFactory.get_model("gemini-2.5-flash")
+        return LLMFactory.get_model(agent_config.DEFAULT_CHAT_MODEL)
+

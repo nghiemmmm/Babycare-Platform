@@ -4,10 +4,6 @@ ENV/
 env/
 .venv/
 
-# Environment variables & Credentials (CRITICAL)
-.env
-*firebase-adminsdk*.json
-firebase-credentials.json
 
 # Python caching
 __pycache__/
@@ -28,3 +24,28 @@ htmlcov/
 # OS files
 .DS_Store
 Thumbs.db
+
+# AI/ML Large Models & Cache
+app/ai/models/
+*.pt
+*.pth
+*.bin
+*.onnx
+*.pkl
+*.h5
+*.joblib
+*.pb
+*.ckpt
+
+# Node/Frontend outputs and dependencies
+node_modules/
+dist/
+build/
+*.log
+
+# Environment variables & Credentials (Full coverage)
+.env*
+!.env.example
+*firebase-adminsdk*.json
+firebase-credentials.json
+

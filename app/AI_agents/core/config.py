@@ -3,8 +3,8 @@ from app.core.config import settings
 
 class AIAgentConfig:
     DEFAULT_TEMPERATURE: float = 0.0
-    DEFAULT_CHAT_MODEL: str = "gemini-2.5-flash"
-    COMPLEX_REASONING_MODEL: str = "gemini-1.5-pro"
+    DEFAULT_CHAT_MODEL: str = "gemini-flash-latest"
+    COMPLEX_REASONING_MODEL: str = "gemini-flash-latest"
     
     # RAG Settings
     RAG_CHUNK_SIZE: int = 500

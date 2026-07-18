@@ -1,4 +1,5 @@
 import os
+import pypdf
 from langchain_core.documents import Document
 
 class DocumentLoader:
@@ -22,9 +23,22 @@ class DocumentLoader:
     def load(self) -> list[Document]:
         documents = []
         for filename in os.listdir(self.directory_path):
+            filepath = os.path.join(self.directory_path, filename)
             if filename.endswith(".md") or filename.endswith(".txt"):
-                filepath = os.path.join(self.directory_path, filename)
                 with open(filepath, "r", encoding="utf-8") as f:
                     text = f.read()
                     documents.append(Document(page_content=text, metadata={"source": filename}))
+            elif filename.endswith(".pdf"):
+                try:
+                    reader = pypdf.PdfReader(filepath)
+                    for i, page in enumerate(reader.pages):
+                        text = page.extract_text()
+                        if text and text.strip():
+                            documents.append(Document(
+                                page_content=text,
+                                metadata={"source": filename, "page": i + 1}
+                            ))
+                except Exception as e:
+                    print(f"Lỗi khi đọc tệp PDF {filename}: {e}")
         return documents
+

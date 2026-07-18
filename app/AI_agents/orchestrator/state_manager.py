@@ -142,3 +142,45 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
                 metadata=_safe_deserialize(d["metadata"]),
                 parent_config=None,
             )
+
+    async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        return self.get_tuple(config)
+
+    async def aput(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
+    ) -> RunnableConfig:
+        return self.put(config, checkpoint, metadata, new_versions)
+
+    def put_writes(
+        self,
+        config: RunnableConfig,
+        writes: Any,
+        task_id: str,
+    ) -> None:
+        pass
+
+    async def aput_writes(
+        self,
+        config: RunnableConfig,
+        writes: Any,
+        task_id: str,
+    ) -> None:
+        pass
+
+
+
+    async def alist(
+        self,
+        config: Optional[RunnableConfig],
+        *,
+        filter: Optional[dict[str, Any]] = None,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ):
+        for checkpoint_tuple in self.list(config, filter=filter, before=before, limit=limit):
+            yield checkpoint_tuple
+

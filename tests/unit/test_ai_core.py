@@ -37,10 +37,10 @@ from app.core.config import settings
 def test_model_router():
     with patch("app.AI_agents.models.llm_factory.ChatGoogleGenerativeAI") as mock_chat:
         model = ModelRouter.get_model_for_task("simple query")
-        mock_chat.assert_called_with(model="gemini-2.5-flash", google_api_key=settings.GEMINI_API_KEY, temperature=0.0)
+        mock_chat.assert_called_with(model="gemini-flash-latest", google_api_key=settings.GEMINI_API_KEY, temperature=0.0)
 
         ModelRouter.get_model_for_task("complex reasoning or summary report")
-        mock_chat.assert_called_with(model="gemini-1.5-pro", google_api_key=settings.GEMINI_API_KEY, temperature=0.0)
+        mock_chat.assert_called_with(model="gemini-flash-latest", google_api_key=settings.GEMINI_API_KEY, temperature=0.0)
 
 from app.AI_agents.workflows.router_graph import RouterGraph
 from langchain_core.messages import HumanMessage
@@ -146,13 +146,24 @@ async def test_chat_graph():
 
 from app.AI_agents.tools.implementation.rag_tools import KnowledgeRetrievalTool
 from app.AI_agents.workflows.cry_analysis_graph import CryAnalysisGraph
-from app.AI_agents.knowledge.rag_pipeline import FakeEmbeddings
+from app.AI_agents.memory.embeddings import FakeEmbeddings
 
 def test_knowledge_retrieval_tool():
-    with patch("app.AI_agents.knowledge.rag_pipeline.GoogleGenerativeAIEmbeddings", return_value=FakeEmbeddings()):
-        tool = KnowledgeRetrievalTool()
-        context = tool._run("Trẻ quấy khóc")
-        assert "tã bẩn" in context or "quấy khóc" in context
+    from langchain_core.documents import Document
+    mock_docs = [
+        Document(page_content="Trẻ quấy khóc có thể do đói hoặc tã bẩn.", metadata={"source": "parenting_guidelines.md"})
+    ]
+    def mock_exists(path):
+        if "faiss_index" in path:
+            return False
+        return True
+        
+    with patch("os.path.exists", side_effect=mock_exists):
+        with patch("app.AI_agents.knowledge.document_loader.DocumentLoader.load", return_value=mock_docs):
+            with patch("app.AI_agents.knowledge.rag_pipeline.get_embeddings", return_value=FakeEmbeddings()):
+                tool = KnowledgeRetrievalTool()
+                context = tool._run("Trẻ quấy khóc")
+                assert "tã bẩn" in context or "quấy khóc" in context
 
 @pytest.mark.anyio
 async def test_cry_analysis_graph():
@@ -263,7 +274,7 @@ async def test_agent_abstractions():
         res = await orch.plan_and_route({})
         assert res == {"intent": "chat"}
 
-    with patch("app.AI_agents.knowledge.rag_pipeline.GoogleGenerativeAIEmbeddings", return_value=FakeEmbeddings()):
+    with patch("app.AI_agents.knowledge.rag_pipeline.get_embeddings", return_value=FakeEmbeddings()):
         research = ResearchAgent()
         with patch("app.AI_agents.knowledge.retriever.MedicalRetriever.retrieve_context") as mock_retrieve:
             mock_retrieve.return_value = "retrieved context"
@@ -279,7 +290,7 @@ async def test_agent_abstractions():
 from app.AI_agents.core import agent_config, get_agent_logger, AIAgentException
 
 def test_core_utilities():
-    assert agent_config.DEFAULT_CHAT_MODEL == "gemini-2.5-flash"
+    assert agent_config.DEFAULT_CHAT_MODEL == "gemini-flash-latest"
     assert agent_config.RAG_CHUNK_SIZE == 500
     
     logger = get_agent_logger("test")
@@ -462,4 +473,41 @@ async def test_speech_transcriber_whisper_fallback_to_gemini():
                     with patch("builtins.open", mock_open(read_data=b"dummy audio data")):
                         result = transcriber.transcribe("dummy.wav")
                         assert result == "Gemini response text"
+
+
+def test_document_loader_pdf():
+    from app.AI_agents.knowledge.document_loader import DocumentLoader
+    with patch("os.path.exists", return_value=True), \
+         patch("os.listdir") as mock_listdir, \
+         patch("app.AI_agents.knowledge.document_loader.pypdf.PdfReader") as mock_pdf_reader:
+        
+        mock_listdir.return_value = ["test_doc.pdf", "other.txt"]
+        
+        mock_open_content = "text content"
+        with patch("builtins.open", mock_open(read_data=mock_open_content)):
+            mock_reader_instance = MagicMock()
+            mock_pdf_reader.return_value = mock_reader_instance
+            
+            mock_page1 = MagicMock()
+            mock_page1.extract_text.return_value = "Page 1 Content"
+            mock_page2 = MagicMock()
+            mock_page2.extract_text.return_value = "Page 2 Content"
+            
+            mock_reader_instance.pages = [mock_page1, mock_page2]
+            
+            loader = DocumentLoader(directory_path="dummy_dir")
+            docs = loader.load()
+            
+            assert len(docs) == 3
+            
+            txt_doc = next(d for d in docs if d.metadata["source"] == "other.txt")
+            assert txt_doc.page_content == "text content"
+            
+            pdf_docs = [d for d in docs if d.metadata["source"] == "test_doc.pdf"]
+            assert len(pdf_docs) == 2
+            assert pdf_docs[0].page_content == "Page 1 Content"
+            assert pdf_docs[0].metadata["page"] == 1
+            assert pdf_docs[1].page_content == "Page 2 Content"
+            assert pdf_docs[1].metadata["page"] == 2
+
 
