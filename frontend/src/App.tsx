@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { useNavigate } from "react-router-dom";
 import {
   Heart,
   LayoutDashboard,
@@ -14,7 +15,8 @@ import {
   Bell,
   Menu,
   X,
-  Shield
+  Shield,
+  LogOut
 } from "lucide-react";
 
 import {
@@ -29,6 +31,8 @@ import {
   SmartExtraction
 } from "./types";
 
+import { useAuth } from "./auth/AuthContext";
+import { apiFetch } from "./lib/authClient";
 
 import DashboardView from "./components/DashboardView";
 import GrowthView from "./components/GrowthView";
@@ -38,6 +42,14 @@ import NutritionView from "./components/NutritionView";
 import HealthView from "./components/HealthView";
 
 export default function App() {
+  const { email, name, logout } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate("/login", { replace: true });
+  }
+
   // Core persistent states backed by Backend APIs
   const [babies, setBabies] = useState<BabyProfile[]>([]);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
@@ -87,7 +99,7 @@ export default function App() {
     if (!babyId) return;
     try {
       // 1. Fetch growth measurements
-      const mRes = await fetch(`/api/v1/growth/measurements?baby_id=${babyId}`);
+      const mRes = await apiFetch(`/api/v1/growth/measurements?baby_id=${babyId}`);
       if (mRes.ok) {
         const mData = await mRes.json();
         setMeasurements(mData.map((m: any) => ({
@@ -104,7 +116,7 @@ export default function App() {
       }
 
       // 2. Fetch feeds
-      const fRes = await fetch(`/api/v1/nutrition/feeds?baby_id=${babyId}`);
+      const fRes = await apiFetch(`/api/v1/nutrition/feeds?baby_id=${babyId}`);
       if (fRes.ok) {
         const fData = await fRes.json();
         setFeeds(fData.map((f: any) => ({
@@ -119,7 +131,7 @@ export default function App() {
       }
 
       // 3. Fetch ingredients
-      const iRes = await fetch(`/api/v1/nutrition/ingredients?baby_id=${babyId}`);
+      const iRes = await apiFetch(`/api/v1/nutrition/ingredients?baby_id=${babyId}`);
       if (iRes.ok) {
         const iData = await iRes.json();
         setIngredients(iData.map((i: any) => ({
@@ -132,7 +144,7 @@ export default function App() {
       }
 
       // 4. Fetch guardians
-      const gRes = await fetch(`/api/v1/guardians?baby_id=${babyId}`);
+      const gRes = await apiFetch(`/api/v1/guardians?baby_id=${babyId}`);
       if (gRes.ok) {
         const gData = await gRes.json();
         setGuardians(gData.map((g: any) => ({
@@ -145,7 +157,7 @@ export default function App() {
       }
 
       // 5. Fetch medications
-      const medRes = await fetch(`/api/v1/babies/${babyId}/medication`);
+      const medRes = await apiFetch(`/api/v1/babies/${babyId}/medication`);
       if (medRes.ok) {
         const medData = await medRes.json();
         setMedications(medData.map((m: any) => ({
@@ -160,7 +172,7 @@ export default function App() {
       }
 
       // 6. Fetch chat messages
-      const chatRes = await fetch(`/api/v1/ai/threads/thread_default/messages`);
+      const chatRes = await apiFetch(`/api/v1/ai/threads/thread_default/messages`);
       if (chatRes.ok) {
         const chatData = await chatRes.json();
         setChats(chatData.map((c: any) => ({
@@ -179,7 +191,7 @@ export default function App() {
   useEffect(() => {
     const loadInitialBabies = async () => {
       try {
-        const res = await fetch("/api/v1/babies");
+        const res = await apiFetch("/api/v1/babies");
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -234,7 +246,7 @@ export default function App() {
       const durationStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
 
       try {
-        const res = await fetch("/api/v1/ai/sleep/timer", {
+        const res = await apiFetch("/api/v1/ai/sleep/timer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -253,7 +265,7 @@ export default function App() {
       setNapElapsedTime(0);
     } else {
       try {
-        const res = await fetch("/api/v1/ai/sleep/timer", {
+        const res = await apiFetch("/api/v1/ai/sleep/timer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -282,7 +294,7 @@ export default function App() {
 
   const handleUpdateBaby = async (updated: BabyProfile) => {
     try {
-      const res = await fetch(`/api/v1/babies/${updated.id}`, {
+      const res = await apiFetch(`/api/v1/babies/${updated.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -303,7 +315,7 @@ export default function App() {
 
   const handleAddBaby = async (newBaby: Omit<BabyProfile, "id">) => {
     try {
-      const res = await fetch("/api/v1/babies", {
+      const res = await apiFetch("/api/v1/babies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -317,7 +329,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         // Reload all babies
-        const bRes = await fetch("/api/v1/babies");
+        const bRes = await apiFetch("/api/v1/babies");
         if (bRes.ok) {
           const bData = await bRes.json();
           const mapped = bData.map((b: any) => ({
@@ -338,7 +350,7 @@ export default function App() {
 
   const handleAddMeasurement = async (newM: Omit<Measurement, "id">) => {
     try {
-      const res = await fetch("/api/v1/growth/measurements", {
+      const res = await apiFetch("/api/v1/growth/measurements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -359,7 +371,7 @@ export default function App() {
 
   const handleDeleteMeasurement = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/babies/${activeBaby.id}/growth/${id}`, {
+      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/growth/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -372,7 +384,7 @@ export default function App() {
 
   const handleAddMedication = async (newMed: Omit<MedicationLog, "id">) => {
     try {
-      const res = await fetch("/api/v1/health/medications/administer", {
+      const res = await apiFetch("/api/v1/health/medications/administer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -392,7 +404,7 @@ export default function App() {
 
   const handleDeleteMedication = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/babies/${activeBaby.id}/medication/${id}`, {
+      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/medication/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -405,7 +417,7 @@ export default function App() {
 
   const handleAddGuardian = async (newG: Omit<Guardian, "id">) => {
     try {
-      const res = await fetch(`/api/v1/guardians/invite?baby_id=${activeBaby.id}`, {
+      const res = await apiFetch(`/api/v1/guardians/invite?baby_id=${activeBaby.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -424,7 +436,7 @@ export default function App() {
 
   const handleDeleteGuardian = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/guardians/${id}?baby_id=${activeBaby.id}`, {
+      const res = await apiFetch(`/api/v1/guardians/${id}?baby_id=${activeBaby.id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -437,7 +449,7 @@ export default function App() {
 
   const handleAddFeed = async (newFeed: Omit<FeedLog, "id">) => {
     try {
-      const res = await fetch("/api/v1/nutrition/feeds", {
+      const res = await apiFetch("/api/v1/nutrition/feeds", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -458,7 +470,7 @@ export default function App() {
 
   const handleDeleteFeed = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/nutrition/feeds/${id}`, {
+      const res = await apiFetch(`/api/v1/nutrition/feeds/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -471,7 +483,7 @@ export default function App() {
 
   const handleAddIngredient = async (newIng: Omit<IngredientLog, "id">) => {
     try {
-      const res = await fetch("/api/v1/nutrition/ingredients", {
+      const res = await apiFetch("/api/v1/nutrition/ingredients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -490,7 +502,7 @@ export default function App() {
 
   const handleDeleteIngredient = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/nutrition/ingredients/${id}`, {
+      const res = await apiFetch(`/api/v1/nutrition/ingredients/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -514,7 +526,7 @@ export default function App() {
     setIsAiLoading(true);
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await apiFetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -769,19 +781,24 @@ export default function App() {
           </button>
         </nav>
 
-        {/* Sidebar Footer Widget - Selected Baby Quick View / User profile */}
-        <div className="pt-4 border-t border-slate-200/60 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <img
-              src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face"
-              alt="Sarah Jenkins"
-              className="w-8 h-8 rounded-full object-cover border border-slate-200 shadow-xs"
-            />
-            <div>
-              <p className="text-xs font-bold text-slate-800 leading-tight">Sarah Jenkins</p>
-              <p className="text-[9px] text-indigo-600 font-semibold">Premium Member</p>
+        {/* Sidebar Footer Widget - Logged-in user + logout */}
+        <div className="pt-4 border-t border-slate-200/60 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+              {(name || email || "?").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-800 leading-tight truncate">{name || "Người giám hộ"}</p>
+              <p className="text-[9px] text-slate-400 font-semibold truncate">{email}</p>
             </div>
           </div>
+          <button
+            onClick={handleLogout}
+            title="Đăng xuất"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </aside>
 
