@@ -21,7 +21,12 @@ class AgentOrchestrator:
         """
         Invokes the main AI agent graph asynchronously.
         """
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {
+            "configurable": {
+                "thread_id": thread_id,
+                "user_id": user_id
+            }
+        }
         inputs = {
             "messages": [HumanMessage(content=message)],
             "baby_id": baby_id,

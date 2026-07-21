@@ -8,10 +8,14 @@ class FakeEmbeddings(Embeddings):
     def embed_query(self, text: str) -> list[float]:
         return [1.0] * 1024
 
+from app.AI_agents.core.constant import MODEL_CACHE_DIR
+
 def get_embeddings() -> Embeddings:
+    import torch
+    torch.set_num_threads(1)
     return HuggingFaceEmbeddings(
         model_name="BAAI/bge-m3",
         model_kwargs={"device": "cpu"},
-        cache_folder="app/ai/models"
+        cache_folder=MODEL_CACHE_DIR
     )
 

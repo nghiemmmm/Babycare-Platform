@@ -299,3 +299,28 @@ async def handle_sleep_timer(
             status="Stopped",
             start_time=start_time_str
         )
+
+@ai_agent_router.delete("/threads/{thread_id}/messages")
+async def delete_thread_messages(
+    thread_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Xóa toàn bộ tin nhắn/lịch sử chat trong phiên chat này (reset checkpoint).
+    """
+    db = get_firestore_db()
+    # 1. Check if thread exists and belongs to this user
+    thread_ref = db.collection("chat_threads").document(thread_id)
+    thread_doc = thread_ref.get()
+    if thread_doc.exists:
+        thread_data = thread_doc.to_dict()
+        if thread_data.get("user_id") != current_user.uid:
+            raise HTTPException(status_code=403, detail="Access denied")
+            
+    # 2. Xoá checkpoint của LangGraph trong Firestore
+    from app.AI_agents.core.constant import CHECKPOINT_COLLECTION
+    docs = db.collection(CHECKPOINT_COLLECTION).where("thread_id", "==", thread_id).stream()
+    for doc in docs:
+        doc.reference.delete()
+        
+    return {"success": True, "message": "Thread history reset successfully."}

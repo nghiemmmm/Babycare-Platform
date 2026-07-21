@@ -32,6 +32,10 @@ interface AiHubViewProps {
   onStartNapTimer: () => void;
   isNapTimerRunning: boolean;
   napElapsedTime: number; // seconds
+  threads: Array<{ id: string; title: string }>;
+  activeThreadId: string;
+  onSelectThread: (id: string) => void;
+  onCreateThread: () => Promise<void>;
 }
 
 export default function AiHubView({
@@ -42,7 +46,11 @@ export default function AiHubView({
   isAiLoading,
   onStartNapTimer,
   isNapTimerRunning,
-  napElapsedTime
+  napElapsedTime,
+  threads,
+  activeThreadId,
+  onSelectThread,
+  onCreateThread
 }: AiHubViewProps) {
   const [inputText, setInputText] = useState("");
   const [activeThread, setActiveThread] = useState("sitting");
@@ -114,7 +122,10 @@ export default function AiHubView({
       {/* 1. Cột Trái (20%): Lịch sử hội thoại (Recent Chats) */}
       <div className="w-[22%] bg-white/40 border-r border-white/20 flex flex-col p-4 space-y-5 select-none shrink-0 h-full">
         {/* New Chat Button */}
-        <button className="w-full bg-[#1c648e] hover:bg-[#154c6d] text-white py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs">
+        <button
+          onClick={onCreateThread}
+          className="w-full bg-[#1c648e] hover:bg-[#154c6d] text-white py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+        >
           <Plus className="w-4 h-4" />
           Cuộc trò chuyện mới
         </button>
@@ -123,41 +134,20 @@ export default function AiHubView({
         <div className="flex-1 overflow-y-auto space-y-1">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2.5 mb-2">Cuộc trò chuyện gần đây</p>
           
-          <button
-            onClick={() => setActiveThread("sitting")}
-            className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
-              activeThread === "sitting"
-                ? "bg-[#e0f2fe]/70 text-[#1c648e]"
-                : "text-slate-500 hover:bg-white/40"
-            }`}
-          >
-            <MessageSquare className="w-4 h-4 shrink-0 text-[#1c648e]" />
-            <span className="truncate">Tiến trình tập ngồi của bé Bo</span>
-          </button>
-
-          <button
-            onClick={() => setActiveThread("fever")}
-            className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
-              activeThread === "fever"
-                ? "bg-[#e0f2fe]/70 text-[#1c648e]"
-                : "text-slate-500 hover:bg-white/40"
-            }`}
-          >
-            <Clock className="w-4 h-4 shrink-0" />
-            <span className="truncate">Liều hạ sốt ở 38.8°C</span>
-          </button>
-
-          <button
-            onClick={() => setActiveThread("solids")}
-            className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
-              activeThread === "solids"
-                ? "bg-[#e0f2fe]/70 text-[#1c648e]"
-                : "text-slate-500 hover:bg-white/40"
-            }`}
-          >
-            <Clock className="w-4 h-4 shrink-0" />
-            <span className="truncate">Bắt đầu ăn dặm</span>
-          </button>
+          {threads.map((thread) => (
+            <button
+              key={thread.id}
+              onClick={() => onSelectThread(thread.id)}
+              className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
+                activeThreadId === thread.id
+                  ? "bg-[#e0f2fe]/70 text-[#1c648e]"
+                  : "text-slate-500 hover:bg-white/40"
+              }`}
+            >
+              <MessageSquare className="w-4 h-4 shrink-0 text-[#1c648e]" />
+              <span className="truncate">{thread.title}</span>
+            </button>
+          ))}
         </div>
 
         {/* User Mini-Profile panel */}

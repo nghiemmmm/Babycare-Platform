@@ -37,6 +37,20 @@ import ProfileView from "./components/ProfileView";
 import NutritionView from "./components/NutritionView";
 import HealthView from "./components/HealthView";
 
+const apiFetch = async (path: string, options: RequestInit = {}) => {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${baseUrl}${cleanPath}`;
+  const headers = new Headers(options.headers);
+  if (!headers.has("Authorization")) {
+    headers.set("Authorization", "Bearer mock-token");
+  }
+  return fetch(url, {
+    ...options,
+    headers,
+  });
+};
+
 export default function App() {
   // Core persistent states backed by Backend APIs
   const [babies, setBabies] = useState<BabyProfile[]>([]);
@@ -46,6 +60,8 @@ export default function App() {
   const [feeds, setFeeds] = useState<FeedLog[]>([]);
   const [ingredients, setIngredients] = useState<IngredientLog[]>([]);
   const [chats, setChats] = useState<ChatMessage[]>([]);
+  const [threads, setThreads] = useState<Array<{ id: string; title: string }>>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string>("thread_default");
 
   // App UI state
   const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health">("dashboard");
@@ -87,7 +103,7 @@ export default function App() {
     if (!babyId) return;
     try {
       // 1. Fetch growth measurements
-      const mRes = await fetch(`/api/v1/growth/measurements?baby_id=${babyId}`);
+      const mRes = await apiFetch(`/api/v1/growth/measurements?baby_id=${babyId}`);
       if (mRes.ok) {
         const mData = await mRes.json();
         setMeasurements(mData.map((m: any) => ({
@@ -104,7 +120,7 @@ export default function App() {
       }
 
       // 2. Fetch feeds
-      const fRes = await fetch(`/api/v1/nutrition/feeds?baby_id=${babyId}`);
+      const fRes = await apiFetch(`/api/v1/nutrition/feeds?baby_id=${babyId}`);
       if (fRes.ok) {
         const fData = await fRes.json();
         setFeeds(fData.map((f: any) => ({
@@ -119,7 +135,7 @@ export default function App() {
       }
 
       // 3. Fetch ingredients
-      const iRes = await fetch(`/api/v1/nutrition/ingredients?baby_id=${babyId}`);
+      const iRes = await apiFetch(`/api/v1/nutrition/ingredients?baby_id=${babyId}`);
       if (iRes.ok) {
         const iData = await iRes.json();
         setIngredients(iData.map((i: any) => ({
@@ -132,7 +148,7 @@ export default function App() {
       }
 
       // 4. Fetch guardians
-      const gRes = await fetch(`/api/v1/guardians?baby_id=${babyId}`);
+      const gRes = await apiFetch(`/api/v1/guardians?baby_id=${babyId}`);
       if (gRes.ok) {
         const gData = await gRes.json();
         setGuardians(gData.map((g: any) => ({
@@ -145,7 +161,7 @@ export default function App() {
       }
 
       // 5. Fetch medications
-      const medRes = await fetch(`/api/v1/babies/${babyId}/medication`);
+      const medRes = await apiFetch(`/api/v1/babies/${babyId}/medication`);
       if (medRes.ok) {
         const medData = await medRes.json();
         setMedications(medData.map((m: any) => ({
@@ -159,19 +175,51 @@ export default function App() {
         })));
       }
 
-      // 6. Fetch chat messages
-      const chatRes = await fetch(`/api/v1/ai/threads/thread_default/messages`);
-      if (chatRes.ok) {
-        const chatData = await chatRes.json();
-        setChats(chatData.map((c: any) => ({
+    } catch (e) {
+      console.error("Error refreshing active baby data:", e);
+    }
+  };
+
+  // Fetch all chat threads for the user
+  const loadThreads = async () => {
+    try {
+      const res = await apiFetch("/api/v1/ai/threads");
+      if (res.ok) {
+        const data = await res.json();
+        setThreads(data.map((t: any) => ({
+          id: t.id,
+          title: t.title
+        })));
+        if (data.length > 0) {
+          const threadIds = data.map((t: any) => t.id);
+          if (!threadIds.includes(activeThreadId)) {
+            setActiveThreadId(data[0].id);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load chat threads:", e);
+    }
+  };
+
+  // Fetch messages inside the selected thread
+  const loadThreadMessages = async (threadId: string) => {
+    try {
+      const res = await apiFetch(`/api/v1/ai/threads/${threadId}/messages`);
+      if (res.ok) {
+        const data = await res.json();
+        setChats(data.map((c: any) => ({
           id: c.id,
           role: c.role,
           content: c.content,
           timestamp: c.timestamp.includes("T") ? c.timestamp.slice(11, 16) : c.timestamp
         })));
+      } else {
+        setChats([]);
       }
     } catch (e) {
-      console.error("Error refreshing active baby data:", e);
+      console.error("Failed to load thread messages:", e);
+      setChats([]);
     }
   };
 
@@ -179,7 +227,7 @@ export default function App() {
   useEffect(() => {
     const loadInitialBabies = async () => {
       try {
-        const res = await fetch("/api/v1/babies");
+        const res = await apiFetch("/api/v1/babies");
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -210,6 +258,20 @@ export default function App() {
     }
   }, [activeBaby?.id]);
 
+  // Sync active baby with threads list
+  useEffect(() => {
+    if (activeBaby?.id) {
+      loadThreads();
+    }
+  }, [activeBaby?.id]);
+
+  // Sync active thread with messages list
+  useEffect(() => {
+    if (activeThreadId) {
+      loadThreadMessages(activeThreadId);
+    }
+  }, [activeThreadId]);
+
   // Stop watch logic
   useEffect(() => {
     if (isNapTimerRunning) {
@@ -234,7 +296,7 @@ export default function App() {
       const durationStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
 
       try {
-        const res = await fetch("/api/v1/ai/sleep/timer", {
+        const res = await apiFetch("/api/v1/ai/sleep/timer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -253,7 +315,7 @@ export default function App() {
       setNapElapsedTime(0);
     } else {
       try {
-        const res = await fetch("/api/v1/ai/sleep/timer", {
+        const res = await apiFetch("/api/v1/ai/sleep/timer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -282,7 +344,7 @@ export default function App() {
 
   const handleUpdateBaby = async (updated: BabyProfile) => {
     try {
-      const res = await fetch(`/api/v1/babies/${updated.id}`, {
+      const res = await apiFetch(`/api/v1/babies/${updated.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -303,7 +365,7 @@ export default function App() {
 
   const handleAddBaby = async (newBaby: Omit<BabyProfile, "id">) => {
     try {
-      const res = await fetch("/api/v1/babies", {
+      const res = await apiFetch("/api/v1/babies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -317,7 +379,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         // Reload all babies
-        const bRes = await fetch("/api/v1/babies");
+        const bRes = await apiFetch("/api/v1/babies");
         if (bRes.ok) {
           const bData = await bRes.json();
           const mapped = bData.map((b: any) => ({
@@ -338,7 +400,7 @@ export default function App() {
 
   const handleAddMeasurement = async (newM: Omit<Measurement, "id">) => {
     try {
-      const res = await fetch("/api/v1/growth/measurements", {
+      const res = await apiFetch("/api/v1/growth/measurements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -359,7 +421,7 @@ export default function App() {
 
   const handleDeleteMeasurement = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/babies/${activeBaby.id}/growth/${id}`, {
+      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/growth/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -372,7 +434,7 @@ export default function App() {
 
   const handleAddMedication = async (newMed: Omit<MedicationLog, "id">) => {
     try {
-      const res = await fetch("/api/v1/health/medications/administer", {
+      const res = await apiFetch("/api/v1/health/medications/administer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -392,7 +454,7 @@ export default function App() {
 
   const handleDeleteMedication = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/babies/${activeBaby.id}/medication/${id}`, {
+      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/medication/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -405,7 +467,7 @@ export default function App() {
 
   const handleAddGuardian = async (newG: Omit<Guardian, "id">) => {
     try {
-      const res = await fetch(`/api/v1/guardians/invite?baby_id=${activeBaby.id}`, {
+      const res = await apiFetch(`/api/v1/guardians/invite?baby_id=${activeBaby.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -424,7 +486,7 @@ export default function App() {
 
   const handleDeleteGuardian = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/guardians/${id}?baby_id=${activeBaby.id}`, {
+      const res = await apiFetch(`/api/v1/guardians/${id}?baby_id=${activeBaby.id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -437,7 +499,7 @@ export default function App() {
 
   const handleAddFeed = async (newFeed: Omit<FeedLog, "id">) => {
     try {
-      const res = await fetch("/api/v1/nutrition/feeds", {
+      const res = await apiFetch("/api/v1/nutrition/feeds", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -458,7 +520,7 @@ export default function App() {
 
   const handleDeleteFeed = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/nutrition/feeds/${id}`, {
+      const res = await apiFetch(`/api/v1/nutrition/feeds/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -471,7 +533,7 @@ export default function App() {
 
   const handleAddIngredient = async (newIng: Omit<IngredientLog, "id">) => {
     try {
-      const res = await fetch("/api/v1/nutrition/ingredients", {
+      const res = await apiFetch("/api/v1/nutrition/ingredients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -490,7 +552,7 @@ export default function App() {
 
   const handleDeleteIngredient = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/nutrition/ingredients/${id}`, {
+      const res = await apiFetch(`/api/v1/nutrition/ingredients/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -501,7 +563,7 @@ export default function App() {
     }
   };
 
-  // AI assistant messaging with proxy backend
+  // AI assistant messaging with direct API calls to FastAPI backend
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
       id: `u_${Date.now()}`,
@@ -514,39 +576,54 @@ export default function App() {
     setIsAiLoading(true);
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await apiFetch(`/api/v1/ai/threads/${activeThreadId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...chats, userMsg].map(c => ({ role: c.role, content: c.content })),
-          babyProfile: {
-            name: activeBaby.name,
-            gender: activeBaby.gender,
-            birthDate: activeBaby.birthDate,
-            weight: measurements[0]?.weight || 7.2
-          },
-          recentLogs: {
-            medications: medications.slice(0, 3),
-            feeds: feeds.slice(0, 3)
-          }
+          content: userMsg.content,
+          type: "text"
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`Backend returned ${response.status}`);
+      }
+
       const data = await response.json();
+      loadThreads(); // Refresh thread list to fetch any updated titles
+
+      // Convert from Backend format (MessageCreateResponse) to App.tsx format
+      const aiContent = data.ai_response?.content || "Tôi đã ghi nhận thông tin đó!";
+      const citations = data.ai_response?.citations || [];
+      const extractedLogs = data.extracted_logs || [];
+
+      // Convert first extracted_log to extraction widget if present
+      let extraction = null;
+      if (extractedLogs.length > 0) {
+        const log = extractedLogs[0];
+        extraction = {
+          type: log.type,
+          title: log.title,
+          detail: log.detail,
+          value: log.value,
+          time: log.time,
+          pending: false,
+        };
+      }
 
       setChats((prev) => [
         ...prev,
         {
           id: `ai_${Date.now()}`,
           role: "assistant",
-          content: data.text,
+          content: aiContent,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          extraction: data.extraction,
-          citations: data.citations
+          extraction,
+          citations
         }
       ]);
     } catch (error) {
-      console.error("Failed to message Gemini proxy:", error);
+      console.error("Failed to message Gemini API:", error);
       // Fallback
       setChats((prev) => [
         ...prev,
@@ -560,6 +637,29 @@ export default function App() {
     } finally {
       setIsAiLoading(false);
     }
+  };
+
+  const handleCreateThread = async () => {
+    try {
+      const res = await apiFetch("/api/v1/ai/threads", {
+        method: "POST"
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const newThreadId = data.thread_id;
+        
+        // Add new thread to the list and select it
+        setThreads(prev => [{ id: newThreadId, title: data.title }, ...prev]);
+        setActiveThreadId(newThreadId);
+        setChats([]); // Clear messages locally immediately
+      }
+    } catch (e) {
+      console.error("Failed to create new thread:", e);
+    }
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    setActiveThreadId(threadId);
   };
 
   const handleConfirmExtraction = (ext: SmartExtraction) => {
@@ -801,24 +901,6 @@ export default function App() {
               </span>
             )}
           </div>
-
-          <div className="flex items-center gap-4">
-            <button className="p-1.5 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition-colors relative">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full" />
-            </button>
-            
-            <div className="h-5 w-px bg-slate-200" />
-            
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-700">{activeBaby.name}</span>
-              <img
-                src={activeBaby.avatarUrl}
-                alt={activeBaby.name}
-                className="w-7 h-7 rounded-full object-cover border border-slate-200"
-              />
-            </div>
-          </div>
         </header>
 
         {/* Content canvas container */}
@@ -882,6 +964,10 @@ export default function App() {
                   onStartNapTimer={handleStartNapTimer}
                   isNapTimerRunning={isNapTimerRunning}
                   napElapsedTime={napElapsedTime}
+                  threads={threads}
+                  activeThreadId={activeThreadId}
+                  onSelectThread={handleSelectThread}
+                  onCreateThread={handleCreateThread}
                 />
               )}
 

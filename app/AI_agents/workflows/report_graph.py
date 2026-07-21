@@ -11,23 +11,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from datetime import datetime
 import os
-
-REPORT_PROMPT = """
-You are the Chief Pediatric Health Analyst for BabyCare AI.
-Synthesize the baby's daily activities, logs, and measurements into a weekly developmental status report.
-
-Input Data:
-- Baby Profile: {baby_profile}
-- Growth History: {growth_history}
-- Nutrition Log: {nutrition_history}
-- Health & Medication History: {health_history}
-
-Provide a structured Vietnamese summary report detailing:
-1. Growth overview (comparing weight/height to WHO standard milestones if relevant).
-2. Nutritional balance assessment (variety, feeding volume, reactions).
-3. Health and medication summary (any ongoing symptoms or drug usage).
-4. Direct recommendation for the upcoming week.
-"""
+from app.AI_agents.core.constant import REPORT_PROMPT, COMPLEX_REASONING_MODEL
 
 def generate_pdf_report(filename: str, title: str, text_content: str):
     os.makedirs(os.path.dirname(os.path.abspath(filename)), exist_ok=True)
@@ -71,7 +55,7 @@ def generate_pdf_report(filename: str, title: str, text_content: str):
 
 class ReportGraph:
     def __init__(self):
-        self.reasoner = AIReasoner(model_name="gemini-1.5-pro") # Complex summary -> use pro
+        self.reasoner = AIReasoner(model_name=COMPLEX_REASONING_MODEL) # Complex summary -> use pro
         self.baby_service = BabyService()
         self.growth_service = GrowthTrackingService(self.baby_service)
         self.health_service = HealthRecordService(self.baby_service)
