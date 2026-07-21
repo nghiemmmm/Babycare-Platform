@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   UserPlus,
@@ -26,8 +26,10 @@ interface ProfileViewProps {
   babies: BabyProfile[];
   guardians: Guardian[];
   onSelectBaby: (id: string) => void;
-  onUpdateBaby: (baby: BabyProfile) => void;
-  onAddBaby: (baby: Omit<BabyProfile, "id">) => void;
+  onUpdateBaby: (baby: BabyProfile) => Promise<void>;
+  onAddBaby: (baby: Omit<BabyProfile, "id">) => Promise<void>;
+  onDeleteBaby: (id: string) => Promise<void>;
+  onUploadAvatar: (file: File) => Promise<string>;
   onAddGuardian: (g: Omit<Guardian, "id">) => void;
   onDeleteGuardian: (id: string) => void;
 }
@@ -38,21 +40,58 @@ export default function ProfileView({
   onSelectBaby,
   onUpdateBaby,
   onAddBaby,
+  onDeleteBaby,
+  onUploadAvatar,
   onAddGuardian,
   onDeleteGuardian,
 }: ProfileViewProps) {
   const activeBaby = babies.find((b) => b.isActive) || babies[0];
 
-  // UI state toggles: viewing dashboard, editing existing, or creating new
+  // UI state toggles: viewing dashboard, editing existing, or creating new.
+  // Chưa có bé nào (vd. vừa đăng ký tài khoản xong) -> mở thẳng form tạo mới, vì view dashboard
+  // demographic bên dưới đọc trực tiếp activeBaby.* nên sẽ crash nếu không có bé nào cả.
   const [isEditing, setIsEditing] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isCreating, setIsCreating] = useState(!activeBaby);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Form states for baby profile
-  const [babyName, setBabyName] = useState(activeBaby.name);
-  const [birthDate, setBirthDate] = useState(activeBaby.birthDate);
-  const [gender, setGender] = useState<Gender>(activeBaby.gender);
-  const [avatarUrl, setAvatarUrl] = useState(activeBaby.avatarUrl || "");
+  const [babyName, setBabyName] = useState(activeBaby?.name ?? "");
+  const [birthDate, setBirthDate] = useState(activeBaby?.birthDate ?? new Date().toISOString().split("T")[0]);
+  const [gender, setGender] = useState<Gender>(activeBaby?.gender ?? Gender.Unknown);
+  const [avatarUrl, setAvatarUrl] = useState(activeBaby?.avatarUrl ?? "");
+  const [bloodType, setBloodType] = useState(activeBaby?.bloodType ?? "");
+  const [pediatricianName, setPediatricianName] = useState(activeBaby?.pediatricianName ?? "");
+  const [allergies, setAllergies] = useState(activeBaby?.allergies ?? "");
+
+  // Avatar upload: chọn file hoặc kéo thả (thay cho dán URL thủ công - dễ dán nhầm đường dẫn
+  // ổ đĩa cục bộ dạng file:/// mà trình duyệt không đọc được).
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isDraggingAvatar, setIsDraggingAvatar] = useState(false);
+  const [avatarUploadError, setAvatarUploadError] = useState<string | null>(null);
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarFile = async (file: File) => {
+    setAvatarUploadError(null);
+    if (!file.type.startsWith("image/")) {
+      setAvatarUploadError("Chỉ chấp nhận file ảnh (JPG, PNG, WEBP, GIF).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarUploadError("Ảnh vượt quá 5MB, vui lòng chọn ảnh nhỏ hơn.");
+      return;
+    }
+    setIsUploadingAvatar(true);
+    try {
+      const url = await onUploadAvatar(file);
+      setAvatarUrl(url);
+    } catch (err) {
+      setAvatarUploadError(err instanceof Error ? err.message : "Tải ảnh lên thất bại, vui lòng thử lại.");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   // Invite Guardian form states
   const [inviteEmail, setInviteEmail] = useState("");
@@ -62,37 +101,55 @@ export default function ProfileView({
 
   // Sync input fields whenever activeBaby changes, but only if not currently creating
   React.useEffect(() => {
-    if (!isCreating) {
+    if (!isCreating && activeBaby) {
       setBabyName(activeBaby.name);
       setBirthDate(activeBaby.birthDate);
       setGender(activeBaby.gender);
       setAvatarUrl(activeBaby.avatarUrl || "");
+      setBloodType(activeBaby.bloodType || "");
+      setPediatricianName(activeBaby.pediatricianName || "");
+      setAllergies(activeBaby.allergies || "");
     }
   }, [activeBaby, isCreating]);
 
-  const handleSaveBaby = (e: React.FormEvent) => {
+  const handleSaveBaby = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isCreating) {
-      // Adding a brand new profile
-      onAddBaby({
-        name: babyName || "Newborn Baby",
-        birthDate: birthDate || new Date().toISOString().split("T")[0],
-        gender: gender,
-        avatarUrl: avatarUrl || "/static/img/leo.png",
-        isActive: true
-      });
-      setIsCreating(false);
-      setIsEditing(false);
-    } else {
-      // Updating existing profile
-      onUpdateBaby({
-        ...activeBaby,
-        name: babyName,
-        birthDate,
-        gender,
-        avatarUrl
-      });
-      setIsEditing(false);
+    setSaveError(null);
+    setIsSaving(true);
+    try {
+      if (isCreating) {
+        // Adding a brand new profile - chỉ thoát khỏi form khi API xác nhận thành công, tránh
+        // race lật sang view "xem hồ sơ" trước khi activeBaby thực sự tồn tại (từng crash app).
+        await onAddBaby({
+          name: babyName || "Newborn Baby",
+          birthDate: birthDate || new Date().toISOString().split("T")[0],
+          gender: gender,
+          avatarUrl: avatarUrl || "/static/img/leo.png",
+          isActive: true,
+          bloodType: bloodType || undefined,
+          pediatricianName: pediatricianName || undefined,
+          allergies: allergies || undefined
+        });
+        setIsCreating(false);
+        setIsEditing(false);
+      } else {
+        // Updating existing profile
+        await onUpdateBaby({
+          ...activeBaby,
+          name: babyName,
+          birthDate,
+          gender,
+          avatarUrl,
+          bloodType,
+          pediatricianName,
+          allergies
+        });
+        setIsEditing(false);
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Đã có lỗi xảy ra, vui lòng thử lại.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -102,8 +159,27 @@ export default function ProfileView({
     setBirthDate(new Date().toISOString().split("T")[0]);
     setGender(Gender.Unknown);
     setAvatarUrl("");
+    setBloodType("");
+    setPediatricianName("");
+    setAllergies("");
     setIsCreating(true);
     setIsEditing(false);
+  };
+
+  const handleDeleteBaby = async () => {
+    if (!activeBaby) return;
+    const confirmed = window.confirm(`Xoá vĩnh viễn hồ sơ của ${activeBaby.name}? Hành động này không thể hoàn tác.`);
+    if (!confirmed) return;
+    setSaveError(null);
+    setIsSaving(true);
+    try {
+      await onDeleteBaby(activeBaby.id);
+      setIsEditing(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Đã có lỗi xảy ra, vui lòng thử lại.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleInviteGuardian = (e: React.FormEvent) => {
@@ -192,9 +268,14 @@ export default function ProfileView({
       </div>
 
       <AnimatePresence mode="wait">
-        
-        {/* VIEW 1: Profile demographic dashboard mode */}
-        {!isEditing && !isCreating ? (
+
+        {/* VIEW 1: Profile demographic dashboard mode. Bắt buộc kiểm tra thêm activeBaby ở đây:
+            handleSaveBaby chuyển isCreating -> false ngay khi bấm submit, nhưng onAddBaby ở App.tsx
+            là async (POST rồi GET lại danh sách bé) - có một khoảng ngắn activeBaby vẫn undefined
+            trong khi isCreating đã false, nếu không chặn ở đây sẽ crash vì view này đọc thẳng
+            activeBaby.name/.avatarUrl. Rơi về form tạo/sửa (an toàn với activeBaby undefined) cho
+            đến khi babies từ App.tsx cập nhật xong. */}
+        {!isEditing && !isCreating && activeBaby ? (
           <motion.div
             key="dashboard-view"
             initial={{ opacity: 0, y: 5 }}
@@ -228,9 +309,11 @@ export default function ProfileView({
 
                     {/* Status badges */}
                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
-                      <span className="px-3 py-1 bg-sky-100 text-sky-700 rounded-full text-[10px] font-bold">
-                        Nhóm máu A+
-                      </span>
+                      {activeBaby.bloodType && (
+                        <span className="px-3 py-1 bg-sky-100 text-sky-700 rounded-full text-[10px] font-bold">
+                          Nhóm máu {activeBaby.bloodType}
+                        </span>
+                      )}
                       <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold">
                         Khỏe mạnh
                       </span>
@@ -259,7 +342,7 @@ export default function ProfileView({
                     </div>
                     <div>
                       <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Bác sĩ nhi khoa</span>
-                      <span className="text-xs font-bold text-slate-700">Dr. Aris</span>
+                      <span className="text-xs font-bold text-slate-700">{activeBaby.pediatricianName || "Chưa cập nhật"}</span>
                     </div>
                   </div>
                 </div>
@@ -271,12 +354,18 @@ export default function ProfileView({
                     Dị ứng & Cảnh báo Y khoa
                   </span>
                   <div className="flex flex-wrap gap-2">
-                    <span className="px-3 py-1 bg-red-100 border border-red-200 text-red-700 font-bold rounded-full text-[10px] cursor-default">
-                      🥛 Nhạy cảm sữa bò
-                    </span>
-                    <span className="px-3 py-1 bg-orange-100 border border-orange-200 text-orange-700 font-bold rounded-full text-[10px] cursor-default">
-                      🥜 Đề phòng Đậu phộng
-                    </span>
+                    {activeBaby.allergies && activeBaby.allergies.trim() ? (
+                      activeBaby.allergies.split(",").map((item) => item.trim()).filter(Boolean).map((item) => (
+                        <span
+                          key={item}
+                          className="px-3 py-1 bg-red-100 border border-red-200 text-red-700 font-bold rounded-full text-[10px] cursor-default"
+                        >
+                          {item}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[11px] text-slate-400 font-semibold">Chưa ghi nhận dị ứng nào.</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -417,32 +506,73 @@ export default function ProfileView({
             className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 max-w-2xl mx-auto space-y-6"
           >
             <h3 className="text-primary font-bold text-sm uppercase tracking-wide text-slate-500">
-              {isCreating ? "Đăng ký hồ sơ em bé mới" : `Chỉnh sửa hồ sơ của ${activeBaby.name}`}
+              {isCreating ? "Đăng ký hồ sơ em bé mới" : `Chỉnh sửa hồ sơ của ${activeBaby?.name ?? ""}`}
             </h3>
+
+            {saveError && (
+              <div className="px-4 py-2.5 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs font-semibold">
+                {saveError}
+              </div>
+            )}
 
             <form onSubmit={handleSaveBaby} className="space-y-6 text-xs font-bold text-slate-600">
               
-              {/* Photo Input link */}
+              {/* Avatar upload: bấm để chọn file hoặc kéo thả trực tiếp vào ảnh - thay cho
+                  dán URL thủ công (nguồn gốc lỗi ảnh vỡ khi người dùng lỡ dán đường dẫn ổ đĩa
+                  cục bộ dạng file:/// mà trình duyệt không đọc được). */}
               <div className="flex items-center gap-4">
-                <div className="relative group cursor-pointer shrink-0">
+                <div
+                  onClick={() => !isUploadingAvatar && avatarFileInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (!isUploadingAvatar) setIsDraggingAvatar(true);
+                  }}
+                  onDragLeave={() => setIsDraggingAvatar(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingAvatar(false);
+                    if (isUploadingAvatar) return;
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleAvatarFile(file);
+                  }}
+                  className={`relative group cursor-pointer shrink-0 rounded-full transition-all ${
+                    isDraggingAvatar ? "ring-4 ring-primary/40" : ""
+                  }`}
+                >
                   <img
                     src={avatarUrl || "/static/img/leo.png"}
                     alt={babyName || "Preview"}
                     className="w-20 h-20 rounded-full object-cover border-2 border-white/40 shadow-sm"
                   />
                   <div className="absolute inset-0 bg-slate-900/30 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all">
-                    <Camera className="w-5 h-5" />
+                    {isUploadingAvatar ? (
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Camera className="w-5 h-5" />
+                    )}
                   </div>
-                </div>
-                <div className="space-y-1.5 flex-1">
-                  <h4 className="font-bold text-slate-700">Đường dẫn ảnh đại diện</h4>
                   <input
-                    type="text"
-                    value={avatarUrl}
-                    onChange={(e) => setAvatarUrl(e.target.value)}
-                    placeholder="Dán đường dẫn ảnh trực tiếp..."
-                    className="w-full font-medium bg-slate-50 border border-slate-200 focus:border-primary/40 focus:outline-hidden rounded-xl px-3 py-2 text-slate-700"
+                    ref={avatarFileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) handleAvatarFile(file);
+                    }}
                   />
+                </div>
+                <div className="space-y-1 flex-1">
+                  <h4 className="font-bold text-slate-700">Ảnh đại diện</h4>
+                  <p className="text-[11px] text-slate-400 font-semibold normal-case">
+                    {isUploadingAvatar
+                      ? "Đang tải ảnh lên…"
+                      : "Bấm vào ảnh hoặc kéo thả file ảnh (JPG/PNG/WEBP/GIF, tối đa 5MB) để thay đổi."}
+                  </p>
+                  {avatarUploadError && (
+                    <p className="text-[11px] text-rose-500 font-bold normal-case">{avatarUploadError}</p>
+                  )}
                 </div>
               </div>
 
@@ -500,23 +630,81 @@ export default function ProfileView({
                 </div>
               </div>
 
+              {/* Thông tin y khoa */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block">Nhóm máu</label>
+                  <select
+                    value={bloodType}
+                    onChange={(e) => setBloodType(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-primary/40 focus:bg-white focus:outline-hidden rounded-xl px-3.5 py-2 text-sm text-slate-800 font-medium"
+                  >
+                    <option value="">Chưa rõ</option>
+                    {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bt) => (
+                      <option key={bt} value={bt}>{bt}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block">Bác sĩ nhi khoa</label>
+                  <input
+                    type="text"
+                    value={pediatricianName}
+                    onChange={(e) => setPediatricianName(e.target.value)}
+                    placeholder="Ví dụ: BS. Nguyễn Văn A"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-primary/40 focus:bg-white focus:outline-hidden rounded-xl px-3.5 py-2 text-sm text-slate-800 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block">Dị ứng & Cảnh báo Y khoa</label>
+                <input
+                  type="text"
+                  value={allergies}
+                  onChange={(e) => setAllergies(e.target.value)}
+                  placeholder="Ví dụ: Sữa bò, Đậu phộng (ngăn cách bởi dấu phẩy)"
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-primary/40 focus:bg-white focus:outline-hidden rounded-xl px-3.5 py-2 text-sm text-slate-800 font-medium"
+                />
+              </div>
+
               <div className="pt-4 border-t border-white/20 flex items-center justify-between">
                 <button
                   type="submit"
-                  className="bg-primary hover:bg-primary/95 text-white px-5 py-2.5 rounded-full font-bold transition-all shadow-md shadow-primary/20 cursor-pointer"
+                  disabled={isSaving || isUploadingAvatar}
+                  className="bg-primary hover:bg-primary/95 text-white px-5 py-2.5 rounded-full font-bold transition-all shadow-md shadow-primary/20 cursor-pointer disabled:opacity-60"
                 >
-                  {isCreating ? "Tạo Hồ sơ em bé" : "Lưu chi tiết hồ sơ"}
+                  {isSaving ? "Đang lưu…" : isCreating ? "Tạo Hồ sơ em bé" : "Lưu chi tiết hồ sơ"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsCreating(false);
-                    setIsEditing(false);
-                  }}
-                  className="text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  Hủy
-                </button>
+                <div className="flex items-center gap-4">
+                  {/* Chỉ cho xoá khi đang sửa một bé đã tồn tại, không phải lúc tạo mới */}
+                  {!isCreating && activeBaby && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteBaby}
+                      disabled={isSaving}
+                      className="inline-flex items-center gap-1.5 text-rose-500 hover:text-rose-600 font-bold cursor-pointer disabled:opacity-60"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Xoá hồ sơ
+                    </button>
+                  )}
+                  {/* Chưa có bé nào thì không có "hồ sơ trước đó" để quay lại xem - ẩn nút Hủy
+                      để tránh lật sang view dashboard demographic vốn đọc thẳng activeBaby.* */}
+                  {activeBaby && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCreating(false);
+                        setIsEditing(false);
+                      }}
+                      className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+                  )}
+                </div>
               </div>
 
             </form>

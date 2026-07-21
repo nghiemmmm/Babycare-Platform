@@ -116,17 +116,28 @@ app.all("/api/v1/*", async (req, res) => {
         headers[key] = val;
       }
     }
-    
+
     // Inject mock token if not present to bypass auth in dev environment
     if (!headers["authorization"]) {
       headers["authorization"] = "Bearer mock-token";
     }
 
+    const hasBody = ["POST", "PUT", "PATCH"].includes(req.method);
+    // express.json() (áp dụng global ở trên) chỉ parse khi Content-Type là application/json -
+    // với multipart/form-data (vd. upload ảnh), req.body luôn rỗng ({}). Trước đây dòng này
+    // luôn JSON.stringify(req.body) bất kể content-type, nên với multipart sẽ gửi lên backend
+    // body là chuỗi "{}" trong khi header Content-Length/Content-Type vẫn giữ nguyên của
+    // multipart gốc (dài hơn nhiều) -> fetch() phát hiện body/headers không khớp và ném lỗi,
+    // proxy trả về "Failed to connect to backend service" dù backend không hề gặp vấn đề gì.
+    // Với các content-type khác JSON, phải forward nguyên request gốc dạng stream.
+    const isJson = req.is("application/json");
     const response = await fetch(targetUrl, {
       method: req.method,
       headers: headers,
-      body: ["POST", "PUT", "PATCH"].includes(req.method) ? JSON.stringify(req.body) : undefined,
-    });
+      body: !hasBody ? undefined : isJson ? JSON.stringify(req.body) : req,
+      // Bắt buộc khi body là ReadableStream (Node fetch yêu cầu duplex:"half" cho streaming body)
+      ...(hasBody && !isJson ? { duplex: "half" } : {}),
+    } as RequestInit);
 
     const contentType = response.headers.get("content-type");
     if (contentType && contentType.includes("application/json")) {

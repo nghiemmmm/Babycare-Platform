@@ -11,6 +11,9 @@ export interface BabyProfile {
   gender: Gender;
   avatarUrl?: string;
   isActive: boolean;
+  bloodType?: string;
+  pediatricianName?: string;
+  allergies?: string; // Chuỗi tự do, ngăn cách bởi dấu phẩy (vd. "Sữa bò, Đậu phộng")
 }
 
 export interface Measurement {

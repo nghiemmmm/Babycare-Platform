@@ -43,6 +43,9 @@ dist/
 build/
 *.log
 
+# Ảnh đại diện bé do người dùng tải lên (runtime, không phải asset nguồn)
+app/static/img/avatars/
+
 # Environment variables & Credentials (Full coverage)
 .env*
 !.env.example

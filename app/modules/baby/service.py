@@ -3,18 +3,43 @@ Baby Service Module
 
 Handles business logic and permission checking for baby profiles.
 """
-import logging
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 from app.modules.baby.schemas import BabyCreate, BabyUpdate, BabyResponse
 from app.modules.baby.repository import BabyRepository
 from app.shared.exceptions import EntityNotFoundError, PermissionDeniedError
 
-logger = logging.getLogger(__name__)
+# app/modules/baby/service.py -> app/ (3 cấp cha) -> static/img/avatars
+AVATAR_UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "img" / "avatars"
 
 class BabyService:
     def __init__(self, repository: Optional[BabyRepository] = None):
         self.repository = repository or BabyRepository()
+
+    def save_avatar(self, contents: bytes, ext: str) -> str:
+        """
+        Lưu file ảnh đại diện (đã được router validate content-type + kích thước) vào thư mục
+        tĩnh với tên ngẫu nhiên (uuid4) - không dùng tên file gốc người dùng gửi lên để tránh
+        path traversal / ghi đè file. Trả về URL public để dùng làm avatar_url khi tạo/sửa bé.
+        """
+        AVATAR_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        filename = f"{uuid.uuid4().hex}.{ext}"
+        (AVATAR_UPLOAD_DIR / filename).write_bytes(contents)
+        return f"/static/img/avatars/{filename}"
+
+    def _deactivate_other_babies(self, user_id: str, keep_baby_id: str) -> None:
+        """
+        Tắt is_active của mọi bé khác mà user_id đang giám hộ, chỉ giữ lại keep_baby_id.
+        Bắt buộc gọi mỗi khi một bé được đánh dấu active, vì "bé đang chọn" chỉ có ý nghĩa
+        khi đúng một bé active tại một thời điểm - nếu không, các lần tạo/chọn bé khác nhau sẽ
+        để lại nhiều bé cùng is_active=True, khiến activeBaby ở frontend (babies.find(is_active))
+        luôn dính vào bé cũ nhất/đầu tiên thay vì bé người dùng vừa chọn.
+        """
+        for other in self.repository.get_babies_by_guardian_id(user_id):
+            if other.id != keep_baby_id and other.is_active:
+                self.repository.update(other.id, {"is_active": False})
 
     def create_baby(self, baby_in: BabyCreate, creator_id: str) -> BabyResponse:
         """
@@ -40,7 +65,22 @@ class BabyService:
         )
         created_baby = self.repository.create(baby_obj)
 
+        if created_baby.is_active:
+            self._deactivate_other_babies(creator_id, created_baby.id)
+
         return created_baby
+
+    def set_active_baby(self, baby_id: str, user_id: str) -> BabyResponse:
+        """
+        Đánh dấu baby_id là bé đang chọn (active) của user_id, tự động bỏ active mọi bé
+        khác - dùng khi người dùng chuyển đổi giữa các hồ sơ bé trên UI.
+        """
+        self.get_baby_by_id(baby_id, user_id)  # kiểm tra tồn tại + quyền
+        self._deactivate_other_babies(user_id, baby_id)
+        updated = self.repository.update(baby_id, {"is_active": True})
+        if not updated:
+            raise EntityNotFoundError("Không thể chọn hồ sơ bé này")
+        return updated
 
     def get_baby_by_id(self, baby_id: str, user_id: str) -> BabyResponse:
         """
@@ -68,24 +108,11 @@ class BabyService:
 
     def get_my_babies(self, user_id: str) -> list[BabyResponse]:
         """
-        Lấy danh sách các bé thuộc quyền giám hộ của người dùng.
-        Nếu chưa có bé nào, tự động tạo bé mặc định để UI có dữ liệu hiển thị.
+        Lấy danh sách các bé thuộc quyền giám hộ của người dùng. Trả về mảng rỗng nếu
+        chưa có bé nào - đây là tín hiệu để frontend đưa người dùng vào luồng onboarding
+        tạo hồ sơ bé đầu tiên (xem App.tsx), nên không được tự seed dữ liệu giả ở đây.
         """
-        babies = self.repository.get_babies_by_guardian_id(user_id)
-        
-        if not babies:
-            logger.info(f"No babies found for user {user_id}, seeding default baby 'Leo'")
-            default_baby = BabyCreate(
-                name="Leo",
-                birth_date="2023-04-20",
-                gender="Boy",
-                avatar_url="/static/img/leo.png",
-                is_active=True
-            )
-            seeded = self.create_baby(default_baby, user_id)
-            babies = [seeded]
-            
-        return babies
+        return self.repository.get_babies_by_guardian_id(user_id)
 
     def update_baby(self, baby_id: str, baby_update: BabyUpdate, user_id: str) -> BabyResponse:
         """
@@ -101,12 +128,15 @@ class BabyService:
         """
         # Kiểm tra tồn tại và quyền trước khi cập nhật
         self.get_baby_by_id(baby_id, user_id)
-        
+
         data = baby_update.model_dump(exclude_unset=True)
         updated_baby = self.repository.update(baby_id, data)
         if not updated_baby:
             raise EntityNotFoundError("Cập nhật hồ sơ thất bại")
-            
+
+        if data.get("is_active"):
+            self._deactivate_other_babies(user_id, baby_id)
+
         return updated_baby
 
     def delete_baby(self, baby_id: str, user_id: str) -> bool:

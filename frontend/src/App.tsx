@@ -75,6 +75,13 @@ export default function App() {
 
   // Active Baby helper
   const activeBaby = babies.find((b) => b.isActive) || babies[0];
+  const hasBaby = Boolean(activeBaby);
+
+  // Onboarding: tài khoản vừa đăng ký chưa có hồ sơ bé nào - đưa thẳng vào tab "Hồ sơ bé" để
+  // nhập thông tin, vì mọi tab khác (Dashboard, Tăng trưởng, AI, Dinh dưỡng, Sức khỏe) đều đọc
+  // activeBaby.* không có kiểm tra null nên sẽ crash nếu chưa có bé nào. Chỉ tự chuyển tab một
+  // lần lúc mới bootstrap xong với 0 bé - không ảnh hưởng người dùng cũ chủ động vào tab Hồ sơ.
+  const [isOnboarding, setIsOnboarding] = useState(false);
 
   // Helper mappers
   const mapBackendGender = (g: string): Gender => {
@@ -195,14 +202,27 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
-            const mapped = data.map((b: any, index: number) => ({
+            // QUAN TRỌNG: chỉ dùng đúng is_active thật từ backend, KHÔNG được ép index===0
+            // thành active - trước đây "isActive: b.is_active || (index===0)" luôn ép phần tử
+            // đầu tiên thành active bất kể giá trị thật, nên dù backend đã lưu đúng bé nào đang
+            // chọn (vd. "gấu"), bé đứng đầu mảng (vd. "Leo") vẫn bị đánh dấu active song song ->
+            // babies.find(isActive) luôn vớ trúng bé đầu tiên thay vì bé người dùng thực sự chọn.
+            const mapped = data.map((b: any) => ({
               id: b.id,
               name: b.name,
               birthDate: b.birth_date,
               gender: mapBackendGender(b.gender),
               avatarUrl: b.avatar_url || "/static/img/leo.png",
-              isActive: b.is_active || (index === 0)
+              isActive: Boolean(b.is_active),
+              bloodType: b.blood_type,
+              pediatricianName: b.pediatrician_name,
+              allergies: b.allergies
             }));
+            // Fallback phòng dữ liệu cũ/hỏng chưa có bé nào active - chỉ áp dụng khi THỰC SỰ
+            // không có bé nào active, không phải mặc định luôn ép bé đầu tiên.
+            if (!mapped.some((b) => b.isActive)) {
+              mapped[0].isActive = true;
+            }
             setBabies(mapped);
           }
         }
@@ -221,6 +241,18 @@ export default function App() {
       refreshActiveBabyData(activeBaby.id);
     }
   }, [activeBaby?.id]);
+
+  // Bootstrap xong mà chưa có bé nào -> mở onboarding, khoá vào tab Hồ sơ.
+  // Ngay khi bé đầu tiên được tạo -> tắt onboarding, chuyển sang Dashboard.
+  useEffect(() => {
+    if (!isBootstrapping && babies.length === 0 && !isOnboarding) {
+      setIsOnboarding(true);
+      setActiveTab("profile");
+    } else if (isOnboarding && babies.length > 0) {
+      setIsOnboarding(false);
+      setActiveTab("dashboard");
+    }
+  }, [isBootstrapping, babies.length, isOnboarding]);
 
   // Stop watch logic
   useEffect(() => {
@@ -284,17 +316,26 @@ export default function App() {
 
   // State handlers passed to child views
   const handleSelectBaby = (id: string) => {
+    // Cập nhật lạc quan ngay trên UI trước, đồng thời lưu lựa chọn xuống backend - nếu chỉ đổi
+    // state cục bộ mà không gọi API, is_active thật trong Firestore không đổi, nên lần fetch
+    // lại babies tiếp theo (refreshActiveBabyData, tạo/sửa bé khác...) sẽ khiến bé đang chọn bị
+    // trả về giá trị cũ trong DB thay vì bé người dùng vừa bấm chọn.
     setBabies((prev) =>
       prev.map((b) => ({
         ...b,
         isActive: b.id === id
       }))
     );
+    apiFetch(`/api/v1/babies/${id}/set-active`, { method: "PATCH" }).catch((e) => console.error(e));
   };
 
+  // Ném lỗi thay vì chỉ console.error khi thất bại - nếu nuốt lỗi âm thầm, UI (ProfileView)
+  // không có cách nào biết để báo cho người dùng, nhìn như "bấm Lưu xong không có gì xảy ra"
+  // (vd. token đăng nhập hết hạn sau 1 giờ, mất mạng, lỗi server).
   const handleUpdateBaby = async (updated: BabyProfile) => {
+    let res: Response;
     try {
-      const res = await apiFetch(`/api/v1/babies/${updated.id}`, {
+      res = await apiFetch(`/api/v1/babies/${updated.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -302,20 +343,26 @@ export default function App() {
           birth_date: updated.birthDate,
           gender: updated.gender,
           avatar_url: updated.avatarUrl,
-          is_active: updated.isActive
+          is_active: updated.isActive,
+          blood_type: updated.bloodType,
+          pediatrician_name: updated.pediatricianName,
+          allergies: updated.allergies
         })
       });
-      if (res.ok) {
-        setBabies((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
-      }
     } catch (e) {
       console.error(e);
+      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
     }
+    if (!res.ok) {
+      throw new Error(res.status === 401 ? "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại." : "Lưu hồ sơ thất bại, vui lòng thử lại.");
+    }
+    setBabies((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
   };
 
   const handleAddBaby = async (newBaby: Omit<BabyProfile, "id">) => {
+    let res: Response;
     try {
-      const res = await apiFetch("/api/v1/babies", {
+      res = await apiFetch("/api/v1/babies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -323,29 +370,79 @@ export default function App() {
           birth_date: newBaby.birthDate,
           gender: newBaby.gender,
           avatar_url: newBaby.avatarUrl,
-          is_active: true
+          is_active: true,
+          blood_type: newBaby.bloodType,
+          pediatrician_name: newBaby.pediatricianName,
+          allergies: newBaby.allergies
         })
       });
-      if (res.ok) {
-        const data = await res.json();
-        // Reload all babies
-        const bRes = await apiFetch("/api/v1/babies");
-        if (bRes.ok) {
-          const bData = await bRes.json();
-          const mapped = bData.map((b: any) => ({
-            id: b.id,
-            name: b.name,
-            birthDate: b.birth_date,
-            gender: mapBackendGender(b.gender),
-            avatarUrl: b.avatar_url || "/static/img/leo.png",
-            isActive: b.id === data.id
-          }));
-          setBabies(mapped);
-        }
-      }
     } catch (e) {
       console.error(e);
+      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
     }
+    if (!res.ok) {
+      throw new Error(res.status === 401 ? "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại." : "Tạo hồ sơ bé thất bại, vui lòng thử lại.");
+    }
+    const data = await res.json();
+    const bRes = await apiFetch("/api/v1/babies");
+    if (bRes.ok) {
+      const bData = await bRes.json();
+      const mapped = bData.map((b: any) => ({
+        id: b.id,
+        name: b.name,
+        birthDate: b.birth_date,
+        gender: mapBackendGender(b.gender),
+        avatarUrl: b.avatar_url || "/static/img/leo.png",
+        isActive: b.id === data.id,
+        bloodType: b.blood_type,
+        pediatricianName: b.pediatrician_name,
+        allergies: b.allergies
+      }));
+      setBabies(mapped);
+    }
+  };
+
+  const handleDeleteBaby = async (id: string) => {
+    let res: Response;
+    try {
+      res = await apiFetch(`/api/v1/babies/${id}`, { method: "DELETE" });
+    } catch (e) {
+      console.error(e);
+      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
+    }
+    if (!res.ok) {
+      throw new Error(res.status === 401 ? "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại." : "Xoá hồ sơ thất bại, vui lòng thử lại.");
+    }
+    setBabies((prev) => {
+      const remaining = prev.filter((b) => b.id !== id);
+      // Nếu bé đang active bị xoá, gán active cho bé còn lại đầu tiên (nếu có) - nếu không
+      // còn bé nào cả, remaining=[] sẽ tự kích hoạt lại luồng onboarding (xem useEffect
+      // isOnboarding phía trên).
+      if (remaining.length > 0 && !remaining.some((b) => b.isActive)) {
+        remaining[0] = { ...remaining[0], isActive: true };
+      }
+      return remaining;
+    });
+  };
+
+  // Upload ảnh đại diện độc lập với create/update baby, vì lúc tạo bé mới chưa có baby_id để
+  // gắn ảnh vào - trả về URL tĩnh để ProfileView gán vào avatarUrl trước khi submit form.
+  const handleUploadAvatar = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    let res: Response;
+    try {
+      res = await apiFetch("/api/v1/babies/upload-avatar", { method: "POST", body: formData });
+    } catch (e) {
+      console.error(e);
+      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
+    }
+    if (!res.ok) {
+      const detail = await res.json().then((d) => d.detail || d.message).catch(() => null);
+      throw new Error(detail || (res.status === 401 ? "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại." : "Tải ảnh lên thất bại, vui lòng thử lại."));
+    }
+    const data = await res.json();
+    return data.avatar_url as string;
   };
 
   const handleAddMeasurement = async (newM: Omit<Measurement, "id">) => {
@@ -680,8 +777,12 @@ export default function App() {
               setActiveTab("dashboard");
               setIsMobileMenuOpen(false);
             }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "dashboard"
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "dashboard"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
@@ -710,8 +811,12 @@ export default function App() {
               setActiveTab("ai");
               setIsMobileMenuOpen(false);
             }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "ai"
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "ai"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
@@ -725,8 +830,12 @@ export default function App() {
               setActiveTab("nutrition");
               setIsMobileMenuOpen(false);
             }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "nutrition"
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "nutrition"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
@@ -740,8 +849,12 @@ export default function App() {
               setActiveTab("health");
               setIsMobileMenuOpen(false);
             }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "health"
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "health"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
@@ -755,8 +868,12 @@ export default function App() {
               setActiveTab("growth");
               setIsMobileMenuOpen(false);
             }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "growth"
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "growth"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
@@ -770,8 +887,12 @@ export default function App() {
               setActiveTab("nutrition");
               setIsMobileMenuOpen(false);
             }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "nutrition"
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "nutrition"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
@@ -827,14 +948,16 @@ export default function App() {
             
             <div className="h-5 w-px bg-slate-200" />
             
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-700">{activeBaby.name}</span>
-              <img
-                src={activeBaby.avatarUrl}
-                alt={activeBaby.name}
-                className="w-7 h-7 rounded-full object-cover border border-slate-200"
-              />
-            </div>
+            {activeBaby && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700">{activeBaby.name}</span>
+                <img
+                  src={activeBaby.avatarUrl}
+                  alt={activeBaby.name}
+                  className="w-7 h-7 rounded-full object-cover border border-slate-200"
+                />
+              </div>
+            )}
           </div>
         </header>
 
@@ -842,13 +965,29 @@ export default function App() {
         <div className="flex-1 p-4 md:p-8 overflow-y-auto">
           <AnimatePresence mode="wait">
             <motion.div
-              key={activeTab + "_" + activeBaby.id}
+              key={activeTab + "_" + (activeBaby?.id ?? "onboarding")}
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -5 }}
               transition={{ duration: 0.15 }}
               className="h-full"
             >
+              {/* Chưa có hồ sơ bé nào (mới đăng ký xong) - luôn hiện trang Hồ sơ để nhập
+                  thông tin bé đầu tiên, bất kể activeTab là gì (nav các tab khác đã bị khoá). */}
+              {!activeBaby ? (
+                <ProfileView
+                  babies={babies}
+                  guardians={guardians}
+                  onSelectBaby={handleSelectBaby}
+                  onUpdateBaby={handleUpdateBaby}
+                  onAddBaby={handleAddBaby}
+                  onDeleteBaby={handleDeleteBaby}
+                  onUploadAvatar={handleUploadAvatar}
+                  onAddGuardian={handleAddGuardian}
+                  onDeleteGuardian={handleDeleteGuardian}
+                />
+              ) : (
+                <>
               {activeTab === "dashboard" && (
                 <DashboardView
                   activeBaby={activeBaby}
@@ -909,6 +1048,8 @@ export default function App() {
                   onSelectBaby={handleSelectBaby}
                   onUpdateBaby={handleUpdateBaby}
                   onAddBaby={handleAddBaby}
+                  onDeleteBaby={handleDeleteBaby}
+                  onUploadAvatar={handleUploadAvatar}
                   onAddGuardian={handleAddGuardian}
                   onDeleteGuardian={handleDeleteGuardian}
                 />
@@ -924,6 +1065,8 @@ export default function App() {
                   onAddIngredient={handleAddIngredient}
                   onDeleteIngredient={handleDeleteIngredient}
                 />
+              )}
+                </>
               )}
             </motion.div>
           </AnimatePresence>
