@@ -1,0 +1,122 @@
+[
+  {
+    "input_query": "Chào trợ lý, tôi cần một vài lời khuyên về cách rèn bé sơ sinh tự ngủ.",
+    "expected_intent": "chat",
+    "expected_entities": {},
+    "expected_context_keywords": ["tự ngủ", "sơ sinh", "rèn ngủ"],
+    "expected_response_notes": "Cung cấp lời khuyên thân thiện về phương pháp rèn ngủ an sau như EASY, CIO hoặc Fading, khuyến nghị tạo môi trường ngủ tối và yên tĩnh."
+  },
+  {
+    "input_query": "Bé mấy tháng tuổi thì có thể bắt đầu tập ngồi được vậy bạn?",
+    "expected_intent": "chat",
+    "expected_entities": {},
+    "expected_context_keywords": ["tập ngồi", "mấy tháng"],
+    "expected_response_notes": "Giải thích trẻ thường bắt đầu tập ngồi từ 4-7 tháng tuổi, lưu ý các dấu hiệu sẵn sàng của bé và không nên ép bé ngồi quá sớm."
+  },
+  {
+    "input_query": "Ghi nhận giúp mình bé Bo vừa bú bình 120ml sữa công thức lúc 9h30 sáng nay.",
+    "expected_intent": "log_activity",
+    "expected_entities": {
+      "activity_type": "feeding",
+      "data": {
+        "food_name": "sữa công thức",
+        "amount_g": 120.0
+      }
+    },
+    "expected_context_keywords": [],
+    "expected_response_notes": "Xác nhận đã ghi nhận cữ bú sữa công thức 120ml của bé Bo thành công vào lúc 09:30."
+  },
+  {
+    "input_query": "Bé đi ị phân lỏng màu vàng, có nhầy lúc 14h chiều.",
+    "expected_intent": "log_activity",
+    "expected_entities": {
+      "activity_type": "diaper",
+      "data": {
+        "status": "lỏng",
+        "color": "vàng",
+        "has_mucus": true
+      }
+    },
+    "expected_context_keywords": [],
+    "expected_response_notes": "Xác nhận đã ghi nhận nhật ký thay tã của bé với mô tả phân lỏng, màu vàng có nhầy vào lúc 14:00."
+  },
+  {
+    "input_query": "Phân tích giúp tôi file âm thanh tiếng khóc hungry_cry_baby.wav vừa tải lên.",
+    "expected_intent": "analyze_cry",
+    "expected_entities": {
+      "audio_file": "hungry_cry_baby.wav"
+    },
+    "expected_context_keywords": ["tiếng khóc đói", "hungry cry"],
+    "expected_response_notes": "Đưa ra nhận diện tiếng khóc có xác suất đói (hungry) cao và hướng dẫn mẹ kiểm tra cữ bú gần nhất, đề xuất phát nhạc ru xoa dịu."
+  },
+  {
+    "input_query": "Nghe tiếng khóc bé gắt ngủ quấy quá, bật tiếng ồn trắng dỗ bé giúp tôi.",
+    "expected_intent": "analyze_cry",
+    "expected_entities": {
+      "action": "play_white_noise"
+    },
+    "expected_context_keywords": [],
+    "expected_response_notes": "Thông báo đang kích hoạt trình phát tiếng ồn trắng (white noise) để dỗ bé ngủ."
+  },
+  {
+    "input_query": "Bé Bo nhà tôi bị sốt nóng đầu, cặp nhiệt độ thấy 38.8 độ C thì phải làm sao?",
+    "expected_intent": "check_health",
+    "expected_entities": {
+      "symptom": "fever",
+      "temperature": 38.8
+    },
+    "expected_context_keywords": ["sốt trẻ em", "38.8 độ", "hạ sốt"],
+    "expected_response_notes": "Hướng dẫn chườm ấm, mặc quần áo thoáng mát. Khuyên dùng Paracetamol đúng liều lượng nếu cần và cảnh báo đưa đi viện nếu sốt cao liên tục hoặc có dấu hiệu li bì. Đính kèm khuyến cáo y tế chuyên khoa."
+  },
+  {
+    "input_query": "Bé uống thuốc hạ sốt Hapacol 150mg lúc 8h sáng, giờ 11h bé lại nóng thì có uống tiếp được không?",
+    "expected_intent": "check_health",
+    "expected_entities": {
+      "medication": "Hapacol",
+      "dose": "150mg",
+      "last_taken": "08:00"
+    },
+    "expected_context_keywords": ["khoảng cách liều", "hạ sốt"],
+    "expected_response_notes": "Cảnh báo khẩn cấp: Khoảng cách giữa 2 liều Paracetamol/Hapacol phải từ 4-6 tiếng. Thời gian hiện tại mới được 3 tiếng, không được tự ý cho uống thêm để tránh ngộ độc gan. Khuyên chườm ấm hạ sốt và theo dõi sát sao."
+  },
+  {
+    "input_query": "Bé 6 tháng nặng 7.2kg, dài 66cm thì có đạt chuẩn WHO không trợ lý?",
+    "expected_intent": "check_nutrition",
+    "expected_entities": {
+      "age_months": 6,
+      "weight_kg": 7.2,
+      "height_cm": 66.0
+    },
+    "expected_context_keywords": ["chuẩn tăng trưởng WHO", "6 tháng tuổi"],
+    "expected_response_notes": "Tính toán và so sánh chỉ số với bảng chuẩn WHO dành cho bé trai/bé gái 6 tháng tuổi. Đưa ra nhận xét bé đang ở ngưỡng phát triển bình thường hay thiếu cân/thấp còi."
+  },
+  {
+    "input_query": "Lên thực đơn ăn dặm tuần đầu tiên cho bé bắt đầu tập ăn dặm từ ngày mai.",
+    "expected_intent": "check_nutrition",
+    "expected_entities": {
+      "stage": "bắt đầu ăn dặm"
+    },
+    "expected_context_keywords": ["ăn dặm tuần đầu", "cháo rây"],
+    "expected_response_notes": "Gợi ý thực đơn tuần đầu tiên chủ yếu là cháo rây loãng tỷ lệ 1:10, kết hợp thử một số loại rau củ rây ngọt dịu (bí đỏ, cà rốt) để theo dõi dị ứng."
+  },
+  {
+    "input_query": "Hãy xuất báo cáo tổng hợp tình hình sức khỏe và cân nặng của bé Bo trong tháng này.",
+    "expected_intent": "generate_report",
+    "expected_entities": {
+      "report_type": "monthly",
+      "target": "health_and_growth"
+    },
+    "expected_context_keywords": [],
+    "expected_response_notes": "Xác nhận đang tiến hành tổng hợp dữ liệu sức khỏe, dinh dưỡng và chỉ số cân nặng trong tháng và xuất file báo cáo (PDF/Word) cho phụ huynh."
+  },
+  {
+    "input_query": "Tải giúp tôi file báo cáo tuần của bé dưới dạng PDF.",
+    "expected_intent": "generate_report",
+    "expected_entities": {
+      "format": "PDF",
+      "report_type": "weekly"
+    },
+    "expected_context_keywords": [],
+    "expected_response_notes": "Xác nhận và gửi đường dẫn tải tệp PDF báo cáo tuần của bé."
+  }
+]

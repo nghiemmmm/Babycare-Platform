@@ -18,3 +18,29 @@ class MedicationLogCreate(MedicationLogBase):
 
 class MedicationLogResponse(MedicationLogBase):
     id: Optional[str] = None
+
+
+# Schemas mới khớp giao diện Frontend
+class SafetyAlert(BaseModel):
+    level: str
+    message: str
+
+class CountdownWidget(BaseModel):
+    medication_name: str
+    next_eligible_time: str
+    is_administer_disabled: bool
+
+class HealthDashboardResponse(BaseModel):
+    safety_alert: Optional[SafetyAlert] = None
+    countdown_widget: Optional[CountdownWidget] = None
+
+class AdministerMedicationRequest(BaseModel):
+    baby_id: str
+    medication_name: str
+    amount: str
+    administered_at: str
+
+class AdministerMedicationResponse(BaseModel):
+    success: bool
+    next_scheduled_dosage: str
+    countdown_seconds: int

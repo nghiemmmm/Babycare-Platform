@@ -1,0 +1,1042 @@
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  Shield,
+  Plus,
+  Bell,
+  Settings,
+  Baby,
+  Moon,
+  Droplet,
+  Pill,
+  ChevronRight,
+  TrendingUp,
+  Activity,
+  ArrowRight,
+  Clock,
+  Sparkles,
+  MessageSquare,
+  Mic,
+  Send,
+  Volume2,
+  AlertCircle,
+  Check,
+  ChevronDown,
+  Trash2,
+  Scale,
+  Ruler
+} from "lucide-react";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend
+} from "recharts";
+import { BabyProfile, MedicationLog, FeedLog, Measurement, ChatMessage, SmartExtraction } from "../types";
+
+interface DashboardViewProps {
+  activeBaby: BabyProfile;
+  medications: MedicationLog[];
+  feeds: FeedLog[];
+  measurements: Measurement[];
+  chats: ChatMessage[];
+  isAiLoading: boolean;
+  isNapTimerRunning: boolean;
+  napElapsedTime: number;
+  onSendMessage: (text: string) => Promise<void>;
+  onConfirmExtraction: (ext: SmartExtraction) => void;
+  onStartNapTimer: () => void;
+  onAddMedication: (med: Omit<MedicationLog, "id">) => void;
+  onDeleteMedication: (id: string) => void;
+  onAddFeed: (feed: Omit<FeedLog, "id">) => void;
+  onDeleteFeed: (id: string) => void;
+  onAddMeasurement: (m: Omit<Measurement, "id">) => void;
+  onDeleteMeasurement: (id: string) => void;
+}
+
+// Static WHO standard median reference data (0-12 months) for boys & girls
+const WHO_BOY_WEIGHT_STANDARDS = [
+  { month: 0, median: 3.3, percentile3: 2.4, percentile97: 4.3 },
+  { month: 2, median: 5.6, percentile3: 4.3, percentile97: 7.1 },
+  { month: 4, median: 7.0, percentile3: 5.6, percentile97: 8.7 },
+  { month: 6, median: 7.9, percentile3: 6.4, percentile97: 9.8 },
+  { month: 8, median: 8.6, percentile3: 7.0, percentile97: 10.7 },
+  { month: 10, median: 9.2, percentile3: 7.5, percentile97: 11.4 },
+  { month: 12, median: 9.6, percentile3: 7.8, percentile97: 12.0 }
+];
+
+const WHO_GIRL_WEIGHT_STANDARDS = [
+  { month: 0, median: 3.2, percentile3: 2.4, percentile97: 4.2 },
+  { month: 2, median: 5.1, percentile3: 3.9, percentile97: 6.6 },
+  { month: 4, median: 6.4, percentile3: 5.0, percentile97: 8.2 },
+  { month: 6, median: 7.3, percentile3: 5.7, percentile97: 9.3 },
+  { month: 8, median: 8.0, percentile3: 6.3, percentile97: 10.2 },
+  { month: 10, median: 8.5, percentile3: 6.7, percentile97: 10.9 },
+  { month: 12, median: 8.9, percentile3: 7.0, percentile97: 11.5 }
+];
+
+export default function DashboardView({
+  activeBaby,
+  medications,
+  feeds,
+  measurements,
+  chats,
+  isAiLoading,
+  isNapTimerRunning,
+  napElapsedTime,
+  onSendMessage,
+  onConfirmExtraction,
+  onStartNapTimer,
+  onAddMedication,
+  onDeleteMedication,
+  onAddFeed,
+  onDeleteFeed,
+  onAddMeasurement,
+  onDeleteMeasurement
+}: DashboardViewProps) {
+  // Modals visibility states
+  const [activeModal, setActiveModal] = useState<"none" | "add-entry" | "feed" | "sleep" | "diaper" | "medication" | "growth">("none");
+
+  // Form states for Feed
+  const [feedType, setFeedType] = useState<"Formula" | "Breast" | "Solids">("Formula");
+  const [feedAmount, setFeedAmount] = useState(150);
+  const [feedDetails, setFeedDetails] = useState("Formula Milk");
+  
+  // Form states for Diaper
+  const [diaperType, setDiaperType] = useState<"Wet" | "Dirty" | "Both">("Wet");
+  const [diaperStatus, setDiaperStatus] = useState("Normal");
+
+  // Form states for Medication
+  const [medName, setMedName] = useState("Vitamin D drops");
+  const [medDosage, setMedDosage] = useState("2 drops");
+  const [prescribedBy, setPrescribedBy] = useState("Dr. Aris");
+
+  // Form states for Measurement
+  const [growthWeight, setGrowthWeight] = useState(7.4);
+  const [growthHeight, setGrowthHeight] = useState(67);
+  const [growthAgeMonths, setGrowthAgeMonths] = useState(6);
+
+  // Form states for Chat
+  const [chatInput, setChatInput] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+
+  // Local state for tracking Diaper logs and Temperature
+  const [diaperLogs, setDiaperLogs] = useState<Array<{ id: string; time: string; type: "Wet" | "Dirty" | "Both"; status: string }>>([
+    { id: "d1", time: "10:45 AM", type: "Wet", status: "Normal" },
+    { id: "d2", time: "07:30 AM", type: "Dirty", status: "Soft" },
+    { id: "d3", time: "06:15 AM", type: "Wet", status: "Normal" }
+  ]);
+  const [temperatureLogs, setTemperatureLogs] = useState<Array<{ id: string; time: string; temp: number; status: string }>>([
+    { id: "t1", time: "09:00 AM", temp: 36.8, status: "Optimal" }
+  ]);
+
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chats, isAiLoading]);
+
+  // Compute stats
+  const lastFeed = feeds.filter(f => f.type === "Formula" || f.type === "Breast")[0];
+  const lastFeedStr = lastFeed ? `${lastFeed.amount} ml` : "150 ml";
+  const lastFeedDetail = lastFeed ? lastFeed.details : "Breastmilk";
+  
+  // Calculate diaper count today
+  const diaperCountStr = `${diaperLogs.length} today`;
+
+  // Calculate current temperature
+  const currentTemp = temperatureLogs[0]?.temp || 36.8;
+
+  // Calculate age of activeBaby in months
+  const calculateAgeStr = (birthDateStr: string) => {
+    const birth = new Date(birthDateStr);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - birth.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const months = Math.floor(diffDays / 30.4);
+    if (months === 0) {
+      return `${diffDays} days`;
+    }
+    return `${months} months`;
+  };
+
+  const getLatestWeight = () => {
+    if (measurements.length > 0) {
+      const sorted = [...measurements].sort((a, b) => b.ageInMonths - a.ageInMonths);
+      return `${sorted[0].weight} kg`;
+    }
+    return "7.4 kg";
+  };
+
+  // Compile Growth Trajectory Chart Data
+  const isBoy = activeBaby.gender !== "Girl";
+  const standards = isBoy ? WHO_BOY_WEIGHT_STANDARDS : WHO_GIRL_WEIGHT_STANDARDS;
+  
+  const chartData = standards.map((std) => {
+    const match = measurements.find(m => Math.abs(m.ageInMonths - std.month) <= 0.5);
+    return {
+      name: std.month === 0 ? "Birth" : `${std.month}M`,
+      "WHO Median": std.median,
+      "WHO 3rd": std.percentile3,
+      "WHO 97th": std.percentile97,
+      [activeBaby.name]: match ? match.weight : (std.month === 6 ? parseFloat(getLatestWeight()) : undefined)
+    };
+  });
+
+  // Handle Quick Chat Submit
+  const handleChatSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || isAiLoading) return;
+    onSendMessage(chatInput);
+    setChatInput("");
+  };
+
+  // Simulate Mic voice memo input
+  const handleToggleMic = () => {
+    if (isRecording) {
+      setIsRecording(false);
+      // Simulate sending a voice request
+      onSendMessage("Vừa thay tã ướt cho bé Bo lúc 10h45");
+    } else {
+      setIsRecording(true);
+    }
+  };
+
+  // Handle modals submit
+  const handleAddFeedSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    onAddFeed({
+      babyId: activeBaby.id,
+      type: feedType,
+      details: feedType === "Solids" ? feedDetails : `${feedAmount}ml ${feedType === "Formula" ? "Formula" : "Breastmilk"}`,
+      amount: feedType === "Solids" ? 1 : feedAmount,
+      time: timeStr,
+      date: "Today"
+    });
+    setActiveModal("none");
+  };
+
+  const handleAddDiaperSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    setDiaperLogs(prev => [
+      { id: `diaper_${Date.now()}`, time: timeStr, type: diaperType, status: diaperStatus },
+      ...prev
+    ]);
+    setActiveModal("none");
+  };
+
+  const handleAddMedicationSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    onAddMedication({
+      babyId: activeBaby.id,
+      name: medName,
+      dosage: medDosage,
+      time: timeStr,
+      date: "Today",
+      prescribedBy: prescribedBy || "Self Logged"
+    });
+    setActiveModal("none");
+  };
+
+  const handleAddMeasurementSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onAddMeasurement({
+      babyId: activeBaby.id,
+      date: new Date().toISOString().split("T")[0],
+      ageInMonths: growthAgeMonths,
+      weight: growthWeight,
+      height: growthHeight,
+      headCircumference: 42.5,
+      status: "Normal"
+    });
+    setActiveModal("none");
+  };
+
+  // Combine feeds, meds, diapers into a single chronological timeline for today
+  const combinedTimeline = [
+    ...feeds.map(f => ({
+      id: f.id,
+      time: f.time,
+      type: "feed",
+      title: f.type === "Solids" ? "Solids Feed" : f.type === "Formula" ? "Formula Feed" : "Breast Feed",
+      detail: f.details,
+      rawType: f.type
+    })),
+    ...medications.map(m => ({
+      id: m.id,
+      time: m.time,
+      type: "medication",
+      title: m.name,
+      detail: `Dosage: ${m.dosage} • Prescribed by: ${m.prescribedBy || "Self"}`,
+      rawType: "Med"
+    })),
+    ...diaperLogs.map(d => ({
+      id: d.id,
+      time: d.time,
+      type: "diaper",
+      title: "Diaper Change",
+      detail: `${d.type} Diaper • ${d.status}`,
+      rawType: "Diaper"
+    }))
+  ].sort((a, b) => {
+    const timeToMinutes = (tStr: string) => {
+      const match = tStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (!match) return 0;
+      let h = parseInt(match[1]);
+      const m = parseInt(match[2]);
+      const ampm = match[3].toUpperCase();
+      if (ampm === "PM" && h < 12) h += 12;
+      if (ampm === "AM" && h === 12) h = 0;
+      return h * 60 + m;
+    };
+    return timeToMinutes(b.time) - timeToMinutes(a.time); // newest first
+  });
+
+  return (
+    <div className="space-y-6" id="dashboard-view">
+      
+      {/* 1. Header Profile Selector & Quick Action Panel */}
+      <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          {/* Baby selector profile */}
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <img
+                src={activeBaby.avatarUrl}
+                alt={activeBaby.name}
+                className="w-16 h-16 rounded-full object-cover border-2 border-white/40 shadow-sm"
+              />
+              <span className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center">
+                <Check className="w-2.5 h-2.5 text-white" />
+              </span>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-primary font-bold text-2xl tracking-tight">{activeBaby.name}</h1>
+                <ChevronDown className="w-5 h-5 text-primary cursor-pointer" />
+              </div>
+              <p className="text-sm font-semibold text-slate-500 mt-0.5">
+                {calculateAgeStr(activeBaby.birthDate) === "0 days" ? "Mới sinh" : calculateAgeStr(activeBaby.birthDate).replace("months", "tháng").replace("days", "ngày")} • {getLatestWeight()}
+              </p>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setActiveModal("add-entry")}
+              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-full text-sm font-bold transition-all shadow-md shadow-primary/20 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              Thêm ghi chép
+            </button>
+            <button className="p-3 bg-white/40 border border-white/20 rounded-full text-slate-500 hover:text-slate-700 transition-all cursor-pointer">
+              <Bell className="w-5 h-5" />
+            </button>
+            <button className="p-3 bg-white/40 border border-white/20 rounded-full text-slate-500 hover:text-slate-700 transition-all cursor-pointer">
+              <Settings className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-4 mt-8 max-w-2xl mx-auto">
+          {[
+            { label: "Ăn uống", icon: Droplet, color: "text-[#7cb9e8] bg-[#7cb9e8]/10 border-[#7cb9e8]/20", modal: "feed" },
+            { label: "Giấc ngủ", icon: Moon, color: "text-[#b19cd9] bg-[#b19cd9]/10 border-[#b19cd9]/20", modal: "sleep" },
+            { label: "Thay tã", icon: Baby, color: "text-[#fdfd96] bg-[#fdfd96]/20 border-[#fdfd96]/30", modal: "diaper" },
+            { label: "Uống thuốc", icon: Pill, color: "text-[#b2e2f2] bg-[#b2e2f2]/20 border-[#b2e2f2]/30", modal: "medication" }
+          ].map((action, idx) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={idx}
+                onClick={() => setActiveModal(action.modal as any)}
+                className="flex flex-col items-center gap-2 cursor-pointer group"
+              >
+                <div className={`w-14 h-14 rounded-full border flex items-center justify-center transition-all ${action.color} group-hover:scale-105 group-hover:shadow-md`}>
+                  <Icon className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-bold text-slate-600 group-hover:text-primary">{action.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 2. Real-time Status Card Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { title: "LẦN BÚ CUỐI", value: lastFeedStr, subtitle: lastFeedDetail.replace("Formula Milk", "Sữa công thức").replace("Breastmilk", "Sữa mẹ"), icon: Droplet, time: "🍼 " + (lastFeed ? lastFeed.time : "01:00 PM"), color: "text-accent-blue bg-accent-blue/10 border-accent-blue/20" },
+          { title: "TỔNG GIỜ NGỦ", value: isNapTimerRunning ? "Đang tính..." : "12.5 giờ", subtitle: "Mục tiêu: 14 giờ", icon: Moon, time: "💤 4 giấc hôm nay", color: "text-accent-purple bg-accent-purple/10 border-accent-purple/20" },
+          { title: "SỐ LẦN THAY TÃ", value: diaperCountStr.replace("today", "hôm nay"), subtitle: "Mọi thứ bình thường", icon: Baby, time: "💩 3 lần ướt / bẩn", color: "text-amber-500 bg-accent-gold/20 border-accent-gold/30" },
+          { title: "NHIỆT ĐỘ", value: `${currentTemp}°C`, subtitle: "Ngưỡng tối ưu", icon: Activity, time: "🌡️ Đo lúc 9:0 SA", color: "text-[#1c648e] bg-[#b2e2f2]/20 border-[#b2e2f2]/30" }
+        ].map((card, idx) => {
+          const Icon = card.icon;
+          return (
+            <div key={idx} className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-5 flex flex-col justify-between space-y-4 hover:scale-105 transition-transform duration-300">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{card.title}</span>
+                <div className={`p-1.5 rounded-full ${card.color}`}>
+                  <Icon className="w-4 h-4" />
+                </div>
+              </div>
+              <div>
+                <h3 className="text-primary font-semibold text-xl">{card.value}</h3>
+                <p className="text-xs font-semibold text-slate-400 mt-0.5">{card.subtitle}</p>
+              </div>
+              <div className="text-[10px] font-bold text-slate-500 bg-white/40 border border-white/20 rounded-lg px-2 py-1 inline-flex items-center gap-1 self-start">
+                {card.time}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 3. Columns Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left column: AI chat & Growth chart */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* AI Chat Widget */}
+          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 flex flex-col h-[400px]">
+            <div className="flex items-center justify-between pb-3 border-b border-white/20 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
+                <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  Trợ lý Trò chuyện AI
+                </h3>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 bg-white/40 border border-white/20 rounded-md px-2 py-0.5">
+                Trợ lý đắc lực
+              </span>
+            </div>
+
+            {/* Chats list area */}
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto py-4 space-y-4 pr-1 text-xs">
+              {chats.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 space-y-2">
+                  <MessageSquare className="w-8 h-8 text-slate-300" />
+                  <p className="text-xs">Hỏi bất cứ điều gì về cữ ăn, giấc ngủ hoặc lịch uống thuốc của {activeBaby.name}.</p>
+                </div>
+              ) : (
+                chats.map((chat) => (
+                  <div key={chat.id} className={`flex flex-col ${chat.role === "user" ? "items-end" : "items-start"}`}>
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-4 py-2.5 leading-relaxed ${
+                        chat.role === "user"
+                          ? "bg-primary text-white rounded-br-none"
+                          : "bg-white/70 border border-white/40 text-slate-700 rounded-bl-none shadow-xs"
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap">{chat.content}</p>
+
+                      {/* Smart extractions verification inside chat */}
+                      {chat.extraction && (
+                        <div className="mt-3 p-3 bg-white/80 border border-white/40 rounded-xl space-y-2 shadow-xs text-slate-800">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-bold uppercase text-primary tracking-wide">
+                              ✨ Gợi ý từ AI
+                            </span>
+                            <span className="text-[9px] font-bold text-slate-400">{chat.extraction.time}</span>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">{chat.extraction.title.replace("Feeding Log", "Cữ bú/ăn dặm").replace("Medication Log", "Uống thuốc").replace("Solids Feed", "Ăn dặm").replace("Nap Duration", "Thời gian ngủ")}</p>
+                            <p className="text-[10px] text-slate-500">{chat.extraction.detail.replace("Formula", "Sữa công thức").replace("Breastmilk", "Sữa mẹ").replace("Start Nap Tracking", "Bắt đầu đo giấc ngủ")}</p>
+                          </div>
+                          <button
+                            onClick={() => onConfirmExtraction(chat.extraction!)}
+                            className="w-full inline-flex items-center justify-center gap-1.5 bg-primary/10 hover:bg-primary/20 text-primary py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            Lưu vào Cơ sở dữ liệu
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-[9px] text-slate-400 font-bold mt-1 px-1">{chat.timestamp}</span>
+                  </div>
+                ))
+              )}
+              {isAiLoading && (
+                <div className="flex items-center gap-1.5 pl-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                </div>
+              )}
+            </div>
+
+            {/* Voice record soundwaves simulation */}
+            {isRecording && (
+              <div className="pb-3 flex items-center justify-center gap-1 shrink-0 animate-pulse bg-[#7cb9e8]/10 border border-[#7cb9e8]/20 rounded-2xl p-2 mb-2">
+                <span className="text-xs font-bold text-primary animate-pulse mr-2 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                  Đang ghi âm giọng nói...
+                </span>
+                {[1, 2, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 3, 2, 1].map((h, i) => (
+                  <span
+                    key={i}
+                    className="w-0.5 bg-primary rounded-full transition-all"
+                    style={{
+                      height: `${h * 4}px`,
+                      animation: "bounce 0.8s infinite alternate",
+                      animationDelay: `${i * 50}ms`
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Chat Input form */}
+            <form onSubmit={handleChatSubmit} className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleToggleMic}
+                className={`p-3 rounded-full border transition-all cursor-pointer ${
+                  isRecording
+                    ? "bg-red-50 text-red-600 border-red-200 animate-pulse"
+                    : "bg-white/40 border-white/20 text-slate-400 hover:text-slate-600 hover:bg-white/80"
+                }`}
+              >
+                <Mic className="w-4 h-4" />
+              </button>
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder={`Hỏi bất cứ điều gì về cách chăm sóc ${activeBaby.name}...`}
+                className="flex-1 bg-white/40 focus:bg-white/80 border border-white/20 focus:border-primary/35 focus:outline-hidden rounded-full px-4 py-3 text-xs text-slate-800 transition-all placeholder-slate-400"
+              />
+              <button
+                type="submit"
+                disabled={isAiLoading || !chatInput.trim()}
+                className="p-3 bg-primary hover:bg-primary/90 disabled:bg-slate-100 text-white disabled:text-slate-300 rounded-full transition-all shadow-md shadow-primary/20 cursor-pointer"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
+
+          {/* Growth trajectory WHO comparison Chart */}
+          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-white/20 pb-3">
+              <div>
+                <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4 text-emerald-500" />
+                  Tiến trình Tăng trưởng (Cân nặng thực tế)
+                </h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">Đường trung vị WHO so với số đo thực tế của {activeBaby.name}</p>
+              </div>
+              <button
+                onClick={() => setActiveModal("growth")}
+                className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 rounded-xl px-3 py-1.5 text-[10px] font-extrabold transition-all cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Thêm chỉ số
+              </button>
+            </div>
+
+            <div className="h-[240px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorBaby" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#1c648e" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#1c648e" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="name" stroke="#94a3b8" fontSize={9} fontWeight="bold" tickLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={9} fontWeight="bold" tickLine={false} domain={[2, 13]} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0", backgroundColor: "rgba(255, 255, 255, 0.9)" }}
+                    labelStyle={{ fontSize: "10px", fontWeight: "bold", color: "#1c648e" }}
+                    itemStyle={{ fontSize: "10px", padding: "1px 0" }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "10px", fontWeight: "bold", color: "#64748b" }} iconType="circle" />
+                  <Area type="monotone" dataKey={activeBaby.name} stroke="#1c648e" strokeWidth={2.5} fillOpacity={1} fill="url(#colorBaby)" activeDot={{ r: 6 }} />
+                  <Area type="monotone" dataKey="WHO Median" stroke="#7cb9e8" strokeWidth={1.5} strokeDasharray="3 3" fillOpacity={0} />
+                  <Area type="monotone" dataKey="WHO 3rd" stroke="#ef4444" strokeWidth={1} strokeDasharray="4 4" fillOpacity={0} />
+                  <Area type="monotone" dataKey="WHO 97th" stroke="#f59e0b" strokeWidth={1} strokeDasharray="4 4" fillOpacity={0} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Right column: AI Insights & Daily timeline */}
+        <div className="space-y-6">
+          
+          {/* AI Insights & Recommendations */}
+          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
+            <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
+              <Sparkles className="w-4.5 h-4.5 text-primary" />
+              Đánh giá từ AI
+            </h3>
+
+            <div className="space-y-3.5">
+              {/* Insight 1 */}
+              <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-blue-800">Chuyển sang ăn dặm</h4>
+                  <span className="text-[9px] font-bold text-blue-500 bg-blue-100 px-2 py-0.5 rounded-md">
+                    Dinh dưỡng
+                  </span>
+                </div>
+                <p className="text-[11px] text-blue-700 leading-relaxed">
+                  {activeBaby.name} đã được {calculateAgeStr(activeBaby.birthDate) === "0 days" ? "mới sinh" : calculateAgeStr(activeBaby.birthDate).replace("months", "tháng").replace("days", "ngày")} hôm nay! Thời điểm hoàn hảo để bắt đầu làm quen với các món nghiền như bơ hoặc khoai lang nghiền.
+                </p>
+                <a href="#" className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors">
+                  Xem hướng dẫn
+                  <ArrowRight className="w-3 h-3" />
+                </a>
+              </div>
+
+              {/* Insight 2 */}
+              <div className="p-4 bg-rose-50/50 border border-rose-100 rounded-2xl space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-rose-800">Nhắc lịch uống thuốc</h4>
+                  <span className="text-[9px] font-bold text-rose-500 bg-rose-100 px-2 py-0.5 rounded-md">
+                    Nhắc nhở
+                  </span>
+                </div>
+                <p className="text-[11px] text-rose-700 leading-relaxed">
+                  Khuyên dùng liều Vitamin D tiếp theo vào khoảng 4:00 chiều (trong 45 phút nữa).
+                </p>
+                <div className="text-[9px] font-bold text-rose-500 bg-white border border-rose-100 rounded px-2 py-0.5 inline-block">
+                  HÔM NAY 4:00 CHIỀU
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Daily Timeline */}
+          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-white/20 pb-3">
+              <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-slate-400" />
+                Dòng thời gian hoạt động
+              </h3>
+              <span className="text-[9px] font-bold text-slate-400 bg-white/40 border border-white/20 rounded-md px-2 py-0.5">
+                Hôm nay
+              </span>
+            </div>
+
+            <div className="relative pl-4 border-l border-slate-100 space-y-5">
+              {combinedTimeline.slice(0, 5).map((item, idx) => {
+                let dotColor = "bg-[#7cb9e8] ring-[#7cb9e8]/20";
+                if (item.type === "medication") dotColor = "bg-[#b2e2f2] ring-[#b2e2f2]/30";
+                if (item.type === "diaper") dotColor = "bg-[#fdfd96] ring-[#fdfd96]/30";
+
+                return (
+                  <div key={idx} className="relative group">
+                    <span className={`absolute -left-[20.5px] top-1 w-2.5 h-2.5 rounded-full ring-4 ${dotColor}`} />
+                    
+                    <div className="space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700">{item.title.replace("Formula Feed", "Bú sữa công thức").replace("Breast Feed", "Bú sữa mẹ").replace("Solids Feed", "Ăn dặm").replace("Diaper Change", "Thay tã")}</span>
+                        <span className="text-[9px] font-bold text-slate-400">{item.time}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">{item.detail.replace("Formula", "Sữa công thức").replace("Dosage:", "Liều lượng:").replace("Prescribed by:", "Kê đơn bởi:").replace("Self", "Tự cho").replace("Wet Diaper", "Tã ướt").replace("Dirty Diaper", "Tã bẩn").replace("Normal", "Bình thường").replace("Soft", "Mềm")}</p>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {combinedTimeline.length === 0 && (
+                <div className="text-center text-slate-400 py-6 text-xs">
+                  Chưa ghi nhận hoạt động nào hôm nay. Hãy ghi nhanh ở trên!
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* --- MODALS SECTION --- */}
+      <AnimatePresence>
+        
+        {/* Modal: Quick log general list selection */}
+        {activeModal === "add-entry" && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-800">Chọn loại ghi chép</h3>
+                <button onClick={() => setActiveModal("none")} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
+                  Đóng
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "🍼 Cữ ăn/uống", modal: "feed" },
+                  { label: "💤 Giấc ngủ", modal: "sleep" },
+                  { label: "💩 Thay tã", modal: "diaper" },
+                  { label: "💊 Uống thuốc", modal: "medication" },
+                  { label: "📈 Chỉ số WHO", modal: "growth" }
+                ].map((item, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveModal(item.modal as any)}
+                    className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-2xl text-left text-xs font-bold text-slate-600 hover:text-primary transition-all cursor-pointer"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Modal: Quick log feeding */}
+        {activeModal === "feed" && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                  🍼 Ghi nhận cữ ăn/uống
+                </h3>
+                <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-primary hover:text-primary/80 cursor-pointer">
+                  Quay lại
+                </button>
+              </div>
+
+              <form onSubmit={handleAddFeedSubmit} className="space-y-4 text-xs font-bold text-slate-600">
+                <div className="space-y-1">
+                  <label className="block">Loại thức ăn/uống</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {["Formula", "Breast", "Solids"].map((type) => {
+                      const labels: Record<string, string> = {
+                        Formula: "Sữa CT",
+                        Breast: "Sữa mẹ",
+                        Solids: "Ăn dặm"
+                      };
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setFeedType(type as any)}
+                          className={`py-2 rounded-xl border text-center transition-all cursor-pointer ${
+                            feedType === type
+                              ? "bg-primary border-primary text-white"
+                              : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          {labels[type]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {feedType !== "Solids" ? (
+                  <div className="space-y-1">
+                    <label className="block">Lượng dùng (ml)</label>
+                    <input
+                      type="number"
+                      value={feedAmount}
+                      onChange={(e) => setFeedAmount(parseInt(e.target.value))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40 focus:outline-hidden"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="block">Chi tiết món ăn dặm</label>
+                    <input
+                      type="text"
+                      value={feedDetails}
+                      onChange={(e) => setFeedDetails(e.target.value)}
+                      placeholder="Ví dụ: Khoai lang nghiền, bột bí đỏ"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40 focus:outline-hidden"
+                    />
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                >
+                  Lưu nhật ký
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Modal: Quick log sleep */}
+        {activeModal === "sleep" && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                  💤 Theo dõi giấc ngủ
+                </h3>
+                <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-primary hover:text-primary/80 cursor-pointer">
+                  Quay lại
+                </button>
+              </div>
+
+              <div className="text-center space-y-4 py-4">
+                <div className="text-3xl font-mono font-bold text-slate-700">
+                  {isNapTimerRunning ? (
+                    <span>
+                      {Math.floor(napElapsedTime / 3600)}g {Math.floor((napElapsedTime % 3600) / 60)}ph {napElapsedTime % 60}g
+                    </span>
+                  ) : (
+                    "00:00:00"
+                  )}
+                </div>
+                
+                <p className="text-xs text-slate-400 font-semibold px-4">
+                  {isNapTimerRunning ? `Bấm giờ đang ghi nhận giấc ngủ của ${activeBaby.name} dưới nền.` : `Nhấn Bắt đầu khi ${activeBaby.name} bắt đầu đi vào giấc ngủ.`}
+                </p>
+
+                <button
+                  onClick={onStartNapTimer}
+                  className={`w-full py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer ${
+                    isNapTimerRunning ? "bg-red-500 hover:bg-red-600 text-white" : "bg-primary hover:bg-primary/95 text-white"
+                  }`}
+                >
+                  {isNapTimerRunning ? "Dừng & Lưu nhật ký" : "Bắt đầu tính giờ ngủ"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Modal: Quick log diaper */}
+        {activeModal === "diaper" && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                  💩 Thay tã cho bé
+                </h3>
+                <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-primary hover:text-primary/80 cursor-pointer">
+                  Quay lại
+                </button>
+              </div>
+
+              <form onSubmit={handleAddDiaperSubmit} className="space-y-4 text-xs font-bold text-slate-600">
+                <div className="space-y-1">
+                  <label className="block">Loại tã</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {["Wet", "Dirty", "Both"].map((type) => {
+                      const labels: Record<string, string> = {
+                        Wet: "Ướt",
+                        Dirty: "Bẩn",
+                        Both: "Cả hai"
+                      };
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setDiaperType(type as any)}
+                          className={`py-2 rounded-xl border text-center transition-all cursor-pointer ${
+                            diaperType === type
+                              ? "bg-primary border-primary text-white"
+                              : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          {labels[type]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block">Trạng thái chất thải</label>
+                  <input
+                    type="text"
+                    value={diaperStatus}
+                    onChange={(e) => setDiaperStatus(e.target.value)}
+                    placeholder="Ví dụ: Bình thường, phân lỏng, khô"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40 focus:outline-hidden"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                >
+                  Lưu nhật ký tã
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Modal: Quick log medication */}
+        {activeModal === "medication" && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                  💊 Ghi nhận dùng thuốc
+                </h3>
+                <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-primary hover:text-primary/80 cursor-pointer">
+                  Quay lại
+                </button>
+              </div>
+
+              <form onSubmit={handleAddMedicationSubmit} className="space-y-4 text-xs font-bold text-slate-600">
+                <div className="space-y-1">
+                  <label className="block">Tên thuốc</label>
+                  <input
+                    type="text"
+                    required
+                    value={medName}
+                    onChange={(e) => setMedName(e.target.value)}
+                    placeholder="Ví dụ: Hapacol 150mg, Vitamin D"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40 focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block">Liều lượng</label>
+                  <input
+                    type="text"
+                    required
+                    value={medDosage}
+                    onChange={(e) => setMedDosage(e.target.value)}
+                    placeholder="Ví dụ: 150mg, 2 giọt"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40 focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block">Người kê đơn</label>
+                  <input
+                    type="text"
+                    value={prescribedBy}
+                    onChange={(e) => setPrescribedBy(e.target.value)}
+                    placeholder="Ví dụ: Bác sĩ nhi, tự bổ sung"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40 focus:outline-hidden"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                >
+                  Lưu nhật ký uống thuốc
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Modal: Quick log growth metric */}
+        {activeModal === "growth" && (
+          <div className="fixed inset-0 bg-[#1c648e]/20 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                  📈 Nhập chỉ số tăng trưởng WHO
+                </h3>
+                <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-primary hover:text-primary/80 cursor-pointer">
+                  Quay lại
+                </button>
+              </div>
+
+              <form onSubmit={handleAddMeasurementSubmit} className="space-y-4 text-xs font-bold text-slate-600">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block">Tuổi (Tháng)</label>
+                    <input
+                      type="number"
+                      required
+                      value={growthAgeMonths}
+                      onChange={(e) => setGrowthAgeMonths(parseInt(e.target.value))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block">Cân nặng (kg)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={growthWeight}
+                      onChange={(e) => setGrowthWeight(parseFloat(e.target.value))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block">Chiều cao (cm)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    value={growthHeight}
+                    onChange={(e) => setGrowthHeight(parseFloat(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                >
+                  Lưu số đo mới
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+      </AnimatePresence>
+
+    </div>
+  );
+}

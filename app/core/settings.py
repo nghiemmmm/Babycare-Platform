@@ -12,6 +12,38 @@ class Settings(BaseSettings):
     # Firebase Configuration
     FIREBASE_CREDENTIALS_PATH: Optional[str] = None
     FIREBASE_CREDENTIALS_JSON: Optional[str] = None
+    # Web API Key (khác service account key) - dùng để gọi Firebase Identity Toolkit
+    # REST API cho đăng nhập/refresh token. Lấy tại Firebase Console > Project
+    # Settings > General > Web API Key.
+    FIREBASE_WEB_API_KEY: Optional[str] = None
+
+    # Redis Cache Configuration (tùy chọn - nếu bỏ trống, cache/rate-limit tự fail-open
+    # sang bộ đếm trong bộ nhớ tiến trình)
+    REDIS_URL: Optional[str] = None
+    BABY_CACHE_TTL_SECONDS: int = 60
+
+    # Timeout tối đa (giây) cho các call đồng bộ (Firebase/Firestore) chạy trong threadpool
+    THREADPOOL_TIMEOUT_SECONDS: int = 10
+
+    # URL gốc của frontend, dùng để tạo action link khi cần (vd. reset password)
+    FRONTEND_URL: str = "http://localhost:5173"
+
+    # SMTP Configuration (tùy chọn - nếu bỏ trống, gửi email quên mật khẩu fail-open:
+    # chỉ log warning, không chặn luồng/không lộ cho client biết email có gửi được không)
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: Optional[str] = None
+
+    # AI API Keys
+    GEMINI_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
+
+    # Speech to Text Configuration
+    STT_PROVIDER: str = "whisper"
+    WHISPER_MODEL_SIZE: str = "tiny"
+    WHISPER_MODEL_DIR: str = "app/ai/models/faster-whisper"
 
     model_config = SettingsConfigDict(
         env_file=".env",

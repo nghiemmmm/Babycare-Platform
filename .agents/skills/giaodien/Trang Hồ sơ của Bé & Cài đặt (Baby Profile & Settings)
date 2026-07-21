@@ -1,0 +1,65 @@
+# Yêu cầu Thiết kế Trang Hồ sơ của Bé & Cài đặt (Baby Profile & Settings Page)
+
+Trang **Hồ sơ của Bé & Cài đặt** cho phép cha mẹ quản lý thông tin lý lịch cá nhân của các con và phân quyền giám hộ (đồng giám hộ) cho các thành viên khác trong gia đình (bố, mẹ, ông bà, người giữ trẻ) để cùng chăm sóc và theo dõi bé trên cơ sở dữ liệu dùng chung.
+
+---
+
+## 📸 1. Bản mẫu Thiết kế Giao diện (UI Mockup)
+Dưới đây là bản vẽ thiết kế giao diện quản lý hồ sơ bé và quản lý đồng giám hộ:
+
+![Bản mẫu giao diện Hồ sơ của Bé & Cài đặt](C:\Users\ASUS\.gemini\antigravity-ide\brain\f22e2574-ea3e-4d3e-b65b-3248594ef5c9\baby_profile_settings_page_mockup_1784282555328.png)
+
+---
+
+## 🧱 2. Bố cục & Tính năng Chi tiết (Page Layout)
+
+Giao diện được bố trí thành **2 khu vực quản lý độc lập**:
+
+### ⬅️ Khối bên trái: Quản lý Thông tin Bé (Baby Profile Manager)
+* **Mô tả**: Cho phép xem danh sách các bé và chỉnh sửa thông tin bé đang chọn.
+* **Các trường dữ liệu (Khớp `BabyResponse` trong database)**:
+  - **Tên của bé (`name`)**: Input text cho phép thay đổi.
+  - **Ngày sinh (`birth_date`)**: Date picker (Định dạng lưu trữ: `YYYY-MM-DD`).
+  - **Giới tính (`gender`)**: Nhóm nút bấm chọn nhanh (Radio Buttons) gồm: 👦 Bé trai (boy), 👧 Bé gái (girl), ❓ Chưa xác định (unknown).
+* **Nút bấm hành động**:
+  - `[ Lưu thay đổi ]`: Cập nhật thông tin bé hiện tại.
+  - `[ + Thêm bé mới ]`: Mở form trắng để đăng ký thêm một bé mới vào tài khoản.
+
+---
+
+### ➡️ Khối bên phải: Quản lý Đồng giám hộ (Co-guardians / Sharing Settings)
+* **Ý nghĩa nghiệp vụ**: Database Firestore lưu trữ danh sách các UIDs của cha mẹ có quyền xem/ghi dữ liệu của bé dưới dạng mảng `guardians` (Ví dụ: `guardians: ["uid_bo", "uid_me"]`).
+* **Các tính năng trên giao diện**:
+  - **Danh sách người giám hộ hiện tại**: Liệt kê danh sách các email/tên của những người đang có quyền truy cập chung hồ sơ bé.
+  - **Nút xóa quyền (Thùng rác)**: Cho phép người tạo hồ sơ chính xóa bớt quyền truy cập của người khác (Ví dụ: dừng chia sẻ dữ liệu với người giúp việc).
+  - **Form Mời Đồng giám hộ mới (Invite Guardian)**: 
+    - Nhập Email người cần mời $\rightarrow$ Bấm nút `[ Gửi lời mời ]`.
+    - Lời mời được gửi đi và khi người kia chấp nhận, UID của họ sẽ được Backend tự động bổ sung vào mảng `guardians` của tài liệu bé trên Firestore.
+
+---
+
+## 💾 3. Luồng dữ liệu & API Tích hợp (API & Data Flow)
+
+### 1. Lấy danh sách bé của tài khoản:
+* **API**: `GET /api/baby` (Trả về danh sách các bé mà UID của người dùng đang đăng nhập nằm trong mảng `guardians`).
+* **Sử dụng**: Hiển thị danh sách bé ở Sidebar và Dropdown trang chủ.
+
+### 2. Đăng ký bé mới:
+* **API**: `POST /api/baby`
+* **Body gửi lên (`BabyCreate`)**:
+  ```json
+  {
+    "name": "Bé Bo",
+    "birth_date": "2026-01-01",
+    "gender": "boy"
+  }
+  ```
+* **Luồng xử lý Backend**: Backend tự động gán UID của người dùng tạo làm phần tử đầu tiên trong mảng `guardians` và lưu vào collection `babies`.
+
+### 3. Cập nhật hồ sơ bé:
+* **API**: `PUT /api/baby/{baby_id}` (Gửi lên `BabyUpdate` payload).
+
+### 4. Thêm đồng giám hộ (Chia sẻ quyền):
+* **API**: `POST /api/baby/{baby_id}/share`
+* **Body gửi lên**: `{ "email": "email_nguoi_duoc_moi@gmail.com" }`
+* **Luồng xử lý**: Backend tìm kiếm UID từ Email trong hệ thống Firebase Auth, sau đó `$push` UID đó vào mảng `guardians` của bé trên Firestore.
