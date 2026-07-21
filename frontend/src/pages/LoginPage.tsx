@@ -12,7 +12,17 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // apiFetch() tự đăng xuất và điều hướng về đây ngay khi gặp 401 không làm mới token được -
+  // đọc cờ khi trang này MOUNT (không phải module-scope, vì LoginPage mount lại mỗi lần
+  // RequireAuth điều hướng tới đây) rồi xoá ngay để không hiện lại nếu quay lại /login sau đó
+  // vì lý do khác (vd. bấm "Đăng xuất" thủ công).
+  const [error, setError] = useState<string | null>(() => {
+    if (sessionStorage.getItem("bc_session_expired") === "1") {
+      sessionStorage.removeItem("bc_session_expired");
+      return "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.";
+    }
+    return null;
+  });
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent) {

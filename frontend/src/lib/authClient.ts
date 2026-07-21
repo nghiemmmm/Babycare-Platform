@@ -89,6 +89,17 @@ async function parseErrorMessage(response: Response): Promise<string> {
   try {
     const body = await response.json();
     if (body && typeof body.message === "string") return body.message;
+    // Lỗi validate 422 của FastAPI/Pydantic không có field "message" mà trả về
+    // {"detail": "..."} hoặc {"detail": [{"msg": "...", ...}, ...]} - nếu bỏ qua trường hợp
+    // này, người dùng chỉ thấy "Yêu cầu thất bại (mã lỗi 422)" chung chung dù backend đã có
+    // thông tin cụ thể hơn (vd. mật khẩu quá ngắn, email sai định dạng).
+    if (body && typeof body.detail === "string") return body.detail;
+    if (body && Array.isArray(body.detail) && body.detail.length > 0) {
+      const messages = body.detail
+        .map((item: { msg?: string }) => item?.msg)
+        .filter((msg: unknown): msg is string => typeof msg === "string");
+      if (messages.length > 0) return messages.join(" ");
+    }
   } catch {
     // response không phải JSON - bỏ qua, dùng message mặc định bên dưới
   }
@@ -143,6 +154,11 @@ export async function apiFetch(input: string, init: RequestInit = {}, _isRetry =
       return apiFetch(input, init, true);
     }
     authStorage.clear();
+    // RequireAuth điều hướng về /login ngay khi AUTH_EXPIRED_EVENT khiến isAuthenticated=false -
+    // nhanh tới mức unmount cả cây component gọi apiFetch trước khi kịp hiện bất kỳ thông báo
+    // lỗi nào tại chỗ. Lưu cờ để LoginPage tự đọc và giải thích lý do bị đăng xuất, thay vì
+    // người dùng thấy "tự nhiên bị đá về trang đăng nhập" không rõ nguyên do.
+    sessionStorage.setItem("bc_session_expired", "1");
     window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
   }
 

@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import logging
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import requests
@@ -31,6 +32,12 @@ OTP_COLLECTION = "password_reset_otps"
 OTP_LENGTH = 6
 OTP_TTL_MINUTES = 10
 OTP_MAX_ATTEMPTS = 5
+# Thời gian tối thiểu cho mỗi lần gọi request_password_reset, dù email có tồn tại hay không.
+# Nhánh "email tồn tại" phải ghi Firestore + gửi SMTP thật nên chậm hơn hẳn nhánh "không tồn
+# tại" (chỉ 1 lệnh get_user_by_email) - nếu không có phần đệm thời gian này, kẻ tấn công có
+# thể đo độ trễ phản hồi để dò xem một email có tài khoản trong hệ thống hay không, dù nội
+# dung message trả về giống hệt nhau.
+OTP_REQUEST_MIN_DURATION_SECONDS = 0.5
 
 
 def _require_web_api_key() -> str:
@@ -171,10 +178,12 @@ def request_password_reset(email: str, db: Client = None) -> None:
     if db is None:
         db = get_firestore_db()
 
+    start = time.monotonic()
     try:
         user_record = auth.get_user_by_email(email)
     except auth.UserNotFoundError:
         logger.info(f"Yêu cầu quên mật khẩu cho email không tồn tại: {email}")
+        _pad_duration(start)
         return
 
     otp = _generate_otp()
@@ -188,6 +197,14 @@ def request_password_reset(email: str, db: Client = None) -> None:
 
     display_name = user_record.display_name or email
     send_otp_email(email, display_name, otp, OTP_TTL_MINUTES)
+    _pad_duration(start)
+
+
+def _pad_duration(start: float) -> None:
+    """Ngủ thêm cho đủ OTP_REQUEST_MIN_DURATION_SECONDS kể từ `start`, nếu chưa đủ."""
+    remaining = OTP_REQUEST_MIN_DURATION_SECONDS - (time.monotonic() - start)
+    if remaining > 0:
+        time.sleep(remaining)
 
 
 def _verify_otp(email: str, otp: str, db: Client) -> auth.UserRecord:

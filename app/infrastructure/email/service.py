@@ -6,6 +6,7 @@ thất bại, chỉ log warning thay vì raise lỗi lên caller. Áp dụng cù
 nguyên tắc với app/infrastructure/cache/redis.py — tính năng phụ thuộc
 (vd. quên mật khẩu) vẫn chạy được, chỉ không gửi được email thật.
 """
+import html
 import logging
 import smtplib
 from email.message import EmailMessage
@@ -42,10 +43,11 @@ def send_email(to_email: str, subject: str, html_body: str) -> bool:
 def send_otp_email(to_email: str, display_name: str, otp: str, ttl_minutes: int) -> bool:
     """Gửi email chứa mã OTP đặt lại mật khẩu cho một tài khoản BabyCare."""
     subject = "BabyCare AI - Mã xác thực đặt lại mật khẩu"
+    safe_display_name = html.escape(display_name)
     html_body = f"""
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
       <h2>Đặt lại mật khẩu BabyCare AI</h2>
-      <p>Xin chào <strong>{display_name}</strong>,</p>
+      <p>Xin chào <strong>{safe_display_name}</strong>,</p>
       <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Nhập mã xác thực sau đây trong ứng dụng để tiếp tục:</p>
       <p style="margin: 24px 0; text-align: center;">
         <span style="display:inline-block;background:#f2f5f0;color:#1f2d22;font-size:32px;font-weight:700;letter-spacing:8px;padding:16px 24px;border-radius:8px;">{otp}</span>

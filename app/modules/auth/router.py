@@ -33,6 +33,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 # quên mật khẩu (xem app/shared/rate_limit.py).
 _register_rate_limit = rate_limiter("register", max_attempts=5, window_seconds=600)
 _login_rate_limit = rate_limiter("login", max_attempts=10, window_seconds=300)
+_refresh_rate_limit = rate_limiter("refresh", max_attempts=20, window_seconds=300)
 _forgot_password_rate_limit = rate_limiter("forgot-password", max_attempts=5, window_seconds=600)
 # Giới hạn riêng cho việc thử mã OTP (ngoài giới hạn 5 lần thử sai/mã ở service layer) -
 # chặn một IP dò nhiều mã OTP của nhiều tài khoản khác nhau trong cùng khung giờ.
@@ -53,7 +54,7 @@ async def login(payload: LoginRequest):
     """
     return await run_in_threadpool(login_user, payload.email, payload.password)
 
-@router.post("/refresh", response_model=AuthTokenResponse)
+@router.post("/refresh", response_model=AuthTokenResponse, dependencies=[Depends(_refresh_rate_limit)])
 async def refresh(payload: RefreshTokenRequest):
     """
     Làm mới ID token đã hết hạn bằng refresh token, không cần đăng nhập lại.

@@ -112,6 +112,12 @@ export default function ForgotPasswordPage() {
       await authApi.resetPassword(email, otp, password);
       setStage("done");
     } catch (err) {
+      // Nhiều khả năng nhất khiến bước cuối này thất bại là mã OTP đã hết hạn trong lúc
+      // người dùng nhập mật khẩu mới (mã hợp lệ trong 10 phút, đã được xác thực đúng ở bước
+      // trước). Quay lại bước nhập mã để họ có ngay lựa chọn "Gửi lại mã", thay vì kẹt ở màn
+      // hình mật khẩu không có lối thoát nào khác ngoài rời khỏi luồng quên mật khẩu.
+      setOtp("");
+      setStage("otp");
       setError(err instanceof ApiClientError ? err.message : "Không thể đặt lại mật khẩu, vui lòng thử lại.");
     } finally {
       setSubmitting(false);
