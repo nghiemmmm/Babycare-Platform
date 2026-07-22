@@ -4,6 +4,7 @@ Mọi thao tác với collection "guardians" và "babies" đều nằm ở đây
 """
 from typing import List, Optional
 from datetime import datetime, timezone
+from google.cloud.firestore import FieldFilter
 from app.infrastructure.database import get_firestore_db
 import uuid
 
@@ -15,7 +16,7 @@ class GuardianRepository:
     def list_by_baby(self, baby_id: str) -> List[dict]:
         """Trả về tất cả guardian documents của một bé."""
         db = get_firestore_db()
-        docs = db.collection(self.COLLECTION).where("baby_id", "==", baby_id).stream()
+        docs = db.collection(self.COLLECTION).where(filter=FieldFilter("baby_id", "==", baby_id)).stream()
         results = []
         for doc in docs:
             d = doc.to_dict()

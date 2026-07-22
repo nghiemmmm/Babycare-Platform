@@ -263,22 +263,6 @@ export default function ProfileView({
                     </div>
                   </div>
                 </div>
-
-                {/* Allergies and medical history block */}
-                <div className="p-4 bg-red-50/50 border border-red-100 rounded-2xl space-y-2">
-                  <span className="text-[10px] font-bold text-red-800 uppercase tracking-wider flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    Dị ứng & Cảnh báo Y khoa
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="px-3 py-1 bg-red-100 border border-red-200 text-red-700 font-bold rounded-full text-[10px] cursor-default">
-                      🥛 Nhạy cảm sữa bò
-                    </span>
-                    <span className="px-3 py-1 bg-orange-100 border border-orange-200 text-orange-700 font-bold rounded-full text-[10px] cursor-default">
-                      🥜 Đề phòng Đậu phộng
-                    </span>
-                  </div>
-                </div>
               </div>
 
               {/* Real-time Activity stream */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Shield,
@@ -19,6 +19,7 @@ import {
   Mic,
   Send,
   Volume2,
+  VolumeX,
   AlertCircle,
   Check,
   ChevronDown,
@@ -36,7 +37,8 @@ import {
   Tooltip,
   Legend
 } from "recharts";
-import { BabyProfile, MedicationLog, FeedLog, Measurement, ChatMessage, SmartExtraction } from "../types";
+import { BabyProfile, MedicationLog, FeedLog, Measurement, ChatMessage, SmartExtraction, NotificationItem } from "../types";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 
 interface DashboardViewProps {
   activeBaby: BabyProfile;
@@ -56,6 +58,7 @@ interface DashboardViewProps {
   onDeleteFeed: (id: string) => void;
   onAddMeasurement: (m: Omit<Measurement, "id">) => void;
   onDeleteMeasurement: (id: string) => void;
+  onNavigateTab?: (tab: string) => void;
 }
 
 // Static WHO standard median reference data (0-12 months) for boys & girls
@@ -96,7 +99,8 @@ export default function DashboardView({
   onAddFeed,
   onDeleteFeed,
   onAddMeasurement,
-  onDeleteMeasurement
+  onDeleteMeasurement,
+  onNavigateTab
 }: DashboardViewProps) {
   // Modals visibility states
   const [activeModal, setActiveModal] = useState<"none" | "add-entry" | "feed" | "sleep" | "diaper" | "medication" | "growth">("none");
@@ -133,6 +137,122 @@ export default function DashboardView({
   const [temperatureLogs, setTemperatureLogs] = useState<Array<{ id: string; time: string; temp: number; status: string }>>([
     { id: "t1", time: "09:00 AM", temp: 36.8, status: "Optimal" }
   ]);
+
+  // Notifications State & Fetching from Backend
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  // Quick Settings State
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+  const [unitSystem, setUnitSystem] = useState<"metric" | "imperial">("metric");
+
+  // Voice Extraction Loading State
+  const [isExtractingVoice, setIsExtractingVoice] = useState(false);
+
+  // Process voice transcript with FastAPI AI Agent Backend
+  const handleProcessVoiceTranscript = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    setIsExtractingVoice(true);
+    try {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      const res = await fetch(`${baseUrl}/api/v1/ai/voice-extract`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer mock-token"
+        },
+        body: JSON.stringify({ transcript: text, baby_id: activeBaby.id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const { intent, extracted_data } = data;
+        
+        if (intent === "feeding") {
+          if (extracted_data.type) setFeedType(extracted_data.type);
+          if (extracted_data.amount) setFeedAmount(extracted_data.amount);
+          if (extracted_data.details) setFeedDetails(extracted_data.details);
+          setActiveModal("feed");
+        } else if (intent === "medication") {
+          if (extracted_data.medication_name) setMedName(extracted_data.medication_name);
+          if (extracted_data.dosage) setMedDosage(extracted_data.dosage);
+          setActiveModal("medication");
+        } else if (intent === "growth") {
+          if (extracted_data.weight) setGrowthWeight(extracted_data.weight);
+          if (extracted_data.height) setGrowthHeight(extracted_data.height);
+          setActiveModal("growth");
+        } else if (intent === "diaper") {
+          if (extracted_data.type) setDiaperType(extracted_data.type);
+          setActiveModal("diaper");
+        } else if (intent === "sleep") {
+          setActiveModal("sleep");
+        } else {
+          setActiveModal("feed");
+        }
+      } else {
+        showToast("error", "Lỗi kết nối", "Không thể kết nối máy chủ phân tích AI.");
+      }
+    } catch (err) {
+      console.error("Error processing voice transcript with AI:", err);
+      showToast("error", "Lỗi bóc tách", "Đã xảy ra lỗi khi xử lý giọng nói.");
+    } finally {
+      setIsExtractingVoice(false);
+    }
+  }, [activeBaby.id]);
+
+  // Speech Recognition & Voice Extraction State with Auto-Silence Detection (1.5s)
+  const { isListening, transcript, startListening, stopListening, resetTranscript } = useSpeechRecognition({
+    silenceTimeoutMs: 1500,
+    onSilence: (finalText) => {
+      handleProcessVoiceTranscript(finalText);
+    }
+  });
+
+  // Toast Notification System (Success & Failure)
+  interface ToastNotification {
+    type: "success" | "error";
+    title: string;
+    message: string;
+  }
+  const [toast, setToast] = useState<ToastNotification | null>(null);
+
+  const showToast = (type: "success" | "error", title: string, message: string) => {
+    setToast({ type, title, message });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch(`/api/v1/dashboard/notifications?baby_id=${activeBaby.id}`, {
+          headers: { "Authorization": "Bearer mock-token" }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setNotifications(data);
+        }
+      } catch (err) {
+        console.warn("Could not fetch notifications from backend:", err);
+      }
+    };
+    fetchNotifications();
+  }, [activeBaby.id]);
+
+  const handleMarkAllAsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    notifications.forEach(async (n) => {
+      if (!n.read) {
+        try {
+          await fetch(`/api/v1/dashboard/notifications/${n.id}/read`, {
+            method: "POST",
+            headers: { "Authorization": "Bearer mock-token" }
+          });
+        } catch (e) {
+          // silent fallback
+        }
+      }
+    });
+  };
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -197,71 +317,92 @@ export default function DashboardView({
     setChatInput("");
   };
 
-  // Simulate Mic voice memo input
+  // Mic voice memo input toggle
   const handleToggleMic = () => {
-    if (isRecording) {
-      setIsRecording(false);
-      // Simulate sending a voice request
-      onSendMessage("Vừa thay tã ướt cho bé Bo lúc 10h45");
+    if (isListening) {
+      stopListening();
+      if (transcript) {
+        setChatInput(transcript);
+      }
     } else {
-      setIsRecording(true);
+      startListening();
     }
   };
 
   // Handle modals submit
   const handleAddFeedSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    onAddFeed({
-      babyId: activeBaby.id,
-      type: feedType,
-      details: feedType === "Solids" ? feedDetails : `${feedAmount}ml ${feedType === "Formula" ? "Formula" : "Breastmilk"}`,
-      amount: feedType === "Solids" ? 1 : feedAmount,
-      time: timeStr,
-      date: "Today"
-    });
-    setActiveModal("none");
+    try {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      onAddFeed({
+        babyId: activeBaby.id,
+        type: feedType,
+        details: feedType === "Solids" ? feedDetails : `${feedAmount}ml ${feedType === "Formula" ? "Formula" : "Breastmilk"}`,
+        amount: feedType === "Solids" ? 1 : feedAmount,
+        time: timeStr,
+        date: "Today"
+      });
+      setActiveModal("none");
+      showToast("success", "Thành công!", "Đã lưu nhật ký cữ bú thành công! 🍼");
+    } catch (err) {
+      showToast("error", "Thất bại!", "Không thể lưu nhật ký cữ bú. Vui lòng thử lại.");
+    }
   };
 
   const handleAddDiaperSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    setDiaperLogs(prev => [
-      { id: `diaper_${Date.now()}`, time: timeStr, type: diaperType, status: diaperStatus },
-      ...prev
-    ]);
-    setActiveModal("none");
+    try {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      setDiaperLogs(prev => [
+        { id: `diaper_${Date.now()}`, time: timeStr, type: diaperType, status: diaperStatus },
+        ...prev
+      ]);
+      setActiveModal("none");
+      showToast("success", "Thành công!", "Đã ghi nhận thay tã thành công! 💩");
+    } catch (err) {
+      showToast("error", "Thất bại!", "Không thể lưu thông tin thay tã.");
+    }
   };
 
   const handleAddMedicationSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    onAddMedication({
-      babyId: activeBaby.id,
-      name: medName,
-      dosage: medDosage,
-      time: timeStr,
-      date: "Today",
-      prescribedBy: prescribedBy || "Self Logged"
-    });
-    setActiveModal("none");
+    try {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      onAddMedication({
+        babyId: activeBaby.id,
+        name: medName,
+        dosage: medDosage,
+        time: timeStr,
+        date: "Today",
+        prescribedBy: prescribedBy || "Self Logged"
+      });
+      setActiveModal("none");
+      showToast("success", "Thành công!", "Đã lưu nhật ký dùng thuốc thành công! 💊");
+    } catch (err) {
+      showToast("error", "Thất bại!", "Không thể lưu thông tin thuốc.");
+    }
   };
 
   const handleAddMeasurementSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onAddMeasurement({
-      babyId: activeBaby.id,
-      date: new Date().toISOString().split("T")[0],
-      ageInMonths: growthAgeMonths,
-      weight: growthWeight,
-      height: growthHeight,
-      headCircumference: 42.5,
-      status: "Normal"
-    });
-    setActiveModal("none");
+    try {
+      onAddMeasurement({
+        babyId: activeBaby.id,
+        date: new Date().toISOString().split("T")[0],
+        ageInMonths: growthAgeMonths,
+        weight: growthWeight,
+        height: growthHeight,
+        headCircumference: 42.5,
+        status: "Normal"
+      });
+      setActiveModal("none");
+      showToast("success", "Thành công!", "Đã cập nhật chỉ số tăng trưởng thành công! 📈");
+    } catch (err) {
+      showToast("error", "Thất bại!", "Không thể lưu chỉ số tăng trưởng.");
+    }
   };
 
   // Combine feeds, meds, diapers into a single chronological timeline for today
@@ -307,8 +448,33 @@ export default function DashboardView({
   return (
     <div className="space-y-6" id="dashboard-view">
       
+      {/* Floating Toast Notification (Success & Error) */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -25, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -25, scale: 0.9 }}
+            className={`fixed top-6 right-6 z-50 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-white/20 flex items-center gap-3 backdrop-blur-xl transition-all ${
+              toast.type === "success" ? "bg-[#1c648e]" : "bg-rose-600"
+            }`}
+          >
+            <div
+              className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                toast.type === "success" ? "bg-emerald-400 text-slate-900" : "bg-white text-rose-600"
+              }`}
+            >
+              {toast.type === "success" ? "✓" : "✕"}
+            </div>
+            <div>
+              <h4 className="text-xs font-bold">{toast.title}</h4>
+              <p className="text-[11px] text-white/90 font-medium">{toast.message}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* 1. Header Profile Selector & Quick Action Panel */}
-      <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6">
+      <div className="relative z-30 bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           {/* Baby selector profile */}
           <div className="flex items-center gap-4">
@@ -333,7 +499,7 @@ export default function DashboardView({
             </div>
           </div>
 
-          {/* Action buttons */}
+            {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => setActiveModal("add-entry")}
@@ -342,12 +508,158 @@ export default function DashboardView({
               <Plus className="w-4 h-4" />
               Thêm ghi chép
             </button>
-            <button className="p-3 bg-white/40 border border-white/20 rounded-full text-slate-500 hover:text-slate-700 transition-all cursor-pointer">
-              <Bell className="w-5 h-5" />
-            </button>
-            <button className="p-3 bg-white/40 border border-white/20 rounded-full text-slate-500 hover:text-slate-700 transition-all cursor-pointer">
-              <Settings className="w-5 h-5" />
-            </button>
+
+            {/* Notification Popover Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setIsNotificationOpen(!isNotificationOpen)}
+                className="p-3 bg-white/40 border border-white/20 rounded-full text-slate-500 hover:text-slate-700 transition-all cursor-pointer relative"
+                title="Thông báo & Nhắc nhở"
+              >
+                <Bell className="w-5 h-5" />
+                {notifications.some((n) => !n.read) && (
+                  <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border border-white" />
+                )}
+              </button>
+
+              {isNotificationOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsNotificationOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-80 bg-white/95 backdrop-blur-xl border border-white/50 rounded-2xl shadow-xl p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+                    <h4 className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-[#1c648e]" />
+                      Thông báo & Nhắc nhở
+                    </h4>
+                    <button
+                      onClick={handleMarkAllAsRead}
+                      className="text-[10px] text-[#1c648e] hover:underline font-semibold cursor-pointer"
+                    >
+                      Đã đọc tất cả
+                    </button>
+                  </div>
+
+                  <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+                    {notifications.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-4">Không có thông báo mới nào</p>
+                    ) : (
+                      notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          className={`p-3 rounded-xl border text-xs transition-all ${
+                            n.read
+                              ? "bg-slate-50/50 border-slate-100 text-slate-500 opacity-75"
+                              : "bg-white border-sky-100 text-slate-800 shadow-xs"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-slate-800 text-[11px] flex items-center gap-1.5">
+                              {n.type === "medication" && "💊"}
+                              {n.type === "feeding" && "🍼"}
+                              {n.type === "safety" && "⚠️"}
+                              {n.type === "system" && "📌"}
+                              {n.title}
+                            </span>
+                            {!n.read && <span className="w-1.5 h-1.5 bg-sky-500 rounded-full shrink-0" />}
+                          </div>
+                          <p className="text-[10px] text-slate-600 leading-snug">{n.message}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+            </div>
+
+            {/* Settings button - Quick Settings Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                className="p-3 bg-white/40 border border-white/20 rounded-full text-slate-500 hover:text-slate-700 transition-all cursor-pointer relative"
+                title="Cài đặt nhanh"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+
+              {isSettingsOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsSettingsOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-72 bg-white/95 backdrop-blur-xl border border-white/50 rounded-2xl shadow-xl p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+                    <h4 className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-[#1c648e]" />
+                      Cài đặt nhanh
+                    </h4>
+                  </div>
+
+                  <div className="space-y-3 text-xs">
+                    {/* Sound Alert Toggle */}
+                    <div className="flex items-center justify-between py-1">
+                      <div className="flex items-center gap-2 text-slate-700 font-medium">
+                        {isSoundEnabled ? <Volume2 className="w-4 h-4 text-emerald-500" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
+                        <span>Âm thanh nhắc nhở</span>
+                      </div>
+                      <button
+                        onClick={() => setIsSoundEnabled(!isSoundEnabled)}
+                        className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                          isSoundEnabled ? "bg-[#1c648e]" : "bg-slate-300"
+                        }`}
+                      >
+                        <div
+                          className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${
+                            isSoundEnabled ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Unit System Selector */}
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-slate-700 font-medium">Đơn vị đo lường</span>
+                      <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                        <button
+                          onClick={() => setUnitSystem("metric")}
+                          className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                            unitSystem === "metric" ? "bg-white text-[#1c648e] shadow-xs" : "text-slate-500"
+                          }`}
+                        >
+                          Metric (ml/kg)
+                        </button>
+                        <button
+                          onClick={() => setUnitSystem("imperial")}
+                          className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                            unitSystem === "imperial" ? "bg-white text-[#1c648e] shadow-xs" : "text-slate-500"
+                          }`}
+                        >
+                          Imperial (oz/lbs)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-2.5 mt-2">
+                      <button
+                        onClick={() => {
+                          setIsSettingsOpen(false);
+                          onNavigateTab?.("profile");
+                        }}
+                        className="w-full flex items-center justify-between p-2.5 rounded-xl bg-sky-50/70 hover:bg-sky-100/70 text-[#1c648e] font-bold text-[11px] transition-all cursor-pointer"
+                      >
+                        <span>Hồ sơ & Phân quyền đầy đủ</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+            </div>
           </div>
         </div>
 
@@ -687,6 +999,57 @@ export default function DashboardView({
                 <button onClick={() => setActiveModal("none")} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
                   Đóng
                 </button>
+              </div>
+
+              {/* Voice Speech-to-Text Input Panel */}
+              <div className="p-4 bg-sky-50/70 border border-sky-100 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#1c648e] flex items-center gap-1.5">
+                    <Mic className="w-4 h-4 text-[#1c648e]" />
+                    Nhập bằng giọng nói (Tiếng Việt)
+                  </span>
+                  {isListening && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-red-500 animate-pulse">
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                      Đang lắng nghe...
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isListening) {
+                        stopListening();
+                        handleProcessVoiceTranscript(transcript);
+                      } else {
+                        startListening();
+                      }
+                    }}
+                    className={`w-full py-2.5 px-4 rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                      isListening
+                        ? "bg-red-500 text-white border-red-500 animate-pulse shadow-md shadow-red-200 font-bold"
+                        : "bg-white border-sky-200 text-[#1c648e] hover:bg-sky-100 font-bold"
+                    }`}
+                  >
+                    <Mic className="w-4 h-4" />
+                    <span className="text-xs">{isListening ? "Dừng & Phân tích Gemini AI" : "Bấm để nói tiếng Việt"}</span>
+                  </button>
+                </div>
+
+                {transcript && (
+                  <div className="p-2.5 bg-white border border-sky-100 rounded-xl text-[11px] text-slate-700 font-medium leading-snug">
+                    "{transcript}"
+                  </div>
+                )}
+
+                {isExtractingVoice && (
+                  <p className="text-[10px] font-bold text-[#1c648e] animate-pulse flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    Gemini AI Backend đang bóc tách thông tin...
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

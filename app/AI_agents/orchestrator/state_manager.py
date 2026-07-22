@@ -28,6 +28,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     ChannelVersions
 )
+from google.cloud.firestore import FieldFilter
 from app.infrastructure.database.connection import get_firestore_db
 from app.AI_agents.core.constant import CHECKPOINT_COLLECTION
 import pickle
@@ -101,8 +102,8 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
                 )
         else:
             docs = (
-                col.where("thread_id", "==", thread_id)
-                .where("checkpoint_ns", "==", checkpoint_ns)
+                col.where(filter=FieldFilter("thread_id", "==", thread_id))
+                .where(filter=FieldFilter("checkpoint_ns", "==", checkpoint_ns))
                 .limit(1)
                 .get()
             )
@@ -140,7 +141,7 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
         if config:
             thread_id = config["configurable"]["thread_id"]
             checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-            query = query.where("thread_id", "==", thread_id).where("checkpoint_ns", "==", checkpoint_ns)
+            query = query.where(filter=FieldFilter("thread_id", "==", thread_id)).where(filter=FieldFilter("checkpoint_ns", "==", checkpoint_ns))
 
         docs = query.get()
         for doc in docs:

@@ -50,6 +50,7 @@ async def delete_solid_food_log(
 
 # Router mới cho Feeds & Ingredients theo giao diện Frontend
 from typing import List, Optional
+from google.cloud.firestore import FieldFilter
 from app.infrastructure.database import get_firestore_db
 import uuid
 from app.modules.nutrition.schemas import (
@@ -78,9 +79,9 @@ async def get_nutrition_feeds(
     solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
     
     db = get_firestore_db()
-    query = db.collection("nutrition_feeds").where("baby_id", "==", baby_id)
+    query = db.collection("nutrition_feeds").where(filter=FieldFilter("baby_id", "==", baby_id))
     if date and date != "Today":
-        query = query.where("date", "==", date)
+        query = query.where(filter=FieldFilter("date", "==", date))
         
     docs = query.stream()
     results = []
@@ -155,7 +156,7 @@ async def get_ingredients(
     solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
     
     db = get_firestore_db()
-    docs = db.collection("nutrition_ingredients").where("baby_id", "==", baby_id).stream()
+    docs = db.collection("nutrition_ingredients").where(filter=FieldFilter("baby_id", "==", baby_id)).stream()
     results = []
     for doc in docs:
         d = doc.to_dict()

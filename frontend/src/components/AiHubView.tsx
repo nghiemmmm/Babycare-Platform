@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import {
   MessageSquare,
   Sparkles,
@@ -56,6 +59,14 @@ export default function AiHubView({
   const [activeThread, setActiveThread] = useState("sitting");
   const [showCitationDropdown, setShowCitationDropdown] = useState(false);
   const [showSwitchBabyDropdown, setShowSwitchBabyDropdown] = useState(false);
+
+  const { isListening, transcript, startListening, stopListening } = useSpeechRecognition();
+
+  useEffect(() => {
+    if (transcript) {
+      setInputText(transcript);
+    }
+  }, [transcript]);
   
   // Voice Memo Simulation State
   const [isVoicePlaying, setIsVoicePlaying] = useState(false);
@@ -168,10 +179,13 @@ export default function AiHubView({
       {/* 2. Cột Trung tâm (55%): Cửa sổ Chat thông minh (The AI Hub) */}
       <div className="flex-1 flex flex-col bg-slate-50/40 relative h-full">
         {/* Header Chat */}
-        <div className="p-4 border-b border-white/20 flex items-center justify-between bg-white/30 backdrop-blur-md">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-black text-slate-800">Tiến trình tập ngồi của bé Bo</h2>
+        {(() => {
+          const currentThread = threads.find((t) => t.id === activeThreadId);
+          return (
+            <div className="p-4 border-b border-white/20 flex items-center justify-between bg-white/30 backdrop-blur-md">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-black text-slate-800">{currentThread?.title || "Trò chuyện với Trợ lý AI"}</h2>
               
               {/* Switch Baby Dropdown selector button */}
               <div className="relative">
@@ -216,130 +230,64 @@ export default function AiHubView({
             <button className="p-2 hover:bg-white/60 rounded-xl cursor-pointer transition-colors">
               <Video className="w-4 h-4 text-slate-600" />
             </button>
-          </div>
-        </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Messages List Area */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs leading-relaxed">
           
-          {/* AI Response Bubble 1 */}
-          <div className="flex items-start gap-3 mr-auto max-w-[85%]">
-            <div className="w-8 h-8 rounded-full bg-[#1c648e]/10 text-[#1c648e] flex items-center justify-center shrink-0 mt-0.5">
-              <Sparkles className="w-4.5 h-4.5" />
-            </div>
-            <div className="space-y-2">
-              <div className="bg-white/70 backdrop-blur-md border border-white/40 text-slate-700 rounded-3xl rounded-tl-xs p-4 shadow-sm">
-                <p>
-                  Dựa trên mô tả của bạn, bé đang tiến bộ rất nhanh về **tập ngồi tựa**. Ở mốc 6 tháng, nhiều bé mới đang bắt đầu chống tay đẩy người lên trong tư thế nằm sấp.
-                </p>
-                <p className="mt-2">
-                  Hãy tiếp tục khuyến khích bé nằm sấp để tăng cường cơ liên sườn và cơ bụng cơ bản nhé!
-                </p>
+          {chats.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3 py-12">
+              <div className="w-12 h-12 rounded-full bg-[#1c648e]/10 text-[#1c648e] flex items-center justify-center">
+                <Sparkles className="w-6 h-6" />
               </div>
-
-              {/* Accordion citations */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowCitationDropdown(!showCitationDropdown)}
-                  className="inline-flex items-center gap-1 text-[10px] font-bold text-[#1c648e] bg-[#e0f2fe]/40 border border-[#e0f2fe]/80 rounded-lg px-2.5 py-1 hover:bg-[#e0f2fe]/60 transition-colors cursor-pointer"
-                >
-                  <BookOpen className="w-3.5 h-3.5" />
-                  XEM TÀI LIỆU THAM KHẢO
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showCitationDropdown ? "rotate-180" : ""}`} />
-                </button>
-
-                <AnimatePresence>
-                  {showCitationDropdown && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="mt-1.5 overflow-hidden p-2.5 bg-white/60 border border-white/30 rounded-xl space-y-1 text-[10px] font-semibold text-slate-500"
-                    >
-                      <p>📚 Mốc Phát triển Thể chất Trẻ sơ sinh WHO (2024)</p>
-                      <p>🏥 Hướng dẫn Vận động Thể chất Nhi khoa AAP (Trang 142)</p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-          </div>
-
-          {/* User Voice Memo Bubble (Right) */}
-          <div className="flex items-start gap-3 ml-auto max-w-[80%] justify-end">
-            <div className="bg-[#7cb9e8]/15 border border-[#7cb9e8]/30 rounded-3xl rounded-tr-xs px-4 py-3 shadow-2xs flex items-center gap-3">
-              <button
-                onClick={handlePlayVoice}
-                className="w-8 h-8 rounded-full bg-[#7cb9e8] text-white flex items-center justify-center transition-transform hover:scale-105 cursor-pointer"
-              >
-                {isVoicePlaying ? <Pause className="w-4 h-4 fill-white" /> : <Play className="w-4 h-4 fill-white ml-0.5" />}
-              </button>
-              
-              {/* Voice waveform animation */}
-              <div className="flex items-end gap-0.5 h-6 w-32 px-1">
-                {[8, 12, 16, 6, 14, 18, 10, 5, 9, 15, 12, 6, 8, 14].map((h, idx) => (
-                  <motion.div
-                    key={idx}
-                    animate={isVoicePlaying ? {
-                      height: [h, h * 1.6, h * 0.4, h],
-                    } : {}}
-                    transition={{
-                      repeat: Infinity,
-                      duration: 1,
-                      delay: idx * 0.08
-                    }}
-                    style={{
-                      height: `${h * 1.1}px`,
-                      opacity: voiceProgress > (idx / 14) * 100 ? 1 : 0.4
-                    }}
-                    className="w-[3px] bg-[#1c648e] rounded-full"
-                  />
-                ))}
-              </div>
-              <span className="text-[10px] font-black text-[#1c648e] font-mono">0:08</span>
-            </div>
-
-            <div className="w-8 h-8 rounded-full bg-sky-200 overflow-hidden flex items-center justify-center shrink-0 border border-white mt-1">
-              <span className="text-[10px] font-black text-sky-700">M</span>
-            </div>
-          </div>
-
-          {/* AI Response Bubble 2 */}
-          <div className="flex items-start gap-3 mr-auto max-w-[85%]">
-            <div className="w-8 h-8 rounded-full bg-[#1c648e]/10 text-[#1c648e] flex items-center justify-center shrink-0 mt-0.5">
-              <Sparkles className="w-4.5 h-4.5" />
-            </div>
-            <div className="bg-[#ecfdf5]/70 border border-[#ecfdf5] backdrop-blur-md text-slate-700 rounded-3xl rounded-tl-xs p-4 shadow-sm">
-              <p>
-                Tôi ghi nhận là bé vừa bú bình xong **150ml**. Điều này rất tuyệt! Lượng sữa này hoàn toàn phù hợp với nhu cầu khuyến nghị cho độ tuổi của bé. Tôi đã tạo sẵn biểu mẫu ghi nhận cữ bú để bạn xác nhận ở góc phải màn hình.
+              <p className="text-xs font-bold text-slate-600">Phiên trò chuyện mới cho {activeBaby.name}</p>
+              <p className="text-[11px] text-slate-400 text-center max-w-xs leading-relaxed">
+                Hãy đặt câu hỏi về cữ bú, giấc ngủ, chỉ số cân nặng hoặc cách chăm sóc {activeBaby.name} bên dưới!
               </p>
             </div>
-          </div>
-
-          {chats.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex items-start gap-3 max-w-[85%] ${
-                msg.role === "user" ? "ml-auto justify-end" : "mr-auto"
-              }`}
-            >
-              {msg.role === "assistant" && (
-                <div className="w-8 h-8 rounded-full bg-[#1c648e]/10 text-[#1c648e] flex items-center justify-center shrink-0 mt-0.5">
-                  <Sparkles className="w-4.5 h-4.5" />
-                </div>
-              )}
-
+          ) : (
+            chats.map((msg) => (
               <div
-                className={`rounded-3xl p-4 shadow-sm ${
-                  msg.role === "user"
-                    ? "bg-[#7cb9e8] text-white rounded-tr-xs"
-                    : "bg-white/70 border border-white/40 text-slate-700 rounded-tl-xs"
+                key={msg.id}
+                className={`flex items-start gap-3 max-w-[85%] ${
+                  msg.role === "user" ? "ml-auto justify-end" : "mr-auto"
                 }`}
               >
-                <p>{msg.content}</p>
+                {msg.role === "assistant" && (
+                  <div className="w-8 h-8 rounded-full bg-[#1c648e]/10 text-[#1c648e] flex items-center justify-center shrink-0 mt-0.5">
+                    <Sparkles className="w-4.5 h-4.5" />
+                  </div>
+                )}
+
+                <div
+                  className={`rounded-3xl p-4 shadow-sm ${
+                    msg.role === "user"
+                      ? "bg-[#1c648e] text-white rounded-tr-xs"
+                      : "bg-white/70 border border-white/40 text-slate-700 rounded-tl-xs"
+                  }`}
+                >
+                  {msg.role === "assistant" ? (
+                    <div className="prose prose-sm max-w-none text-slate-700 leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-1 [&_strong]:font-semibold [&_strong]:text-slate-900 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-slate-800 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  )}
+                </div>
+
+                {msg.role === "user" && (
+                  <div className="w-8 h-8 rounded-full bg-sky-200 overflow-hidden flex items-center justify-center shrink-0 border border-white mt-1">
+                    <span className="text-[10px] font-black text-sky-700">M</span>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            ))
+          )}
 
           {isAiLoading && (
             <div className="flex items-start gap-3 mr-auto">
@@ -374,7 +322,19 @@ export default function AiHubView({
               placeholder={`Hỏi về cữ bú hoặc giấc ngủ của ${activeBaby.name}...`}
               className="flex-1 bg-transparent border-none outline-hidden text-xs text-slate-700 placeholder-slate-400 font-medium"
             />
-            <button className="p-1 text-slate-400 hover:text-[#1c648e] transition-colors cursor-pointer" title="Sử dụng micro">
+            <button
+              onClick={() => {
+                if (isListening) {
+                  stopListening();
+                } else {
+                  startListening();
+                }
+              }}
+              className={`p-1.5 rounded-full transition-all cursor-pointer ${
+                isListening ? "bg-red-500 text-white animate-pulse" : "text-slate-400 hover:text-[#1c648e]"
+              }`}
+              title={isListening ? "Đang lắng nghe... Bấm để dừng" : "Nói tiếng Việt để nhập tin nhắn"}
+            >
               <Mic className="w-4 h-4" />
             </button>
             <button

@@ -387,10 +387,18 @@ export default function NutritionView({
             </h3>
 
             {/* High Alert Box */}
-            <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-r-2xl space-y-1.5 animate-pulse">
+            <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-r-2xl space-y-2 animate-pulse">
               <span className="text-[10px] font-bold text-red-800 uppercase tracking-wider flex items-center gap-1">
-                ⚠️ Cảnh báo cao: Đậu phộng
+                ⚠️ Dị ứng & Cảnh báo Y khoa
               </span>
+              <div className="flex flex-wrap gap-1.5">
+                <span className="px-2.5 py-0.5 bg-red-100 border border-red-200 text-red-700 font-bold rounded-full text-[9px]">
+                  🥛 Nhạy cảm sữa bò
+                </span>
+                <span className="px-2.5 py-0.5 bg-orange-100 border border-orange-200 text-orange-700 font-bold rounded-full text-[9px]">
+                  🥜 Đề phòng Đậu phộng
+                </span>
+              </div>
               <p className="text-[11px] text-red-700 leading-relaxed font-semibold">
                 {activeBaby.name} có phản ứng nổi mẩn đỏ nhẹ khi dùng bơ đậu phộng. Tránh tái sử dụng và tham khảo ý kiến bác sĩ.
               </p>

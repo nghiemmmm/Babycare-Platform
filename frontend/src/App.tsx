@@ -14,7 +14,9 @@ import {
   Bell,
   Menu,
   X,
-  Shield
+  Shield,
+  Clock,
+  BookOpen
 } from "lucide-react";
 
 import {
@@ -36,6 +38,7 @@ import AiHubView from "./components/AiHubView";
 import ProfileView from "./components/ProfileView";
 import NutritionView from "./components/NutritionView";
 import HealthView from "./components/HealthView";
+import LogsView from "./components/LogsView";
 
 const apiFetch = async (path: string, options: RequestInit = {}) => {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
@@ -64,7 +67,7 @@ export default function App() {
   const [activeThreadId, setActiveThreadId] = useState<string>("thread_default");
 
   // App UI state
-  const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health" | "logs">("dashboard");
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -810,6 +813,21 @@ export default function App() {
 
           <button
             onClick={() => {
+              setActiveTab("logs");
+              setIsMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
+              activeTab === "logs"
+                ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
+                : "text-slate-500 hover:text-primary hover:bg-primary/5"
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            Nhật ký
+          </button>
+
+          <button
+            onClick={() => {
               setActiveTab("nutrition");
               setIsMobileMenuOpen(false);
             }}
@@ -820,7 +838,7 @@ export default function App() {
             }`}
           >
             <Coffee className="w-4 h-4" />
-            Nhật ký
+            Dinh dưỡng
           </button>
 
           <button
@@ -851,21 +869,6 @@ export default function App() {
           >
             <Activity className="w-4 h-4" />
             Tăng trưởng
-          </button>
-
-          <button
-            onClick={() => {
-              setActiveTab("nutrition");
-              setIsMobileMenuOpen(false);
-            }}
-            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "nutrition"
-                ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
-                : "text-slate-500 hover:text-primary hover:bg-primary/5"
-            }`}
-          >
-            <Coffee className="w-4 h-4" />
-            Dinh dưỡng
           </button>
         </nav>
 
@@ -933,6 +936,7 @@ export default function App() {
                   onDeleteFeed={handleDeleteFeed}
                   onAddMeasurement={handleAddMeasurement}
                   onDeleteMeasurement={handleDeleteMeasurement}
+                  onNavigateTab={(tab) => setActiveTab(tab as any)}
                 />
               )}
 
@@ -980,6 +984,20 @@ export default function App() {
                   onAddBaby={handleAddBaby}
                   onAddGuardian={handleAddGuardian}
                   onDeleteGuardian={handleDeleteGuardian}
+                />
+              )}
+
+              {activeTab === "logs" && (
+                <LogsView
+                  activeBaby={activeBaby}
+                  feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
+                  medications={medications.filter((m) => m.babyId === activeBaby.id)}
+                  measurements={measurements.filter((m) => m.babyId === activeBaby.id)}
+                  onAddFeed={handleAddFeed}
+                  onDeleteFeed={handleDeleteFeed}
+                  onAddMedication={handleAddMedication}
+                  onDeleteMedication={handleDeleteMedication}
+                  onAddMeasurement={handleAddMeasurement}
                 />
               )}
 
