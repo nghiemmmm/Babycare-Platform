@@ -1,4 +1,5 @@
 import os
+import json
 import pypdf
 from langchain_core.documents import Document
 from app.AI_agents.core.constant import RAG_DOCUMENT_DIR
@@ -66,26 +67,61 @@ class DocumentLoader:
 
     def load(self) -> list[Document]:
         documents = []
-        for filename in os.listdir(self.directory_path):
+        files = os.listdir(self.directory_path)
+        has_jsonl = any(f.endswith(".jsonl") for f in files)
+        
+        for filename in files:
             filepath = os.path.join(self.directory_path, filename)
-            if filename.endswith(".md") or filename.endswith(".txt"):
-                with open(filepath, "r", encoding="utf-8") as f:
-                    text = f.read()
-                    documents.append(Document(page_content=text, metadata=self._get_metadata_for_file(filename, 1)))
-            elif filename.endswith(".pdf"):
+            if filename.endswith(".jsonl"):
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        for idx, line in enumerate(f):
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                data = json.loads(line)
+                                # Lấy trường enriched_text làm page_content chính để embedding
+                                content = data.get("enriched_text") or data.get("text", "")
+                                if not content or not content.strip():
+                                    continue
+                                
+                                # Metadata chỉ lấy riêng từng item trong jsonl
+                                item_meta = data.get("metadata")
+                                meta = dict(item_meta) if isinstance(item_meta, dict) else {}
+                                meta["source"] = filename
+                                meta["line"] = idx + 1
+                                
+                                # Lưu lại text gốc và context trong metadata để truy xuất khi cần
+                                if "text" in data:
+                                    meta["original_text"] = data["text"]
+                                if "context" in data:
+                                    meta["context"] = data["context"]
+                                
+                                documents.append(Document(page_content=content, metadata=meta))
+                            except json.JSONDecodeError:
+                                continue
+                except Exception as e:
+                    print(f"Lỗi khi đọc tệp JSONL {filename}: {e}")
+            elif not has_jsonl and filename.endswith(".pdf"):
                 try:
                     reader = pypdf.PdfReader(filepath)
-                    # Limit to first 5 pages to keep indexing fast during development
-                    pages_to_load = min(len(reader.pages), 5)
-                    for i in range(pages_to_load):
-                        page = reader.pages[i]
+                    for i, page in enumerate(reader.pages):
                         text = page.extract_text()
                         if text and text.strip():
-                            documents.append(Document(
-                                page_content=text,
-                                metadata=self._get_metadata_for_file(filename, i + 1)
-                            ))
+                            metadata = self._get_metadata_for_file(filename, page=i+1)
+                            documents.append(Document(page_content=text, metadata=metadata))
                 except Exception as e:
                     print(f"Lỗi khi đọc tệp PDF {filename}: {e}")
+            elif not has_jsonl and (filename.endswith(".txt") or filename.endswith(".md")):
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        text = f.read()
+                        if text and text.strip():
+                            metadata = self._get_metadata_for_file(filename)
+                            documents.append(Document(page_content=text, metadata=metadata))
+                except Exception as e:
+                    print(f"Lỗi khi đọc tệp văn bản {filename}: {e}")
         return documents
+
 

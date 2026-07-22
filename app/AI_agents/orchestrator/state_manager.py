@@ -14,6 +14,10 @@ class OverallState(TypedDict):
     next_step: Optional[str]
     extracted_data: Optional[dict]
     error_message: Optional[str]
+    # Out-of-scope web search fields
+    web_search_results: Optional[list[dict]]   # Raw results from WebSearchTool
+    is_out_of_scope: Optional[bool]            # Flag set when intent = "out_of_scope"
+
 
 from typing import Any, Iterator, Tuple
 from langchain_core.runnables import RunnableConfig

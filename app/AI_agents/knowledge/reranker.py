@@ -4,10 +4,6 @@ from langchain_core.documents import Document
 
 class LocalReranker:
     def __init__(self):
-        # Prevent PyTorch OpenMP/MKL multithreading deadlock in background tasks on Windows
-        import torch
-        torch.set_num_threads(1)
-        
         # Load CrossEncoder model from local cache directory
         self.model = CrossEncoder(
             RERANKER_MODEL_NAME,

@@ -1,4 +1,5 @@
 import os
+import shutil
 from app.AI_agents.knowledge.document_loader import DocumentLoader
 from app.AI_agents.knowledge.text_splitter import TextSplitter
 from langchain_community.vectorstores import FAISS
@@ -7,20 +8,31 @@ from app.AI_agents.core.constant import FAISS_INDEX_DIR, HYBRID_RETRIEVE_CANDIDA
 from app.AI_agents.knowledge.sparse_retriever import SparseBM25Retriever
 
 class RAGPipeline:
-    def __init__(self):
+    def __init__(self, force_rebuild: bool = False):
         self.loader = DocumentLoader()
         self.splitter = TextSplitter()
         self.embeddings = get_embeddings()
         self.vector_store = None
         self.sparse_retriever = SparseBM25Retriever()
         self.reranker = None  # Lazy init to save startup memory/time
-        self._initialize_pipeline()
+        self._initialize_pipeline(force_rebuild=force_rebuild)
 
-    def _initialize_pipeline(self):
+    def rebuild_index(self):
+        """Force clear old FAISS index and rebuild pipeline from scratch."""
+        self._initialize_pipeline(force_rebuild=True)
+
+    def _initialize_pipeline(self, force_rebuild: bool = False):
         """Load documents, split them, and index them in the FAISS vector store. Save/load locally to avoid rebuilding."""
         index_dir = FAISS_INDEX_DIR
         
-        if os.path.exists(index_dir):
+        if force_rebuild and os.path.exists(index_dir):
+            try:
+                shutil.rmtree(index_dir)
+                print(f"Đã xóa FAISS index cũ tại {index_dir}")
+            except Exception as e:
+                print(f"Lỗi khi xóa FAISS index cũ: {e}")
+        
+        if os.path.exists(index_dir) and not force_rebuild:
             try:
                 self.vector_store = FAISS.load_local(
                     folder_path=index_dir,
@@ -30,16 +42,18 @@ class RAGPipeline:
             except Exception as e:
                 print(f"Không thể tải FAISS index cục bộ, tiến hành dựng lại: {e}")
 
-        # Always parse and split documents to fit the BM25 sparse retriever
+        # Always parse documents to fit the BM25 sparse retriever & FAISS index if needed
         docs = self.loader.load()
-        chunks = self.splitter.split_documents(docs)
+        # Keep documents as atomic chunks without re-splitting if pre-chunked JSONL items
+        chunks = docs
         
         if chunks:
             self.sparse_retriever.fit(chunks)
-            if not self.vector_store:
+            if not self.vector_store or force_rebuild:
                 self.vector_store = FAISS.from_documents(chunks, self.embeddings)
                 try:
                     self.vector_store.save_local(index_dir)
+                    print(f"Đã tạo và lưu FAISS index mới với {len(chunks)} chunks.")
                 except Exception as e:
                     print(f"Lỗi khi lưu FAISS index cục bộ: {e}")
         else:
@@ -47,7 +61,7 @@ class RAGPipeline:
             from langchain_core.documents import Document
             dummy_doc = Document(page_content="dummy", metadata={"source": "dummy"})
             self.sparse_retriever.fit([dummy_doc])
-            if not self.vector_store:
+            if not self.vector_store or force_rebuild:
                 self.vector_store = FAISS.from_documents([dummy_doc], self.embeddings)
 
     def retrieve(self, query: str, k: int = 3, metadata_filter: dict = None) -> list:
@@ -58,9 +72,11 @@ class RAGPipeline:
         filter_func = None
         if metadata_filter:
             def metadata_filter_func(metadata: dict) -> bool:
-                if "category" in metadata_filter and metadata.get("category") != metadata_filter["category"]:
-                    return False
-                if "baby_age" in metadata_filter and metadata_filter["baby_age"] is not None:
+                for key in ["category", "chapter", "section", "subsection", "source"]:
+                    if key in metadata_filter and key in metadata and metadata[key] is not None:
+                        if metadata.get(key) != metadata_filter[key]:
+                            return False
+                if "baby_age" in metadata_filter and metadata_filter["baby_age"] is not None and ("age_min_months" in metadata or "age_max_months" in metadata):
                     try:
                         age = int(metadata_filter["baby_age"])
                         min_age = int(metadata.get("age_min_months", 0))

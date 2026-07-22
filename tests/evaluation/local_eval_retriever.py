@@ -1,14 +1,4 @@
 import os
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["MKL_THREADING_TYPE"] = "SEQUENTIAL"
-os.environ["OMP_THREAD_LIMIT"] = "1"
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
-
-import torch
-torch.set_num_threads(1)
-
 import json
 import anyio
 from app.AI_agents.knowledge.retriever import MedicalRetriever
