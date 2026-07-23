@@ -211,7 +211,8 @@ export default function App() {
       const res = await apiFetch(`/api/v1/ai/threads/${threadId}/messages`);
       if (res.ok) {
         const data = await res.json();
-        setChats(data.map((c: any) => ({
+        const recentMessages = Array.isArray(data) ? data.slice(-6) : [];
+        setChats(recentMessages.map((c: any) => ({
           id: c.id,
           role: c.role,
           content: c.content,
@@ -252,6 +253,41 @@ export default function App() {
       }
     };
     loadInitialBabies();
+  }, []);
+
+  // Check URL query parameters for invitation acceptance link
+  useEffect(() => {
+    const handleAcceptInviteFromUrl = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const inviteId = searchParams.get("accept_invite");
+      if (inviteId) {
+        try {
+          const res = await apiFetch(`/api/v1/guardians/accept/${inviteId}`, {
+            method: "POST"
+          });
+          if (res.ok) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            const resBabies = await apiFetch("/api/v1/babies");
+            if (resBabies.ok) {
+              const dataBabies = await resBabies.json();
+              if (Array.isArray(dataBabies) && dataBabies.length > 0) {
+                setBabies(dataBabies.map((b: any, index: number) => ({
+                  id: b.id,
+                  name: b.name,
+                  birthDate: b.birth_date,
+                  gender: mapBackendGender(b.gender),
+                  avatarUrl: b.avatar_url || "/static/img/leo.png",
+                  isActive: index === 0
+                })));
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error accepting invitation from URL:", e);
+        }
+      }
+    };
+    handleAcceptInviteFromUrl();
   }, []);
 
   // Sync active baby details

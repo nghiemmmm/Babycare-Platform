@@ -8,6 +8,7 @@ from app.infrastructure.database import get_firestore_db
 from app.modules.baby.service import BabyService
 from datetime import datetime, timezone, timedelta
 import uuid
+import os
 
 from app.modules.ai_agent.schemas import (
     ChatRequest,
@@ -70,8 +71,9 @@ async def list_chat_threads(
             last_updated=d.get("last_updated", "")
         ))
         
-    # Sắp xếp cuộc trò chuyện gần nhất lên đầu
+    # Sắp xếp cuộc trò chuyện gần nhất lên đầu và giới hạn 6 phiên
     threads.sort(key=lambda x: x.last_updated, reverse=True)
+    threads = threads[:6]
     
     # Nếu chưa có thread nào, tự động tạo một thread ban đầu cho người dùng
     if not threads:
@@ -89,7 +91,7 @@ async def list_chat_threads(
             last_updated=datetime.now(timezone.utc).isoformat()
         ))
         
-    return threads
+    return threads[:6]
 
 @ai_agent_router.post("/threads", response_model=ThreadCreateResponse)
 async def create_chat_thread(
@@ -142,7 +144,8 @@ async def get_thread_messages(
             content=msg.content,
             timestamp=ts
         ))
-    return result
+    # Chỉ trả về 6 tin nhắn mới nhất trong phiên chat
+    return result[-6:]
 
 @ai_agent_router.post("/threads/{thread_id}/messages", response_model=MessageCreateResponse)
 async def create_thread_message(
@@ -424,3 +427,40 @@ async def extract_from_voice(
         extracted_data=extracted_data,
         confidence_message="Bóc tách dữ liệu từ giọng nói thành công."
     )
+
+@ai_agent_router.post("/reports/generate")
+async def generate_baby_report(
+    baby_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Kích hoạt AI tổng hợp dữ liệu và xuất bản tệp PDF Báo cáo Tăng trưởng & Y khoa.
+    """
+    from app.AI_agents.workflows.report_graph import ReportGraph, generate_pdf_report
+    graph = ReportGraph().compile()
+    
+    initial_state = {
+        "messages": [],
+        "baby_id": baby_id,
+        "current_user_id": current_user.uid,
+        "extracted_data": {}
+    }
+    
+    res = await graph.ainvoke(initial_state)
+    extracted = res.get("extracted_data", {})
+    summary = extracted.get("report_text_summary", "Chưa có dữ liệu báo cáo.")
+    
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    pdf_filename = f"report_{baby_id}_{timestamp}.pdf"
+    pdf_path = os.path.join("app", "static", "reports", pdf_filename)
+    
+    os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
+    generate_pdf_report(pdf_path, "Báo Cáo Tăng Trưởng & Y Khoa Cho Bé", summary)
+    
+    pdf_url = f"/static/reports/{pdf_filename}"
+    return {
+        "success": True,
+        "summary": summary,
+        "pdf_url": pdf_url,
+        "message": "Đã tạo báo cáo PDF thành công."
+    }

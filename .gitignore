@@ -1,51 +1,196 @@
-# Virtual Environment
+# =============================================================================
+# BabyCare AI — .gitignore
+# Stack: FastAPI · LangGraph · PyTorch · React + Vite · Firebase
+# =============================================================================
+
+# ─── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# ─── Virtual Environments ────────────────────────────────────────────────────
 venv/
 ENV/
 env/
 .venv/
+.python-version
 
-
-# Python caching
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Testing caching
+# ─── Testing & Coverage ──────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+*.xml
 
-# Editor & IDEs
+# ─── Build / Distribution ────────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+*.egg
+site/
+.eggs/
+
+# ─── Type Checking ───────────────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+.pyright/
+
+# ─── Editors & IDEs ──────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
 
-# OS files
+# ─── OS Files ────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
+ehthumbs.db
+*.lnk
 
-# AI/ML Large Models & Cache
-app/ai/models/
+# =============================================================================
+# Frontend — Node / Vite / React
+# =============================================================================
+
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+node_modules/
+dist/
+.vite/
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =============================================================================
+# AI / ML — Models, Weights & Caches
+# =============================================================================
+
+# PyTorch / HuggingFace / ONNX / TF (global — not CRY, see below)
 *.pt
-*.pth
-*.bin
+# *.pth excluded from global rule — handled per-directory below
 *.onnx
 *.pkl
 *.h5
 *.joblib
 *.pb
 *.ckpt
+*.safetensors
+*.msgpack
 
-# Node/Frontend outputs and dependencies
-node_modules/
-dist/
-build/
-*.log
+# Model directories (keep CRY source code — only weight files ignored below)
+app/ai/models/
+app/ai/cry_detection/models/
+app/ai/voice_clone/models/
 
-# Environment variables & Credentials (Full coverage)
-.env*
+# HuggingFace / Torch cache
+.cache/
+*.cache/
+huggingface/
+torch_cache/
+
+# Jupyter Notebooks (colab experiments — keep .py scripts only)
+app/AI_agents/knowledge/colab/
+
+# CRY inference module — only ignore heavy weight files (.pth)
+# Source code (ast_models.py, inference.py, data CSVs) will still be tracked
+app/ai/CRY/weights/*.pth
+app/ai/CRY/weights/*.bin
+app/ai/CRY/models/*.pth
+app/ai/CRY/models/*.bin
+
+# AI Logs (auto-generated at runtime — not for version control)
+app/AI_agents/logs/*.jsonl
+app/AI_agents/logs/*.log
+!app/AI_agents/logs/.gitkeep
+
+# FAISS vector indexes
+*.faiss
+*.index
+app/AI_agents/knowledge/vectorstore/
+
+# =============================================================================
+# Static File Uploads (user-generated, runtime files)
+# =============================================================================
+
+# Uploaded cry recordings
+app/static/cry/*.wav
+app/static/cry/*.mp3
+app/static/cry/*.ogg
+app/static/cry/*.flac
+app/static/cry/*.m4a
+# Keep the placeholder
+!app/static/cry/.gitkeep
+
+# Generated reports
+app/static/reports/*.pdf
+app/static/reports/*.docx
+!app/static/reports/.gitkeep
+
+# Voice clone recordings (private user data)
+app/static/voices/**/*.wav
+app/static/voices/**/*.mp3
+!app/static/voices/**/.gitkeep
+
+# Sample cry audio (large binary files)
+app/static/samples/cry_samples/*.wav
+app/static/samples/cry_samples/*.mp3
+!app/static/samples/cry_samples/.gitkeep
+
+# Lullabies & white noise (large binary files, not source code)
+app/static/sounds/lullabies/*.wav
+app/static/sounds/lullabies/*.mp3
+!app/static/sounds/lullabies/.gitkeep
+app/static/sounds/white_noise/*.wav
+app/static/sounds/white_noise/*.mp3
+!app/static/sounds/white_noise/.gitkeep
+
+# =============================================================================
+# Credentials & Secrets (CRITICAL — never commit these)
+# =============================================================================
+
+.env
+.env.*
 !.env.example
+
+# Firebase service account keys
 *firebase-adminsdk*.json
 firebase-credentials.json
+serviceAccountKey.json
+google-services.json
+GoogleService-Info.plist
 
+# API keys / config files
+*.pem
+*.key
+*.p12
+secrets/
+credentials/
+
+# =============================================================================
+# Miscellaneous
+# =============================================================================
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
+*.swn
+
+# Profiling
+*.prof
+*.lprof

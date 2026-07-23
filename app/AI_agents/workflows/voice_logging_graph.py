@@ -4,8 +4,6 @@ from app.AI_agents.core.reasoner import AIReasoner
 from app.AI_agents.tools.implementation.nutrition_tools import NutritionTrackingTool
 from app.AI_agents.tools.implementation.health_tools import HealthRecordsTool
 from app.AI_agents.tools.implementation.growth_tools import GrowthTrackingTool
-from app.ai.speech_to_text import SpeechTranscriber
-from app.AI_agents.utils.validators import validate_audio_file
 from langchain_core.messages import AIMessage, HumanMessage
 from datetime import datetime, timezone
 import json
@@ -19,18 +17,7 @@ class VoiceLoggingGraph:
         self.nutrition_tool = NutritionTrackingTool()
         self.health_tool = HealthRecordsTool()
         self.growth_tool = GrowthTrackingTool()
-        self.transcriber = SpeechTranscriber()
         self.extraction_prompt = load_prompt("extraction.txt")
-
-    async def transcribe_node(self, state: OverallState) -> dict:
-        """Convert audio file to text if last message is an audio path."""
-        last_message = state["messages"][-1].content
-        if validate_audio_file(last_message):
-            transcribed = self.transcriber.transcribe(last_message)
-            if transcribed:
-                # Replace audio path with transcribed text in state
-                return {"messages": [HumanMessage(content=transcribed)]}
-        return {}
 
     async def extract_entities_node(self, state: OverallState) -> dict:
         user_message = state["messages"][-1].content
@@ -94,19 +81,19 @@ class VoiceLoggingGraph:
         return {"messages": [AIMessage(content=msg)]}
 
     def compile(self, checkpointer=None):
-        """Compile the voice logging subgraph flow.
+        """Compile the activity logging subgraph flow.
         
-        Pipeline: START → transcribe (STT) → extract_entities → write_to_db → END
+        Pipeline: START → extract_entities → write_to_db → END
+        (Speech-to-Text transcription is handled on Frontend)
         """
         builder = StateGraph(OverallState)
-        builder.add_node("transcribe", self.transcribe_node)
         builder.add_node("extract_entities", self.extract_entities_node)
         builder.add_node("write_to_db", self.write_to_db_node)
         
-        builder.add_edge(START, "transcribe")
-        builder.add_edge("transcribe", "extract_entities")
+        builder.add_edge(START, "extract_entities")
         builder.add_edge("extract_entities", "write_to_db")
         builder.add_edge("write_to_db", END)
         
         return builder.compile(checkpointer=checkpointer)
+
 

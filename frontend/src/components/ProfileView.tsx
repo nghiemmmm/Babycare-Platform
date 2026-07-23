@@ -59,6 +59,7 @@ export default function ProfileView({
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "GUARDIAN" | "VIEWER">("GUARDIAN");
   const [showInviteSuccess, setShowInviteSuccess] = useState(false);
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
 
   // Sync input fields whenever activeBaby changes, but only if not currently creating
   React.useEffect(() => {
@@ -106,22 +107,29 @@ export default function ProfileView({
     setIsEditing(false);
   };
 
-  const handleInviteGuardian = (e: React.FormEvent) => {
+  const handleInviteGuardian = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail || !inviteName) return;
+    if (!inviteEmail || !inviteName || isSendingInvite) return;
 
-    onAddGuardian({
-      name: inviteName,
-      email: inviteEmail,
-      role: inviteRole,
-      status: "Invited"
-    });
+    setIsSendingInvite(true);
+    try {
+      await onAddGuardian({
+        name: inviteName,
+        email: inviteEmail,
+        role: inviteRole,
+        status: "Invited"
+      });
 
-    setInviteEmail("");
-    setInviteName("");
-    setShowInviteModal(false);
-    setShowInviteSuccess(true);
-    setTimeout(() => setShowInviteSuccess(false), 3000);
+      setInviteEmail("");
+      setInviteName("");
+      setShowInviteModal(false);
+      setShowInviteSuccess(true);
+      setTimeout(() => setShowInviteSuccess(false), 3500);
+    } catch (err) {
+      console.error("Lỗi khi gửi lời mời người giám hộ:", err);
+    } finally {
+      setIsSendingInvite(false);
+    }
   };
 
   // Helper: calculate age strings in months and days
@@ -137,9 +145,12 @@ export default function ProfileView({
     const days = Math.floor(remainingDays % 30.4);
 
     if (years > 0) {
-      return `${years} tuổi, ${months} tháng tuổi`;
+      return `${years} tuổi`;
     }
-    return `${months} tháng, ${days} ngày tuổi`;
+    if (months > 0) {
+      return `${months} tháng tuổi`;
+    }
+    return `${days} ngày tuổi`;
   };
 
   return (
@@ -584,9 +595,17 @@ export default function ProfileView({
 
                 <button
                   type="submit"
-                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                  disabled={isSendingInvite}
+                  className="w-full bg-primary hover:bg-primary/95 disabled:bg-slate-300 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
                 >
-                  Gửi lời mời
+                  {isSendingInvite ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Đang gửi email...</span>
+                    </>
+                  ) : (
+                    <span>Gửi lời mời qua Email</span>
+                  )}
                 </button>
               </form>
             </motion.div>

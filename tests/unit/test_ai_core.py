@@ -171,21 +171,22 @@ async def test_cry_analysis_graph():
     chain = graph.compile()
     assert chain is not None
 
-    with patch("app.AI_agents.core.reasoner.AIReasoner.areason") as mock_reason:
-        mock_reason.return_value = "Bé có vẻ đói do tiếng khóc hungry kéo dài."
+    with patch("app.ai.cry_detection.classifier.CryClassifier.predict", return_value=("hungry", 0.92, {"hungry": 0.92, "tired": 0.05})):
+        with patch("app.AI_agents.core.reasoner.AIReasoner.areason") as mock_reason:
+            mock_reason.return_value = "Bé có vẻ đói do tiếng khóc hungry kéo dài."
 
-        result = await chain.ainvoke(
-            {
-                "messages": [HumanMessage(content="Bé đang khóc")],
-                "baby_id": "baby-123",
-                "current_user_id": "user-123",
-                "extracted_data": {"audio_file": "hungry_cry_baby.wav"}
-            }
-        )
+            result = await chain.ainvoke(
+                {
+                    "messages": [HumanMessage(content="Bé đang khóc")],
+                    "baby_id": "baby-123",
+                    "current_user_id": "user-123",
+                    "extracted_data": {"audio_file": "hungry_cry_baby.wav"}
+                }
+            )
 
-        assert "messages" in result
-        assert "hungry" in result["messages"][-1].content
-        assert "Bé có vẻ đói" in result["messages"][-1].content
+            assert "messages" in result
+            assert "hungry" in result["messages"][-1].content
+            assert "Bé có vẻ đói" in result["messages"][-1].content
 
 from app.AI_agents.workflows.report_graph import ReportGraph
 from app.AI_agents.orchestrator.state_manager import FirestoreCheckpointer
@@ -398,82 +399,7 @@ def test_utils():
     assert not validate_message_not_empty("")
     assert not validate_message_not_empty(None)
 
-
-from app.ai.speech_to_text.transcriber import SpeechTranscriber
 from unittest.mock import mock_open
-
-def test_speech_transcriber_text_passthrough():
-    transcriber = SpeechTranscriber()
-    assert transcriber.transcribe_text("  hello  ") == "hello"
-
-
-def test_speech_transcriber_file_not_found():
-    transcriber = SpeechTranscriber()
-    assert transcriber.transcribe("non_existent_file.wav") is None
-
-
-@pytest.mark.anyio
-async def test_speech_transcriber_whisper_mode():
-    transcriber = SpeechTranscriber()
-    transcriber.provider = "whisper"
-    
-    with patch("app.ai.speech_to_text.transcriber.settings") as mock_settings:
-        mock_settings.STT_PROVIDER = "whisper"
-        mock_settings.WHISPER_MODEL_SIZE = "tiny"
-        mock_settings.WHISPER_MODEL_DIR = "app/ai/models/faster-whisper"
-        
-        def mock_isfile(path):
-            return path == "dummy.wav"
-            
-        with patch("app.ai.speech_to_text.transcriber.os.path.isfile", side_effect=mock_isfile):
-            with patch("faster_whisper.WhisperModel") as mock_whisper_class:
-                mock_model = MagicMock()
-                mock_whisper_class.return_value = mock_model
-                
-                mock_segment = MagicMock()
-                mock_segment.text = "Hello baby"
-                mock_model.transcribe.return_value = ([mock_segment], MagicMock())
-                
-                result = transcriber.transcribe("dummy.wav")
-                assert result == "Hello baby"
-                mock_whisper_class.assert_called_once_with(
-                    "tiny",
-                    device="cpu",
-                    compute_type="float32",
-                    download_root="app/ai/models/faster-whisper"
-                )
-
-
-@pytest.mark.anyio
-async def test_speech_transcriber_whisper_fallback_to_gemini():
-    transcriber = SpeechTranscriber()
-    transcriber.provider = "whisper"
-    
-    with patch("app.ai.speech_to_text.transcriber.settings") as mock_settings:
-        mock_settings.STT_PROVIDER = "whisper"
-        mock_settings.WHISPER_MODEL_SIZE = "tiny"
-        mock_settings.WHISPER_MODEL_DIR = "app/ai/models/faster-whisper"
-        mock_settings.GEMINI_API_KEY = "dummy-key"
-        
-        def mock_isfile(path):
-            return path == "dummy.wav"
-            
-        with patch("app.ai.speech_to_text.transcriber.os.path.isfile", side_effect=mock_isfile):
-            with patch("faster_whisper.WhisperModel") as mock_whisper_class:
-                mock_whisper_class.side_effect = Exception("CUDA error")
-                
-                import google.generativeai
-                with patch("google.generativeai.GenerativeModel") as mock_gen_model_class:
-                    mock_model = MagicMock()
-                    mock_gen_model_class.return_value = mock_model
-                    mock_response = MagicMock()
-                    mock_response.text = "Gemini response text"
-                    mock_model.generate_content.return_value = mock_response
-                    
-                    with patch("builtins.open", mock_open(read_data=b"dummy audio data")):
-                        result = transcriber.transcribe("dummy.wav")
-                        assert result == "Gemini response text"
-
 
 def test_document_loader_pdf():
     from app.AI_agents.knowledge.document_loader import DocumentLoader

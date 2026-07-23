@@ -60,7 +60,42 @@ export default function AiHubView({
   const [showCitationDropdown, setShowCitationDropdown] = useState(false);
   const [showSwitchBabyDropdown, setShowSwitchBabyDropdown] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingChatFile, setIsUploadingChatFile] = useState(false);
+
   const { isListening, transcript, startListening, stopListening } = useSpeechRecognition();
+
+  const handleFileUploadInChat = async (file: File) => {
+    setIsUploadingChatFile(true);
+    try {
+      const formData = new FormData();
+      formData.append("audio_file", file);
+
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      const token = localStorage.getItem("token") || "mock-token";
+      
+      const res = await fetch(`${baseUrl}/api/v1/babies/${activeBaby.id}/cry-prediction`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const pred = data.prediction || "discomfort";
+        const soundPlayed = data.sound_played || "/static/sounds/lullabies/classic_lullaby.mp3";
+        const promptText = `[Đã đính kèm tệp âm thanh tiếng khóc: ${file.name}] Kết quả chẩn đoán âm thanh từ AI: ${pred} (Độ tin cậy ${Math.round((data.confidence || 0.85) * 100)}%). Âm thanh dỗ: ${soundPlayed}. Hãy tư vấn hướng xử lý phù hợp cho bé ${activeBaby.name}.`;
+        await onSendMessage(promptText);
+      } else {
+        await onSendMessage(`[Đã đính kèm tệp: ${file.name}] Hãy hỗ trợ phân tích dữ liệu tệp này cho bé ${activeBaby.name}.`);
+      }
+    } catch (err) {
+      console.error("Error uploading file in chat:", err);
+      await onSendMessage(`[Đã đính kèm tệp: ${file.name}] Hãy hỗ trợ tôi tư vấn về bé ${activeBaby.name}.`);
+    } finally {
+      setIsUploadingChatFile(false);
+    }
+  };
 
   useEffect(() => {
     if (transcript) {
@@ -145,7 +180,7 @@ export default function AiHubView({
         <div className="flex-1 overflow-y-auto space-y-1">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2.5 mb-2">Cuộc trò chuyện gần đây</p>
           
-          {threads.map((thread) => (
+          {threads.slice(0, 6).map((thread) => (
             <button
               key={thread.id}
               onClick={() => onSelectThread(thread.id)}
@@ -249,7 +284,7 @@ export default function AiHubView({
               </p>
             </div>
           ) : (
-            chats.map((msg) => (
+            chats.slice(-6).map((msg) => (
               <div
                 key={msg.id}
                 className={`flex items-start gap-3 max-w-[85%] ${
@@ -311,9 +346,27 @@ export default function AiHubView({
         {/* Input area */}
         <div className="p-4 bg-white/20 border-t border-white/20 select-none">
           <div className="max-w-3xl mx-auto flex items-center gap-2.5 bg-white/80 border border-white/40 rounded-full px-4 py-2 shadow-xs">
-            <button className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer" title="Đính kèm tệp">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingChatFile || isAiLoading}
+              className="p-1 text-slate-400 hover:text-[#1c648e] transition-colors cursor-pointer disabled:opacity-50"
+              title="Đính kèm tệp âm thanh / ghi âm tiếng khóc"
+            >
               <Paperclip className="w-4 h-4" />
             </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="audio/*,.wav,.mp3,.m4a,.ogg,.pdf,.png,.jpg"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  handleFileUploadInChat(file);
+                  e.target.value = "";
+                }
+              }}
+            />
             <input
               type="text"
               value={inputText}

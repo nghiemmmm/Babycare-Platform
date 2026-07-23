@@ -55,6 +55,15 @@ class GuardianRepository:
         d["id"] = doc.id
         return d
 
+    def update_status_and_user(self, guardian_id: str, user_id: str, status: str = "Synced") -> None:
+        """Cập nhật user_id, status và accepted_at cho guardian document."""
+        db = get_firestore_db()
+        db.collection(self.COLLECTION).document(guardian_id).update({
+            "user_id": user_id,
+            "status": status,
+            "accepted_at": datetime.now(timezone.utc).isoformat()
+        })
+
     def delete(self, guardian_id: str) -> None:
         """Xóa guardian document."""
         db = get_firestore_db()

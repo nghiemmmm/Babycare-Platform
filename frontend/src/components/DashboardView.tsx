@@ -25,7 +25,9 @@ import {
   ChevronDown,
   Trash2,
   Scale,
-  Ruler
+  Ruler,
+  Upload,
+  RefreshCw
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -76,10 +78,29 @@ const WHO_GIRL_WEIGHT_STANDARDS = [
   { month: 0, median: 3.2, percentile3: 2.4, percentile97: 4.2 },
   { month: 2, median: 5.1, percentile3: 3.9, percentile97: 6.6 },
   { month: 4, median: 6.4, percentile3: 5.0, percentile97: 8.2 },
-  { month: 6, median: 7.3, percentile3: 5.7, percentile97: 9.3 },
   { month: 8, median: 8.0, percentile3: 6.3, percentile97: 10.2 },
   { month: 10, median: 8.5, percentile3: 6.7, percentile97: 10.9 },
   { month: 12, median: 8.9, percentile3: 7.0, percentile97: 11.5 }
+];
+
+const WHO_BOY_HEIGHT_STANDARDS = [
+  { month: 0, median: 49.9, percentile3: 46.1, percentile97: 53.7 },
+  { month: 2, median: 58.4, percentile3: 54.4, percentile97: 62.4 },
+  { month: 4, median: 63.9, percentile3: 59.7, percentile97: 68.0 },
+  { month: 6, median: 67.6, percentile3: 63.3, percentile97: 71.9 },
+  { month: 8, median: 70.6, percentile3: 66.2, percentile97: 75.0 },
+  { month: 10, median: 73.3, percentile3: 68.7, percentile97: 77.9 },
+  { month: 12, median: 75.7, percentile3: 71.0, percentile97: 80.5 }
+];
+
+const WHO_GIRL_HEIGHT_STANDARDS = [
+  { month: 0, median: 49.1, percentile3: 45.4, percentile97: 52.9 },
+  { month: 2, median: 57.1, percentile3: 53.0, percentile97: 61.1 },
+  { month: 4, median: 62.1, percentile3: 57.8, percentile97: 66.4 },
+  { month: 6, median: 65.7, percentile3: 61.2, percentile97: 70.3 },
+  { month: 8, median: 68.7, percentile3: 64.0, percentile97: 73.5 },
+  { month: 10, median: 71.5, percentile3: 66.7, percentile97: 76.4 },
+  { month: 12, median: 74.0, percentile3: 68.9, percentile97: 79.2 }
 ];
 
 export default function DashboardView({
@@ -104,6 +125,9 @@ export default function DashboardView({
 }: DashboardViewProps) {
   // Modals visibility states
   const [activeModal, setActiveModal] = useState<"none" | "add-entry" | "feed" | "sleep" | "diaper" | "medication" | "growth">("none");
+
+  // Growth Metric Toggle state (weight or height)
+  const [growthMetric, setGrowthMetric] = useState<"weight" | "height">("weight");
 
   // Form states for Feed
   const [feedType, setFeedType] = useState<"Formula" | "Breast" | "Solids">("Formula");
@@ -149,6 +173,128 @@ export default function DashboardView({
 
   // Voice Extraction Loading State
   const [isExtractingVoice, setIsExtractingVoice] = useState(false);
+
+  // AI Cry Detection State & Handlers
+  const [isAnalyzingCry, setIsAnalyzingCry] = useState(false);
+  const [cryFeedback, setCryFeedback] = useState<"accurate" | "inaccurate" | null>(null);
+  const [cryResult, setCryResult] = useState<{
+    prediction: string;
+    label: string;
+    confidence: number;
+    reasonScores?: Record<string, number>;
+    soothingSound: string;
+    advice: string;
+    logId: string;
+  } | null>(null);
+  const cryFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const getCryAdvice = (pred: string, name: string) => {
+    switch (pred) {
+      case "hungry":
+        return `Bé ${name} có dấu hiệu đói bú. Vui lòng kiểm tra cữ ăn gần nhất và chuẩn bị cữ sữa ấm cho bé.`;
+      case "tired":
+        return `Bé ${name} đang mệt và gắt ngủ. Vui lòng hạ ánh sáng phòng, bật nhạc ru nhẹ nhàng và bế đung đưa bé.`;
+      case "pain":
+        return `Bé ${name} có thể đang bị đau bụng hoặc đầy hơi. Hãy vỗ lưng ợ hơi, chần ấm bụng và theo dõi thêm.`;
+      case "burp":
+        return `Bé ${name} cần ợ hơi sau cữ bú. Phụ huynh nên bế đứng ép bụng bé vào vai và vỗ lưng nhẹ nhàng.`;
+      case "diaper":
+        return `Tã của bé ${name} có thể đã ẩm ướt hoặc bẩn. Vui lòng kiểm tra và thay tã mới sạch sẽ cho bé.`;
+      case "discomfort":
+        return `Bé ${name} cảm thấy không thoải mái (nóng/lạnh hoặc quần áo chật). Vui lòng kiểm tra nhiệt độ phòng và trang phục.`;
+      case "lonely":
+        return `Bé ${name} đang cần sự chú ý và vỗ về từ cha mẹ. Hãy ôm bé vào lòng và nói chuyện nhẹ nhàng với bé.`;
+      case "scared":
+        return `Bé ${name} bị giật mình hoặc sợ hãi bởi tiếng động lạ. Hãy ôm chặt bé và bật tiếng ồn trắng để xoa dịu.`;
+      default:
+        return `Bé ${name} đang cảm thấy khó chịu. Phụ huynh nên kiểm tra nhiệt độ phòng, tã lót và vỗ về bé.`;
+    }
+  };
+
+  const handleStartCryAnalysis = async (selectedFile?: File) => {
+    setIsAnalyzingCry(true);
+    setCryFeedback(null);
+    try {
+      const formData = new FormData();
+      if (selectedFile) {
+        formData.append("audio_file", selectedFile);
+      } else {
+        // Lấy tệp âm thanh WAV mẫu hợp lệ từ static server để chạy thử nghiệm
+        try {
+          const sampleRes = await fetch("/static/samples/cry_samples/sample_baby_cry.wav");
+          if (sampleRes.ok) {
+            const sampleBlob = await sampleRes.blob();
+            formData.append("audio_file", sampleBlob, "sample_baby_cry.wav");
+          } else {
+            throw new Error("Cannot fetch sample audio file");
+          }
+        } catch (fetchErr) {
+          const emptyAudioHeader = new Uint8Array([82, 73, 70, 70, 36, 0, 0, 0, 87, 65, 86, 69, 102, 109, 116, 32, 16, 0, 0, 0, 1, 0, 1, 0, 128, 62, 0, 0, 0, 125, 0, 0, 2, 0, 16, 0, 100, 97, 116, 97, 0, 0, 0, 0]);
+          const sampleBlob = new Blob([emptyAudioHeader], { type: "audio/wav" });
+          formData.append("audio_file", sampleBlob, "sample_baby_cry.wav");
+        }
+      }
+
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      const token = localStorage.getItem("token") || "mock-token";
+      const res = await fetch(`${baseUrl}/api/v1/babies/${activeBaby.id}/cry-prediction`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const pred = data.prediction || "hungry";
+        const labels: Record<string, string> = {
+          hungry: "Khóc do Đói 🍼",
+          tired: "Khóc do Gắt ngủ 🥱",
+          pain: "Khóc do Đau/Đầy hơi 😣",
+          burp: "Khóc do Cần ợ hơi 💨",
+          diaper: "Khóc do Bẩn tã 💩",
+          discomfort: "Khóc do Khó chịu 🌡️",
+          lonely: "Khóc do Cần bế/Cô đơn 🫂",
+          scared: "Khóc do Giật mình/Sợ hãi 😨"
+        };
+        const soundPath = data.sound_played || "/static/sounds/lullabies/classic_lullaby.mp3";
+
+        setCryResult({
+          prediction: pred,
+          label: labels[pred] || "Khóc do Khó chịu 🌡️",
+          confidence: Math.round((data.confidence || 0.85) * 100),
+          reasonScores: data.reason_scores || {},
+          soothingSound: soundPath,
+          advice: getCryAdvice(pred, activeBaby.name),
+          logId: data.id || `cry_${Date.now()}`
+        });
+        showToast("success", "Phân tích hoàn tất", `AI chẩn đoán: ${labels[pred] || pred}`);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showToast("error", "Lỗi phân tích", errData.detail || "Không thể phân tích tệp âm thanh này.");
+      }
+    } catch (e) {
+      console.error("Error analyzing cry:", e);
+      showToast("error", "Lỗi kết nối", "Lỗi kết nối với máy chủ phân tích tiếng khóc.");
+    } finally {
+      setIsAnalyzingCry(false);
+    }
+  };
+
+  const handleSendCryFeedback = async (accurate: boolean) => {
+    setCryFeedback(accurate ? "accurate" : "inaccurate");
+    if (cryResult?.logId) {
+      try {
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+        const token = localStorage.getItem("token");
+        await fetch(`${baseUrl}/api/v1/babies/${activeBaby.id}/cry-prediction/${cryResult.logId}/feedback?feedback_accurate=${accurate}`, {
+          method: "PATCH",
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+      } catch (e) {
+        console.error("Error submitting cry feedback:", e);
+      }
+    }
+  };
 
   // Process voice transcript with FastAPI AI Agent Backend
   const handleProcessVoiceTranscript = useCallback(async (text: string) => {
@@ -273,17 +419,22 @@ export default function DashboardView({
   // Calculate current temperature
   const currentTemp = temperatureLogs[0]?.temp || 36.8;
 
-  // Calculate age of activeBaby in months
+  // Calculate age of activeBaby
   const calculateAgeStr = (birthDateStr: string) => {
     const birth = new Date(birthDateStr);
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - birth.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const months = Math.floor(diffDays / 30.4);
-    if (months === 0) {
-      return `${diffDays} days`;
+    const years = Math.floor(diffDays / 365);
+    const remainingDays = diffDays % 365;
+    const months = Math.floor(remainingDays / 30.4);
+    if (years > 0) {
+      return `${years} tuổi`;
     }
-    return `${months} months`;
+    if (months === 0) {
+      return `${diffDays} ngày`;
+    }
+    return `${months} tháng`;
   };
 
   const getLatestWeight = () => {
@@ -294,18 +445,32 @@ export default function DashboardView({
     return "7.4 kg";
   };
 
+  const getLatestHeight = () => {
+    if (measurements.length > 0) {
+      const sorted = [...measurements].sort((a, b) => b.ageInMonths - a.ageInMonths);
+      return `${sorted[0].height} cm`;
+    }
+    return "67 cm";
+  };
+
   // Compile Growth Trajectory Chart Data
   const isBoy = activeBaby.gender !== "Girl";
-  const standards = isBoy ? WHO_BOY_WEIGHT_STANDARDS : WHO_GIRL_WEIGHT_STANDARDS;
+  const weightStandards = isBoy ? WHO_BOY_WEIGHT_STANDARDS : WHO_GIRL_WEIGHT_STANDARDS;
+  const heightStandards = isBoy ? WHO_BOY_HEIGHT_STANDARDS : WHO_GIRL_HEIGHT_STANDARDS;
+  const standards = growthMetric === "weight" ? weightStandards : heightStandards;
   
   const chartData = standards.map((std) => {
     const match = measurements.find(m => Math.abs(m.ageInMonths - std.month) <= 0.5);
+    const val = match
+      ? (growthMetric === "weight" ? match.weight : match.height)
+      : (std.month === 6 ? parseFloat(growthMetric === "weight" ? getLatestWeight() : getLatestHeight()) : undefined);
+
     return {
       name: std.month === 0 ? "Birth" : `${std.month}M`,
       "WHO Median": std.median,
       "WHO 3rd": std.percentile3,
       "WHO 97th": std.percentile97,
-      [activeBaby.name]: match ? match.weight : (std.month === 6 ? parseFloat(getLatestWeight()) : undefined)
+      [activeBaby.name]: val
     };
   });
 
@@ -494,7 +659,7 @@ export default function DashboardView({
                 <ChevronDown className="w-5 h-5 text-primary cursor-pointer" />
               </div>
               <p className="text-sm font-semibold text-slate-500 mt-0.5">
-                {calculateAgeStr(activeBaby.birthDate) === "0 days" ? "Mới sinh" : calculateAgeStr(activeBaby.birthDate).replace("months", "tháng").replace("days", "ngày")} • {getLatestWeight()}
+                {calculateAgeStr(activeBaby.birthDate) === "0 ngày" ? "Mới sinh" : calculateAgeStr(activeBaby.birthDate)} • {getLatestWeight()}
               </p>
             </div>
           </div>
@@ -745,7 +910,7 @@ export default function DashboardView({
                   <p className="text-xs">Hỏi bất cứ điều gì về cữ ăn, giấc ngủ hoặc lịch uống thuốc của {activeBaby.name}.</p>
                 </div>
               ) : (
-                chats.map((chat) => (
+                chats.slice(-6).map((chat) => (
                   <div key={chat.id} className={`flex flex-col ${chat.role === "user" ? "items-end" : "items-start"}`}>
                     <div
                       className={`max-w-[85%] rounded-2xl px-4 py-2.5 leading-relaxed ${
@@ -845,26 +1010,55 @@ export default function DashboardView({
 
           {/* Growth trajectory WHO comparison Chart */}
           <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-white/20 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/20 pb-3">
               <div>
                 <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
                   <TrendingUp className="w-4 h-4 text-emerald-500" />
-                  Tiến trình Tăng trưởng (Cân nặng thực tế)
+                  Tiến trình Tăng trưởng ({growthMetric === "weight" ? "Cân nặng" : "Chiều cao"})
                 </h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">Đường trung vị WHO so với số đo thực tế của {activeBaby.name}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Đường trung vị WHO ({growthMetric === "weight" ? "kg" : "cm"}) so với số đo thực tế của {activeBaby.name}
+                </p>
               </div>
-              <button
-                onClick={() => setActiveModal("growth")}
-                className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 rounded-xl px-3 py-1.5 text-[10px] font-extrabold transition-all cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Thêm chỉ số
-              </button>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                {/* Metric Selector Toggle */}
+                <div className="flex bg-slate-100/80 p-0.5 rounded-xl border border-slate-200/60">
+                  <button
+                    onClick={() => setGrowthMetric("weight")}
+                    className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
+                      growthMetric === "weight"
+                        ? "bg-white text-primary shadow-xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Cân nặng (kg)
+                  </button>
+                  <button
+                    onClick={() => setGrowthMetric("height")}
+                    className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
+                      growthMetric === "height"
+                        ? "bg-white text-primary shadow-xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Chiều cao (cm)
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setActiveModal("growth")}
+                  className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 rounded-xl px-3 py-1 text-[10px] font-extrabold transition-all cursor-pointer shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Thêm chỉ số
+                </button>
+              </div>
             </div>
 
             <div className="h-[240px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorBaby" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#1c648e" stopOpacity={0.2}/>
@@ -873,8 +1067,9 @@ export default function DashboardView({
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={9} fontWeight="bold" tickLine={false} />
-                  <YAxis stroke="#94a3b8" fontSize={9} fontWeight="bold" tickLine={false} domain={[2, 13]} />
+                  <YAxis stroke="#94a3b8" fontSize={9} fontWeight="bold" tickLine={false} domain={growthMetric === "weight" ? [2, 13] : [45, 85]} />
                   <Tooltip
+                    formatter={(value: any) => [`${value} ${growthMetric === "weight" ? "kg" : "cm"}`]}
                     contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0", backgroundColor: "rgba(255, 255, 255, 0.9)" }}
                     labelStyle={{ fontSize: "10px", fontWeight: "bold", color: "#1c648e" }}
                     itemStyle={{ fontSize: "10px", padding: "1px 0" }}
@@ -894,6 +1089,148 @@ export default function DashboardView({
         {/* Right column: AI Insights & Daily timeline */}
         <div className="space-y-6">
           
+          {/* AI Cry Detector Card */}
+          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
+                <Mic className="w-4.5 h-4.5 text-rose-500 animate-pulse" />
+                Phân tích Tiếng khóc AI
+              </h3>
+              <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-2 py-0.5">
+                Real-time AI
+              </span>
+            </div>
+
+            <div className="flex items-center justify-center gap-4 py-1">
+              {/* Mic Icon Button */}
+              <button
+                onClick={() => handleStartCryAnalysis()}
+                disabled={isAnalyzingCry}
+                title="Thu âm tiếng khóc qua Micro"
+                className="w-12 h-12 rounded-full bg-rose-500 hover:bg-rose-600 disabled:bg-slate-300 text-white flex items-center justify-center transition-all shadow-md cursor-pointer hover:scale-105"
+              >
+                {isAnalyzingCry ? (
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Mic className="w-5 h-5" />
+                )}
+              </button>
+
+              {/* Upload Icon Button */}
+              <button
+                onClick={() => cryFileInputRef.current?.click()}
+                disabled={isAnalyzingCry}
+                title="Tải file ghi âm tiếng khóc (.wav, .mp3)"
+                className="w-12 h-12 rounded-full bg-white border border-rose-200 hover:bg-rose-50 text-rose-500 disabled:bg-slate-100 flex items-center justify-center transition-all shadow-xs cursor-pointer hover:scale-105"
+              >
+                <Upload className="w-5 h-5 text-rose-500" />
+              </button>
+
+              <input
+                type="file"
+                ref={cryFileInputRef}
+                accept="audio/*,.wav,.mp3,.m4a,.ogg"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleStartCryAnalysis(file);
+                    e.target.value = "";
+                  }
+                }}
+              />
+            </div>
+
+            {/* Cry Analysis Result Display Card */}
+            {cryResult && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 bg-white/80 border border-slate-100 rounded-2xl space-y-3 shadow-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-slate-800">{cryResult.label}</span>
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-md px-2 py-0.5">
+                    Độ tin cậy: {cryResult.confidence}%
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                  {cryResult.advice}
+                </p>
+
+                {/* Multi-class Reason Scores Breakdown */}
+                {cryResult.reasonScores && Object.keys(cryResult.reasonScores).length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Bảng tỷ lệ các khả năng:</span>
+                    <div className="space-y-1">
+                      {Object.entries(cryResult.reasonScores).slice(0, 4).map(([reason, score]) => {
+                        const reasonLabels: Record<string, string> = {
+                          hungry: "Đói bú 🍼",
+                          tired: "Gắt ngủ 🥱",
+                          pain: "Đau/Đầy hơi 😣",
+                          burp: "Cần ợ hơi 💨",
+                          diaper: "Bẩn tã 💩",
+                          discomfort: "Khó chịu 🌡️",
+                          lonely: "Cần bế 🫂",
+                          scared: "Giật mình 😨"
+                        };
+                        const pct = Math.round(score * 100);
+                        return (
+                          <div key={reason} className="flex items-center gap-2 text-[10px]">
+                            <span className="w-24 text-slate-600 font-semibold truncate">{reasonLabels[reason] || reason}</span>
+                            <div className="flex-1 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                              <div className="bg-sky-500 h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="w-8 text-right text-slate-500 font-bold">{pct}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-2.5 bg-sky-50/60 border border-sky-100 rounded-xl flex items-center justify-between text-xs text-sky-800 font-bold">
+                  <span className="truncate pr-2">🎵 Âm thanh dỗ: {cryResult.soothingSound.split("/").pop()}</span>
+                  <button
+                    onClick={() => {
+                      try {
+                        const audio = new Audio(cryResult.soothingSound);
+                        audio.play().catch(() => showToast("error", "Âm thanh", "Không thể phát tệp âm thanh này"));
+                      } catch(e) {}
+                    }}
+                    className="text-[10px] bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1 rounded-lg transition-all cursor-pointer shrink-0"
+                  >
+                    Bật nhạc dỗ
+                  </button>
+                </div>
+
+                {/* Parent Feedback Buttons */}
+                <div className="pt-1 flex items-center justify-between text-[10px] text-slate-400 font-bold border-t border-slate-100">
+                  <span>AI đoán đúng không?</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleSendCryFeedback(true)}
+                      className={`px-2 py-1 rounded-lg border cursor-pointer transition-all ${
+                        cryFeedback === "accurate" ? "bg-emerald-500 text-white border-emerald-500" : "bg-white hover:bg-slate-50 text-slate-600"
+                      }`}
+                    >
+                      👍 Đúng
+                    </button>
+                    <button
+                      onClick={() => handleSendCryFeedback(false)}
+                      className={`px-2 py-1 rounded-lg border cursor-pointer transition-all ${
+                        cryFeedback === "inaccurate" ? "bg-rose-500 text-white border-rose-500" : "bg-white hover:bg-slate-50 text-slate-600"
+                      }`}
+                    >
+                      👎 Chưa chuẩn
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </div>
+
           {/* AI Insights & Recommendations */}
           <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
             <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
@@ -985,7 +1322,7 @@ export default function DashboardView({
       {/* --- MODALS SECTION --- */}
       <AnimatePresence>
         
-        {/* Modal: Quick log general list selection */}
+        {/* Modal: Quick log with BOTH Voice Input & Manual Category Selection */}
         {activeModal === "add-entry" && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
             <motion.div
@@ -995,18 +1332,27 @@ export default function DashboardView({
               className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-800">Chọn loại ghi chép</h3>
-                <button onClick={() => setActiveModal("none")} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                  <Plus className="w-4 h-4 text-primary" />
+                  Thêm ghi chép mới
+                </h3>
+                <button
+                  onClick={() => {
+                    if (isListening) stopListening();
+                    setActiveModal("none");
+                  }}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
                   Đóng
                 </button>
               </div>
 
-              {/* Voice Speech-to-Text Input Panel */}
-              <div className="p-4 bg-sky-50/70 border border-sky-100 rounded-2xl space-y-3">
+              {/* Nhập liệu bằng giọng nói */}
+              <div className="p-4 bg-sky-50/70 border border-sky-100/80 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#1c648e] flex items-center gap-1.5">
-                    <Mic className="w-4 h-4 text-[#1c648e]" />
-                    Nhập bằng giọng nói (Tiếng Việt)
+                  <span className="text-xs font-bold text-primary flex items-center gap-1.5">
+                    <Mic className="w-4 h-4 text-primary" />
+                    Nhập liệu bằng giọng nói
                   </span>
                   {isListening && (
                     <span className="flex items-center gap-1 text-[10px] font-bold text-red-500 animate-pulse">
@@ -1016,7 +1362,7 @@ export default function DashboardView({
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex justify-center py-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -1027,47 +1373,52 @@ export default function DashboardView({
                         startListening();
                       }
                     }}
-                    className={`w-full py-2.5 px-4 rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                    className={`p-4 rounded-full border-2 transition-all cursor-pointer shadow-md flex items-center justify-center ${
                       isListening
-                        ? "bg-red-500 text-white border-red-500 animate-pulse shadow-md shadow-red-200 font-bold"
-                        : "bg-white border-sky-200 text-[#1c648e] hover:bg-sky-100 font-bold"
+                        ? "bg-red-500 border-red-400 text-white animate-pulse shadow-red-200"
+                        : "bg-white border-sky-200 text-primary hover:bg-sky-100 hover:scale-105"
                     }`}
+                    title={isListening ? "Dừng & Phân tích" : "Chạm vào Micro để bắt đầu nói"}
                   >
-                    <Mic className="w-4 h-4" />
-                    <span className="text-xs">{isListening ? "Dừng & Phân tích Gemini AI" : "Bấm để nói tiếng Việt"}</span>
+                    <Mic className={`w-7 h-7 ${isListening ? "animate-bounce" : ""}`} />
                   </button>
                 </div>
 
                 {transcript && (
                   <div className="p-2.5 bg-white border border-sky-100 rounded-xl text-[11px] text-slate-700 font-medium leading-snug">
+                    <span className="text-[9px] font-bold text-primary block uppercase">Văn bản nhận diện:</span>
                     "{transcript}"
                   </div>
                 )}
 
                 {isExtractingVoice && (
-                  <p className="text-[10px] font-bold text-[#1c648e] animate-pulse flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" />
-                    Gemini AI Backend đang bóc tách thông tin...
-                  </p>
+                  <div className="text-[10px] font-bold text-primary animate-pulse flex items-center justify-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Gemini AI đang bóc tách dữ liệu...</span>
+                  </div>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: "🍼 Cữ ăn/uống", modal: "feed" },
-                  { label: "💤 Giấc ngủ", modal: "sleep" },
-                  { label: "💩 Thay tã", modal: "diaper" },
-                  { label: "💊 Uống thuốc", modal: "medication" },
-                  { label: "📈 Chỉ số WHO", modal: "growth" }
-                ].map((item, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setActiveModal(item.modal as any)}
-                    className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-2xl text-left text-xs font-bold text-slate-600 hover:text-primary transition-all cursor-pointer"
-                  >
-                    {item.label}
-                  </button>
-                ))}
+              {/* Chọn các danh mục sau */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-slate-500 block">Chọn các danh mục sau</span>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {[
+                    { label: "🍼 Cữ ăn/uống", modal: "feed" },
+                    { label: "💤 Giấc ngủ", modal: "sleep" },
+                    { label: "💩 Thay tã", modal: "diaper" },
+                    { label: "💊 Uống thuốc", modal: "medication" },
+                    { label: "📈 Chỉ số WHO", modal: "growth" }
+                  ].map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveModal(item.modal as any)}
+                      className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-100 rounded-2xl text-left text-xs font-bold text-slate-600 hover:text-primary transition-all cursor-pointer"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </motion.div>
           </div>

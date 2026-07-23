@@ -57,3 +57,28 @@ class IngredientCreateResponse(BaseModel):
 class SuccessResponse(BaseModel):
     success: bool
     message: Optional[str] = None
+
+class FoodSafetyItemResponse(BaseModel):
+    name: str
+    reason: str
+    category: str = "under_1_year"
+    min_age_months: int = 12
+
+class AllergenAlertResponse(BaseModel):
+    allergens: list[str] = Field(default_factory=list)
+    warning_message: str = ""
+    has_alert: bool = False
+
+class NutritionSafetyResponse(BaseModel):
+    foods_to_avoid: list[FoodSafetyItemResponse]
+    allergen_alerts: AllergenAlertResponse
+
+class SafetyHandbookSection(BaseModel):
+    title: str
+    description: str
+    items: Optional[list[str]] = None
+    level: str = "info"
+
+class SafetyHandbookResponse(BaseModel):
+    title: str = "Cẩm nang An toàn Dinh dưỡng (WHO/AAP)"
+    sections: list[SafetyHandbookSection]

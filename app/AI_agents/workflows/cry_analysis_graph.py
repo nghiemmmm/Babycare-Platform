@@ -16,13 +16,14 @@ class CryAnalysisGraph:
     async def detect_cry_node(self, state: OverallState) -> dict:
         data = state.get("extracted_data") or {}
         filename = data.get("audio_file", "unknown_cry_tired.wav")
-        prediction, confidence = self.classifier.predict(filename)
+        prediction, confidence, reason_scores = self.classifier.predict(filename)
         soothing_sound = self.classifier.get_soothing_sound(prediction)
         
         updated_data = state.get("extracted_data", {}).copy()
         updated_data.update({
             "cry_prediction": prediction,
             "cry_confidence": confidence,
+            "reason_scores": reason_scores,
             "soothing_sound": soothing_sound
         })
         return {"extracted_data": updated_data}

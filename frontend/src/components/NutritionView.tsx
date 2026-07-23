@@ -52,6 +52,7 @@ export default function NutritionView({
   // Modal visibility states
   const [showAddFeedModal, setShowAddFeedModal] = useState(false);
   const [showAddIngredientModal, setShowAddIngredientModal] = useState(false);
+  const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [activeInfoAlert, setActiveInfoAlert] = useState<string | null>(null);
 
   // Form states for Feed
@@ -70,6 +71,44 @@ export default function NutritionView({
     { name: "Muối gia vị", reason: "Thận của trẻ dưới 1 tuổi chưa đủ phát triển để lọc muối bổ sung.", showInfo: false },
     { name: "Đường gia vị", reason: "Có thể gây sâu răng, hình thành thói quen ăn ngọt có hại cho sức khỏe và thiếu giá trị dinh dưỡng.", showInfo: false }
   ]);
+
+  const [allergenAlerts, setAllergenAlerts] = useState<{
+    allergens: string[];
+    warning_message: string;
+    has_alert: boolean;
+  }>({
+    allergens: ["🥛 Nhạy cảm sữa bò", "🥜 Đề phòng Đậu phộng"],
+    warning_message: `${activeBaby.name} chưa ghi nhận dị ứng nghiêm trọng. Cần cẩn trọng khi cho bé thử nhóm thực phẩm mới.`,
+    has_alert: false
+  });
+
+  React.useEffect(() => {
+    const fetchSafetyGuidelines = async () => {
+      try {
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+        const token = localStorage.getItem("token") || "mock-token";
+        const res = await fetch(`${baseUrl}/api/v1/nutrition/safety-guidelines?baby_id=${activeBaby.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.foods_to_avoid) && data.foods_to_avoid.length > 0) {
+            setFoodsToAvoid(data.foods_to_avoid.map((f: any) => ({
+              name: f.name,
+              reason: f.reason,
+              showInfo: false
+            })));
+          }
+          if (data.allergen_alerts) {
+            setAllergenAlerts(data.allergen_alerts);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching safety guidelines:", err);
+      }
+    };
+    fetchSafetyGuidelines();
+  }, [activeBaby.id, ingredients]);
 
   React.useEffect(() => {
     const now = new Date();
@@ -349,31 +388,7 @@ export default function NutritionView({
             </div>
           </div>
 
-          {/* Quick Action Row (Footer) */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: "Quét món ăn", icon: Camera, desc: "AI quét hình ảnh" },
-              { label: "Sách ăn dặm", icon: Book, desc: "Hướng dẫn bé 6T+" },
-              { label: "Hỏi chuyên gia", icon: Heart, desc: "Tư vấn Nhi khoa AI" },
-              { label: "Giỏ mua sắm", icon: Compass, desc: "Mua sắm tự động" }
-            ].map((btn, idx) => {
-              const Icon = btn.icon;
-              return (
-                <button
-                  key={idx}
-                  className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[24px] p-4 flex flex-col items-center text-center gap-2 cursor-pointer hover:scale-105 transition-all group"
-                >
-                  <div className="p-3 bg-primary/10 rounded-2xl text-primary group-hover:bg-primary group-hover:text-white transition-all">
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-slate-800">{btn.label}</h5>
-                    <p className="text-[9px] text-slate-400 font-semibold">{btn.desc}</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+
 
         </div>
 
@@ -387,20 +402,32 @@ export default function NutritionView({
             </h3>
 
             {/* High Alert Box */}
-            <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-r-2xl space-y-2 animate-pulse">
-              <span className="text-[10px] font-bold text-red-800 uppercase tracking-wider flex items-center gap-1">
+            <div className={`p-4 rounded-r-2xl space-y-2 border-l-4 ${
+              allergenAlerts.has_alert
+                ? "bg-red-50 border-red-500 animate-pulse"
+                : "bg-amber-50 border-amber-400"
+            }`}>
+              <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1">
                 ⚠️ Dị ứng & Cảnh báo Y khoa
               </span>
               <div className="flex flex-wrap gap-1.5">
-                <span className="px-2.5 py-0.5 bg-red-100 border border-red-200 text-red-700 font-bold rounded-full text-[9px]">
-                  🥛 Nhạy cảm sữa bò
-                </span>
-                <span className="px-2.5 py-0.5 bg-orange-100 border border-orange-200 text-orange-700 font-bold rounded-full text-[9px]">
-                  🥜 Đề phòng Đậu phộng
-                </span>
+                {allergenAlerts.allergens.map((alg, aIdx) => (
+                  <span
+                    key={aIdx}
+                    className={`px-2.5 py-0.5 border font-bold rounded-full text-[9px] ${
+                      allergenAlerts.has_alert
+                        ? "bg-red-100 border-red-200 text-red-700"
+                        : "bg-amber-100 border-amber-200 text-amber-800"
+                    }`}
+                  >
+                    ⚠️ {alg}
+                  </span>
+                ))}
               </div>
-              <p className="text-[11px] text-red-700 leading-relaxed font-semibold">
-                {activeBaby.name} có phản ứng nổi mẩn đỏ nhẹ khi dùng bơ đậu phộng. Tránh tái sử dụng và tham khảo ý kiến bác sĩ.
+              <p className={`text-[11px] leading-relaxed font-semibold ${
+                allergenAlerts.has_alert ? "text-red-700" : "text-amber-800"
+              }`}>
+                {allergenAlerts.warning_message}
               </p>
             </div>
 
@@ -442,7 +469,10 @@ export default function NutritionView({
             </div>
 
             {/* View Full Safety Guide Button */}
-            <button className="w-full inline-flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-100 text-blue-700 text-[10px] font-bold py-2 rounded-xl transition-all cursor-pointer">
+            <button
+              onClick={() => setShowSafetyModal(true)}
+              className="w-full inline-flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-100 text-blue-700 text-[10px] font-bold py-2 rounded-xl transition-all cursor-pointer"
+            >
               <BookOpen className="w-4.5 h-4.5 text-blue-600" />
               Xem toàn bộ Hướng dẫn An toàn
             </button>
@@ -648,6 +678,64 @@ export default function NutritionView({
                   Lưu Nhật ký phản ứng
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* --- FULL SAFETY GUIDE MODAL --- */}
+        {showSafetyModal && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-xl space-y-4 max-h-[85vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-blue-600" />
+                  <h3 className="text-sm font-black text-slate-800">Cẩm nang An toàn Dinh dưỡng (WHO/AAP)</h3>
+                </div>
+                <button
+                  onClick={() => setShowSafetyModal(false)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs text-slate-600 leading-relaxed font-medium">
+                <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-2xl space-y-1">
+                  <h4 className="font-bold text-blue-900 flex items-center gap-1">📌 Quy tắc 3 ngày thử món mới (Rule of 3)</h4>
+                  <p>Khi cho bé thử nguyên liệu ăn dặm mới (ví dụ: bơ, trứng, cá), cho bé ăn liên tục 3 ngày để dễ dàng xác định chính xác thực phẩm gây dị ứng nếu có phản ứng.</p>
+                </div>
+
+                <div className="p-3 bg-red-50/70 border border-red-100 rounded-2xl space-y-1">
+                  <h4 className="font-bold text-red-900 flex items-center gap-1">🚨 Dấu hiệu dị ứng cần đi cấp cứu ngay</h4>
+                  <ul className="list-disc pl-4 space-y-0.5 text-red-800">
+                    <li>Khó thở, thở khò khè hoặc sưng môi, lưỡi, mắt.</li>
+                    <li>Nổi mẩn đỏ toàn thân, ngứa ngáy nhiều.</li>
+                    <li>Nôn mửa nhiều lần hoặc tiêu chảy cấp.</li>
+                  </ul>
+                </div>
+
+                <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-2xl space-y-1">
+                  <h4 className="font-bold text-amber-900 flex items-center gap-1">⚠️ Phòng ngừa hóc dị vật (Choking Hazards)</h4>
+                  <p>Cắt đôi hoặc bổ 4 các loại quả tròn nhỏ (nho, cà chua bi, cherry). Tránh cho trẻ dưới 3 tuổi ăn hạt nguyên hạt, kẹo cứng, popcorn.</p>
+                </div>
+
+                <div className="p-3 bg-emerald-50/70 border border-emerald-100 rounded-2xl space-y-1">
+                  <h4 className="font-bold text-emerald-900 flex items-center gap-1">🥛 An toàn hâm sữa & Bảo quản</h4>
+                  <p>Sữa mẹ/Sữa công thức đã pha chỉ dùng trong 2 giờ ở nhiệt độ phòng. Hâm sữa bằng nước ấm dưới 40°C, không hâm bằng lò vi sóng.</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowSafetyModal(false)}
+                className="w-full bg-[#1c648e] hover:bg-[#154c6d] text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer text-xs"
+              >
+                Đã hiểu hướng dẫn
+              </button>
             </motion.div>
           </div>
         )}
