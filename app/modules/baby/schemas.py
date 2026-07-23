@@ -3,8 +3,23 @@ Baby Schemas Module
 
 Defines request and response schemas for baby profiles.
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
+
+
+def _normalize_allergies(v):
+    """
+    Chuẩn hoá allergies về list[str], tương thích ngược với dữ liệu Firestore cũ
+    lưu dạng chuỗi ngăn cách bởi dấu phẩy (trước khi field này chuyển sang list[str]).
+    """
+    if v is None:
+        return v
+    if isinstance(v, list):
+        return [item.strip() for item in v if isinstance(item, str) and item.strip()]
+    if isinstance(v, str):
+        return [item.strip() for item in v.split(",") if item.strip()]
+    return v
+
 
 class BabyBase(BaseModel):
     name: str
@@ -14,7 +29,13 @@ class BabyBase(BaseModel):
     is_active: bool = True
     blood_type: Optional[str] = None  # A+, A-, B+, B-, AB+, AB-, O+, O-
     pediatrician_name: Optional[str] = None
-    allergies: Optional[str] = None  # Chuỗi tự do, ngăn cách bởi dấu phẩy
+    allergies: list[str] = Field(default_factory=list)  # Danh sách dị ứng
+
+    @field_validator("allergies", mode="before")
+    @classmethod
+    def validate_allergies(cls, v):
+        normalized = _normalize_allergies(v)
+        return normalized if normalized is not None else []
 
 
 class BabyCreate(BabyBase):
@@ -30,7 +51,12 @@ class BabyUpdate(BaseModel):
     guardians: Optional[list[str]] = None
     blood_type: Optional[str] = None
     pediatrician_name: Optional[str] = None
-    allergies: Optional[str] = None
+    allergies: Optional[list[str]] = None
+
+    @field_validator("allergies", mode="before")
+    @classmethod
+    def validate_allergies(cls, v):
+        return _normalize_allergies(v)
 
 
 class BabyResponse(BabyBase):

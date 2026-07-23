@@ -1,14 +1,16 @@
+from typing import Optional
 from app.AI_agents.knowledge.rag_pipeline import RAGPipeline
 
 class MedicalRetriever:
     def __init__(self):
         self.pipeline = RAGPipeline()
 
-    def retrieve_context(self, query: str, k: int = 3) -> str:
+    def retrieve_context(self, query: str, k: int = 3, domain: Optional[str] = None) -> str:
         """
-        Retrieves context for Q&A and formats it as a single string.
+        Retrieves context for Q&A and formats it as a single string. `domain` lọc theo
+        metadata gắn ở DocumentLoader (vd "allergy_safety", "illness_diet", "nutrition_general").
         """
-        docs = self.pipeline.retrieve(query, k=k)
+        docs = self.pipeline.retrieve(query, k=k, domain=domain)
         if not docs:
             return "Không tìm thấy tài liệu y tế phù hợp."
         

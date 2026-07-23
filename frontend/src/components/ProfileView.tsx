@@ -63,7 +63,16 @@ export default function ProfileView({
   const [avatarUrl, setAvatarUrl] = useState(activeBaby?.avatarUrl ?? "");
   const [bloodType, setBloodType] = useState(activeBaby?.bloodType ?? "");
   const [pediatricianName, setPediatricianName] = useState(activeBaby?.pediatricianName ?? "");
-  const [allergies, setAllergies] = useState(activeBaby?.allergies ?? "");
+  const [allergies, setAllergies] = useState<string[]>(activeBaby?.allergies ?? []);
+  const [allergyInputText, setAllergyInputText] = useState("");
+
+  const addAllergyFromInput = () => {
+    const value = allergyInputText.trim();
+    if (value && !allergies.includes(value)) {
+      setAllergies((prev) => [...prev, value]);
+    }
+    setAllergyInputText("");
+  };
 
   // Avatar upload: chọn file hoặc kéo thả (thay cho dán URL thủ công - dễ dán nhầm đường dẫn
   // ổ đĩa cục bộ dạng file:/// mà trình duyệt không đọc được).
@@ -108,7 +117,8 @@ export default function ProfileView({
       setAvatarUrl(activeBaby.avatarUrl || "");
       setBloodType(activeBaby.bloodType || "");
       setPediatricianName(activeBaby.pediatricianName || "");
-      setAllergies(activeBaby.allergies || "");
+      setAllergies(activeBaby.allergies || []);
+      setAllergyInputText("");
     }
   }, [activeBaby, isCreating]);
 
@@ -128,7 +138,7 @@ export default function ProfileView({
           isActive: true,
           bloodType: bloodType || undefined,
           pediatricianName: pediatricianName || undefined,
-          allergies: allergies || undefined
+          allergies
         });
         setIsCreating(false);
         setIsEditing(false);
@@ -161,7 +171,8 @@ export default function ProfileView({
     setAvatarUrl("");
     setBloodType("");
     setPediatricianName("");
-    setAllergies("");
+    setAllergies([]);
+    setAllergyInputText("");
     setIsCreating(true);
     setIsEditing(false);
   };
@@ -354,8 +365,8 @@ export default function ProfileView({
                     Dị ứng & Cảnh báo Y khoa
                   </span>
                   <div className="flex flex-wrap gap-2">
-                    {activeBaby.allergies && activeBaby.allergies.trim() ? (
-                      activeBaby.allergies.split(",").map((item) => item.trim()).filter(Boolean).map((item) => (
+                    {activeBaby.allergies && activeBaby.allergies.length > 0 ? (
+                      activeBaby.allergies.map((item) => (
                         <span
                           key={item}
                           className="px-3 py-1 bg-red-100 border border-red-200 text-red-700 font-bold rounded-full text-[10px] cursor-default"
@@ -658,13 +669,40 @@ export default function ProfileView({
                 </div>
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <label className="block">Dị ứng & Cảnh báo Y khoa</label>
+                {allergies.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pb-1">
+                    {allergies.map((item) => (
+                      <span
+                        key={item}
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 border border-red-200 text-red-700 font-bold rounded-full text-[10px]"
+                      >
+                        {item}
+                        <button
+                          type="button"
+                          onClick={() => setAllergies((prev) => prev.filter((a) => a !== item))}
+                          className="text-red-500 hover:text-red-700 cursor-pointer"
+                          aria-label={`Xoá ${item}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <input
                   type="text"
-                  value={allergies}
-                  onChange={(e) => setAllergies(e.target.value)}
-                  placeholder="Ví dụ: Sữa bò, Đậu phộng (ngăn cách bởi dấu phẩy)"
+                  value={allergyInputText}
+                  onChange={(e) => setAllergyInputText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === ",") {
+                      e.preventDefault();
+                      addAllergyFromInput();
+                    }
+                  }}
+                  onBlur={addAllergyFromInput}
+                  placeholder="Nhập tên dị ứng rồi nhấn Enter (vd: Sữa bò, Đậu phộng)"
                   className="w-full bg-slate-50 border border-slate-200 focus:border-primary/40 focus:bg-white focus:outline-hidden rounded-xl px-3.5 py-2 text-sm text-slate-800 font-medium"
                 />
               </div>

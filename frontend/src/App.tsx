@@ -28,7 +28,9 @@ import {
   FeedLog,
   IngredientLog,
   ChatMessage,
-  SmartExtraction
+  SmartExtraction,
+  NutritionRecommendation,
+  WeeklyMealPlan
 } from "./types";
 
 import { useAuth } from "./auth/AuthContext";
@@ -58,6 +60,11 @@ export default function App() {
   const [feeds, setFeeds] = useState<FeedLog[]>([]);
   const [ingredients, setIngredients] = useState<IngredientLog[]>([]);
   const [chats, setChats] = useState<ChatMessage[]>([]);
+  const [nutritionRecommendation, setNutritionRecommendation] = useState<NutritionRecommendation | null>(null);
+  const [isGeneratingRecommendation, setIsGeneratingRecommendation] = useState(false);
+  const [weeklyMealPlan, setWeeklyMealPlan] = useState<WeeklyMealPlan | null>(null);
+  const [isGeneratingWeeklyPlan, setIsGeneratingWeeklyPlan] = useState(false);
+  const [isAcceptingWeeklyPlan, setIsAcceptingWeeklyPlan] = useState(false);
 
   // App UI state
   const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health">("dashboard");
@@ -100,6 +107,34 @@ export default function App() {
     if (rl.includes("spat") || rl.includes("dislike") || rl === "spat out") return "Spat out";
     return "Neutral";
   };
+
+  const mapNutritionRecommendation = (r: any): NutritionRecommendation => ({
+    id: r.id,
+    babyId: r.baby_id,
+    generatedAt: r.generated_at,
+    recommendedFoods: (r.recommended_foods || []).map((f: any) => ({ foodName: f.food_name, reason: f.reason })),
+    foodsToAvoid: (r.foods_to_avoid || []).map((f: any) => ({ foodName: f.food_name, reason: f.reason, linkedTo: f.linked_to })),
+    summary: r.summary,
+    basedOnAllergies: r.based_on_allergies || [],
+    basedOnConditions: r.based_on_conditions || []
+  });
+
+  const mapWeeklyMealPlan = (p: any): WeeklyMealPlan => ({
+    id: p.id,
+    babyId: p.baby_id,
+    generatedAt: p.generated_at,
+    startDate: p.start_date,
+    endDate: p.end_date,
+    status: p.status,
+    acceptedAt: p.accepted_at || undefined,
+    days: (p.days || []).map((d: any) => ({
+      date: d.date,
+      meals: (d.meals || []).map((m: any) => ({ mealType: m.meal_type, foodName: m.food_name, note: m.note }))
+    })),
+    summary: p.summary,
+    basedOnAllergies: p.based_on_allergies || [],
+    basedOnConditions: p.based_on_conditions || []
+  });
 
   // Fetch active baby's data
   const refreshActiveBabyData = async (babyId: string) => {
@@ -189,6 +224,19 @@ export default function App() {
           timestamp: c.timestamp.includes("T") ? c.timestamp.slice(11, 16) : c.timestamp
         })));
       }
+      // 7. Fetch cached AI nutrition recommendation (null nếu chưa từng tạo, không phải lỗi)
+      const recRes = await apiFetch(`/api/v1/nutrition/recommendation?baby_id=${babyId}`);
+      if (recRes.ok) {
+        const recData = await recRes.json();
+        setNutritionRecommendation(recData ? mapNutritionRecommendation(recData) : null);
+      }
+
+      // 8. Fetch cached AI weekly meal plan (null nếu chưa từng tạo, không phải lỗi)
+      const planRes = await apiFetch(`/api/v1/nutrition/meal-plan/weekly?baby_id=${babyId}`);
+      if (planRes.ok) {
+        const planData = await planRes.json();
+        setWeeklyMealPlan(planData ? mapWeeklyMealPlan(planData) : null);
+      }
     } catch (e) {
       console.error("Error refreshing active baby data:", e);
     }
@@ -216,7 +264,7 @@ export default function App() {
               isActive: Boolean(b.is_active),
               bloodType: b.blood_type,
               pediatricianName: b.pediatrician_name,
-              allergies: b.allergies
+              allergies: b.allergies || []
             }));
             // Fallback phòng dữ liệu cũ/hỏng chưa có bé nào active - chỉ áp dụng khi THỰC SỰ
             // không có bé nào active, không phải mặc định luôn ép bé đầu tiên.
@@ -607,6 +655,72 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleGenerateNutritionRecommendation = async () => {
+    if (!activeBaby) return;
+    setIsGeneratingRecommendation(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/recommendation/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baby_id: activeBaby.id })
+      });
+      if (!res.ok) {
+        throw new Error("Không thể tạo gợi ý dinh dưỡng lúc này, vui lòng thử lại sau.");
+      }
+      const data = await res.json();
+      setNutritionRecommendation(mapNutritionRecommendation(data));
+    } finally {
+      setIsGeneratingRecommendation(false);
+    }
+  };
+
+  const handleGenerateWeeklyMealPlan = async (feedback?: string) => {
+    if (!activeBaby) return;
+    setIsGeneratingWeeklyPlan(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/meal-plan/weekly/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baby_id: activeBaby.id, feedback: feedback || undefined })
+      });
+      if (!res.ok) {
+        // Backend trả message tiếng Việt cụ thể (vd "còn X ngày" khi bị khoá 409) - ưu tiên đọc
+        // thẳng từ response thay vì thông báo lỗi chung chung.
+        let message = "Không thể tạo thực đơn 7 ngày lúc này, vui lòng thử lại sau.";
+        try {
+          const errBody = await res.json();
+          if (errBody?.message) message = errBody.message;
+        } catch {
+          // ignore parse error, dùng message mặc định
+        }
+        throw new Error(message);
+      }
+      const data = await res.json();
+      setWeeklyMealPlan(mapWeeklyMealPlan(data));
+    } finally {
+      setIsGeneratingWeeklyPlan(false);
+    }
+  };
+
+  const handleAcceptWeeklyMealPlan = async () => {
+    if (!activeBaby) return;
+    setIsAcceptingWeeklyPlan(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/meal-plan/weekly/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baby_id: activeBaby.id })
+      });
+      if (!res.ok) {
+        throw new Error("Không thể chấp nhận thực đơn lúc này, vui lòng thử lại sau.");
+      }
+      const data = await res.json();
+      setWeeklyMealPlan(mapWeeklyMealPlan(data));
+    } finally {
+      setIsAcceptingWeeklyPlan(false);
     }
   };
 
@@ -1064,6 +1178,14 @@ export default function App() {
                   onDeleteFeed={handleDeleteFeed}
                   onAddIngredient={handleAddIngredient}
                   onDeleteIngredient={handleDeleteIngredient}
+                  recommendation={nutritionRecommendation}
+                  isGeneratingRecommendation={isGeneratingRecommendation}
+                  onGenerateRecommendation={handleGenerateNutritionRecommendation}
+                  weeklyMealPlan={weeklyMealPlan}
+                  isGeneratingWeeklyPlan={isGeneratingWeeklyPlan}
+                  isAcceptingWeeklyPlan={isAcceptingWeeklyPlan}
+                  onGenerateWeeklyMealPlan={handleGenerateWeeklyMealPlan}
+                  onAcceptWeeklyMealPlan={handleAcceptWeeklyMealPlan}
                 />
               )}
                 </>

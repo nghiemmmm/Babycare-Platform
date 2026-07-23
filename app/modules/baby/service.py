@@ -59,6 +59,9 @@ class BabyService:
             gender=baby_in.gender,
             avatar_url=baby_in.avatar_url,
             is_active=baby_in.is_active,
+            blood_type=baby_in.blood_type,
+            pediatrician_name=baby_in.pediatrician_name,
+            allergies=baby_in.allergies,
             guardians=[creator_id],
             created_at=now,
             updated_at=now
