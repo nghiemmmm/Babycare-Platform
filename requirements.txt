@@ -19,6 +19,10 @@ pypdf>=5.0.0
 faiss-cpu>=1.8.0
 langchain-community>=0.2.0
 sentence-transformers>=3.0.0,<4.0.0
+torch>=2.0.0
+torchaudio
+timm==0.4.5
+soundfile
 
 # Test dependencies
 pytest>=8.0.0
