@@ -16,7 +16,8 @@ import {
   Menu,
   X,
   Shield,
-  LogOut
+  LogOut,
+  ClipboardList
 } from "lucide-react";
 
 import {
@@ -41,6 +42,7 @@ import GrowthView from "./components/GrowthView";
 import AiHubView from "./components/AiHubView";
 import ProfileView from "./components/ProfileView";
 import NutritionView from "./components/NutritionView";
+import FeedingLogView from "./components/FeedingLogView";
 import HealthView from "./components/HealthView";
 
 export default function App() {
@@ -67,7 +69,7 @@ export default function App() {
   const [isAcceptingWeeklyPlan, setIsAcceptingWeeklyPlan] = useState(false);
 
   // App UI state
-  const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health" | "log">("dashboard");
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -941,7 +943,7 @@ export default function App() {
 
           <button
             onClick={() => {
-              setActiveTab("nutrition");
+              setActiveTab("log");
               setIsMobileMenuOpen(false);
             }}
             disabled={!hasBaby}
@@ -949,12 +951,12 @@ export default function App() {
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
               !hasBaby
                 ? "text-slate-300 cursor-not-allowed"
-                : activeTab === "nutrition"
+                : activeTab === "log"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
           >
-            <Coffee className="w-4 h-4" />
+            <ClipboardList className="w-4 h-4" />
             Nhật ký
           </button>
 
@@ -1169,8 +1171,8 @@ export default function App() {
                 />
               )}
 
-              {activeTab === "nutrition" && (
-                <NutritionView
+              {activeTab === "log" && (
+                <FeedingLogView
                   activeBaby={activeBaby}
                   feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
                   ingredients={ingredients.filter((i) => i.babyId === activeBaby.id)}
@@ -1178,6 +1180,12 @@ export default function App() {
                   onDeleteFeed={handleDeleteFeed}
                   onAddIngredient={handleAddIngredient}
                   onDeleteIngredient={handleDeleteIngredient}
+                />
+              )}
+
+              {activeTab === "nutrition" && (
+                <NutritionView
+                  activeBaby={activeBaby}
                   recommendation={nutritionRecommendation}
                   isGeneratingRecommendation={isGeneratingRecommendation}
                   onGenerateRecommendation={handleGenerateNutritionRecommendation}
