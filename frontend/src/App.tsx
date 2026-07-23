@@ -67,6 +67,8 @@ export default function App() {
   const [weeklyMealPlan, setWeeklyMealPlan] = useState<WeeklyMealPlan | null>(null);
   const [isGeneratingWeeklyPlan, setIsGeneratingWeeklyPlan] = useState(false);
   const [isAcceptingWeeklyPlan, setIsAcceptingWeeklyPlan] = useState(false);
+  const [threads, setThreads] = useState<Array<{ id: string; title: string }>>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string>("thread_default");
 
   // App UI state
   const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health" | "log">("dashboard");
@@ -215,17 +217,6 @@ export default function App() {
         })));
       }
 
-      // 6. Fetch chat messages
-      const chatRes = await apiFetch(`/api/v1/ai/threads/thread_default/messages`);
-      if (chatRes.ok) {
-        const chatData = await chatRes.json();
-        setChats(chatData.map((c: any) => ({
-          id: c.id,
-          role: c.role,
-          content: c.content,
-          timestamp: c.timestamp.includes("T") ? c.timestamp.slice(11, 16) : c.timestamp
-        })));
-      }
       // 7. Fetch cached AI nutrition recommendation (null nếu chưa từng tạo, không phải lỗi)
       const recRes = await apiFetch(`/api/v1/nutrition/recommendation?baby_id=${babyId}`);
       if (recRes.ok) {
@@ -241,6 +232,49 @@ export default function App() {
       }
     } catch (e) {
       console.error("Error refreshing active baby data:", e);
+    }
+  };
+
+  // Fetch all chat threads for the user
+  const loadThreads = async () => {
+    try {
+      const res = await apiFetch("/api/v1/ai/threads");
+      if (res.ok) {
+        const data = await res.json();
+        setThreads(data.map((t: any) => ({
+          id: t.id,
+          title: t.title
+        })));
+        if (data.length > 0) {
+          const threadIds = data.map((t: any) => t.id);
+          if (!threadIds.includes(activeThreadId)) {
+            setActiveThreadId(data[0].id);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load chat threads:", e);
+    }
+  };
+
+  // Fetch messages inside the selected thread
+  const loadThreadMessages = async (threadId: string) => {
+    try {
+      const res = await apiFetch(`/api/v1/ai/threads/${threadId}/messages`);
+      if (res.ok) {
+        const data = await res.json();
+        setChats(data.map((c: any) => ({
+          id: c.id,
+          role: c.role,
+          content: c.content,
+          timestamp: c.timestamp.includes("T") ? c.timestamp.slice(11, 16) : c.timestamp
+        })));
+      } else {
+        setChats([]);
+      }
+    } catch (e) {
+      console.error("Failed to load thread messages:", e);
+      setChats([]);
     }
   };
 
@@ -285,12 +319,58 @@ export default function App() {
     loadInitialBabies();
   }, []);
 
+  // Check URL query parameters for invitation acceptance link
+  useEffect(() => {
+    const handleAcceptInviteFromUrl = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const inviteId = searchParams.get("accept_invite");
+      if (inviteId) {
+        try {
+          const res = await apiFetch(`/api/v1/guardians/accept/${inviteId}`, {
+            method: "POST"
+          });
+          if (res.ok) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            const resBabies = await apiFetch("/api/v1/babies");
+            if (resBabies.ok) {
+              const dataBabies = await resBabies.json();
+              if (Array.isArray(dataBabies) && dataBabies.length > 0) {
+                setBabies(dataBabies.map((b: any) => ({
+                  id: b.id,
+                  name: b.name,
+                  birthDate: b.birth_date,
+                  gender: mapBackendGender(b.gender),
+                  avatarUrl: b.avatar_url || "/static/img/leo.png",
+                  isActive: Boolean(b.is_active),
+                  bloodType: b.blood_type,
+                  pediatricianName: b.pediatrician_name,
+                  allergies: b.allergies || []
+                })));
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error accepting invitation from URL:", e);
+        }
+      }
+    };
+    handleAcceptInviteFromUrl();
+  }, []);
+
   // Sync active baby details
   useEffect(() => {
     if (activeBaby?.id) {
       refreshActiveBabyData(activeBaby.id);
+      loadThreads();
     }
   }, [activeBaby?.id]);
+
+  // Sync active thread with messages list
+  useEffect(() => {
+    if (activeThreadId) {
+      loadThreadMessages(activeThreadId);
+    }
+  }, [activeThreadId]);
 
   // Bootstrap xong mà chưa có bé nào -> mở onboarding, khoá vào tab Hồ sơ.
   // Ngay khi bé đầu tiên được tạo -> tắt onboarding, chuyển sang Dashboard.
@@ -726,7 +806,7 @@ export default function App() {
     }
   };
 
-  // AI assistant messaging with proxy backend
+  // AI assistant messaging with direct API calls to FastAPI backend (thread-scoped)
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
       id: `u_${Date.now()}`,
@@ -739,39 +819,54 @@ export default function App() {
     setIsAiLoading(true);
 
     try {
-      const response = await apiFetch("/api/chat", {
+      const response = await apiFetch(`/api/v1/ai/threads/${activeThreadId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...chats, userMsg].map(c => ({ role: c.role, content: c.content })),
-          babyProfile: {
-            name: activeBaby.name,
-            gender: activeBaby.gender,
-            birthDate: activeBaby.birthDate,
-            weight: measurements[0]?.weight || 7.2
-          },
-          recentLogs: {
-            medications: medications.slice(0, 3),
-            feeds: feeds.slice(0, 3)
-          }
+          content: userMsg.content,
+          type: "text"
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`Backend returned ${response.status}`);
+      }
+
       const data = await response.json();
+      loadThreads(); // Refresh thread list to fetch any updated titles
+
+      // Convert from Backend format (MessageCreateResponse) to App.tsx format
+      const aiContent = data.ai_response?.content || "Tôi đã ghi nhận thông tin đó!";
+      const citations = data.ai_response?.citations || [];
+      const extractedLogs = data.extracted_logs || [];
+
+      // Convert first extracted_log to extraction widget if present
+      let extraction = null;
+      if (extractedLogs.length > 0) {
+        const log = extractedLogs[0];
+        extraction = {
+          type: log.type,
+          title: log.title,
+          detail: log.detail,
+          value: log.value,
+          time: log.time,
+          pending: false,
+        };
+      }
 
       setChats((prev) => [
         ...prev,
         {
           id: `ai_${Date.now()}`,
           role: "assistant",
-          content: data.text,
+          content: aiContent,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          extraction: data.extraction,
-          citations: data.citations
+          extraction,
+          citations
         }
       ]);
     } catch (error) {
-      console.error("Failed to message Gemini proxy:", error);
+      console.error("Failed to message Gemini API:", error);
       // Fallback
       setChats((prev) => [
         ...prev,
@@ -785,6 +880,29 @@ export default function App() {
     } finally {
       setIsAiLoading(false);
     }
+  };
+
+  const handleCreateThread = async () => {
+    try {
+      const res = await apiFetch("/api/v1/ai/threads", {
+        method: "POST"
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const newThreadId = data.thread_id;
+
+        // Add new thread to the list and select it
+        setThreads(prev => [{ id: newThreadId, title: data.title }, ...prev]);
+        setActiveThreadId(newThreadId);
+        setChats([]); // Clear messages locally immediately
+      }
+    } catch (e) {
+      console.error("Failed to create new thread:", e);
+    }
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    setActiveThreadId(threadId);
   };
 
   const handleConfirmExtraction = (ext: SmartExtraction) => {
@@ -1123,6 +1241,7 @@ export default function App() {
                   onDeleteFeed={handleDeleteFeed}
                   onAddMeasurement={handleAddMeasurement}
                   onDeleteMeasurement={handleDeleteMeasurement}
+                  onNavigateTab={(tab) => setActiveTab(tab as any)}
                 />
               )}
 
@@ -1154,6 +1273,10 @@ export default function App() {
                   onStartNapTimer={handleStartNapTimer}
                   isNapTimerRunning={isNapTimerRunning}
                   napElapsedTime={napElapsedTime}
+                  threads={threads}
+                  activeThreadId={activeThreadId}
+                  onSelectThread={handleSelectThread}
+                  onCreateThread={handleCreateThread}
                 />
               )}
 
