@@ -1,26 +1,7 @@
 from app.AI_agents.core.reasoner import AIReasoner
 from app.AI_agents.orchestrator.state_manager import OverallState
+from app.AI_agents.core.constant import INTENT_PROMPT
 import json
-
-INTENT_PROMPT = """
-You are the Intent & Planning Agent for BabyCare AI.
-Analyze the user's input and classify their intent into exactly one of these labels:
-1. "chat" - General conversation, parenting advice, Q&A.
-2. "log_activity" - Recording/logging baby activities (feeding, sleeping, diaper change).
-3. "analyze_cry" - Request to diagnose a baby's cry or sound.
-4. "check_health" - Logging symptoms, checking fever, or checking medication rules.
-5. "check_nutrition" - Checking baby growth logs, nutrition tips, solid foods, or WHO standards.
-6. "generate_report" - Request to export or generate health reports (PDF, Word).
-
-Respond with a JSON object containing:
-- "intent": The selected label string.
-- "confidence": Float between 0.0 and 1.0.
-
-Example JSON output:
-{"intent": "log_activity", "confidence": 0.95}
-
-Do not return any other text besides the JSON.
-"""
 
 class TaskPlanner:
     def __init__(self):

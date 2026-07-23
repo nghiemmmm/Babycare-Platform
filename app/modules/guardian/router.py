@@ -49,7 +49,8 @@ async def invite_guardian(
         baby_id=baby_id,
         name=invite_in.name,
         email=invite_in.email,
-        role=invite_in.role
+        role=invite_in.role,
+        inviter_name=current_user.name or "Phụ huynh"
     )
 
 
@@ -62,3 +63,16 @@ async def delete_guardian(
     """Xóa quyền truy cập của một người chăm sóc khỏi bé."""
     baby_service.get_baby_by_id(baby_id, current_user.uid)
     return guardian_service.remove_guardian(baby_id=baby_id, guardian_id=guardian_id)
+
+
+@router.post("/accept/{invitation_id}", response_model=MessageResponse)
+async def accept_guardian_invitation(
+    invitation_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """Xác nhận chấp nhận lời mời người giám hộ và chính thức kết nối với bé."""
+    return guardian_service.accept_invitation(
+        invitation_id=invitation_id,
+        user_id=current_user.uid,
+        user_email=current_user.email or ""
+    )

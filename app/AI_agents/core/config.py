@@ -1,17 +1,25 @@
-import os
 from app.core.config import settings
+from app.AI_agents.core.constant import (
+    DEFAULT_TEMPERATURE,
+    DEFAULT_CHAT_MODEL,
+    COMPLEX_REASONING_MODEL,
+    RAG_CHUNK_SIZE,
+    RAG_CHUNK_OVERLAP,
+    RAG_DOCUMENT_DIR,
+    CHECKPOINT_COLLECTION
+)
 
 class AIAgentConfig:
-    DEFAULT_TEMPERATURE: float = 0.0
-    DEFAULT_CHAT_MODEL: str = "gemini-flash-latest"
-    COMPLEX_REASONING_MODEL: str = "gemini-flash-latest"
+    DEFAULT_TEMPERATURE: float = DEFAULT_TEMPERATURE
+    DEFAULT_CHAT_MODEL: str = DEFAULT_CHAT_MODEL
+    COMPLEX_REASONING_MODEL: str = COMPLEX_REASONING_MODEL
     
     # RAG Settings
-    RAG_CHUNK_SIZE: int = 500
-    RAG_CHUNK_OVERLAP: int = 50
-    RAG_DOCUMENT_DIR: str = "app/AI_agents/knowledge/documents"
+    RAG_CHUNK_SIZE: int = RAG_CHUNK_SIZE
+    RAG_CHUNK_OVERLAP: int = RAG_CHUNK_OVERLAP
+    RAG_DOCUMENT_DIR: str = RAG_DOCUMENT_DIR
     
     # Firestore Settings
-    CHECKPOINT_COLLECTION: str = "chat_checkpoints"
+    CHECKPOINT_COLLECTION: str = CHECKPOINT_COLLECTION
 
 agent_config = AIAgentConfig()

@@ -6,6 +6,18 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 
+# ─── Notifications ────────────────────────────────────────────────────────────
+
+class NotificationResponse(BaseModel):
+    id: str
+    title: str
+    message: str
+    type: str             # "medication" | "safety" | "feeding" | "system"
+    created_at: str
+    read: bool
+    action_url: Optional[str] = None
+
+
 # ─── Milk / Feed ─────────────────────────────────────────────────────────────
 
 class MilkIntake(BaseModel):

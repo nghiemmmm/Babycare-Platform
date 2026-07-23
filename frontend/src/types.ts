@@ -135,3 +135,13 @@ export interface ChatMessage {
   isVoice?: boolean;
   voiceDuration?: string;
 }
+
+export interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  type: "medication" | "safety" | "feeding" | "system";
+  created_at: string;
+  read: boolean;
+  action_url?: string;
+}

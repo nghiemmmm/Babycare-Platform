@@ -59,3 +59,12 @@ class ChatMessageResponse(BaseModel):
     content: str
     timestamp: str
 
+class VoiceExtractRequest(BaseModel):
+    transcript: str
+    baby_id: Optional[str] = None
+
+class VoiceExtractResponse(BaseModel):
+    intent: str  # "feeding" | "medication" | "growth" | "diaper" | "sleep" | "unknown"
+    extracted_data: dict
+    confidence_message: str
+

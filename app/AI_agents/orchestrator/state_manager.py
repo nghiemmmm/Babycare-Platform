@@ -14,6 +14,10 @@ class OverallState(TypedDict):
     next_step: Optional[str]
     extracted_data: Optional[dict]
     error_message: Optional[str]
+    # Out-of-scope web search fields
+    web_search_results: Optional[list[dict]]   # Raw results from WebSearchTool
+    is_out_of_scope: Optional[bool]            # Flag set when intent = "out_of_scope"
+
 
 from typing import Any, Iterator, Tuple
 from langchain_core.runnables import RunnableConfig
@@ -24,7 +28,9 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     ChannelVersions
 )
+from google.cloud.firestore import FieldFilter
 from app.infrastructure.database.connection import get_firestore_db
+from app.AI_agents.core.constant import CHECKPOINT_COLLECTION
 import pickle
 import json
 import base64
@@ -58,6 +64,7 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = checkpoint["id"]
+        user_id = config["configurable"].get("user_id")
 
         data = {
             "checkpoint": _safe_serialize(checkpoint),
@@ -66,23 +73,27 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
             "thread_id": thread_id,
             "checkpoint_ns": checkpoint_ns,
             "checkpoint_id": checkpoint_id,
+            "user_id": user_id,
         }
 
         doc_id = f"{thread_id}_{checkpoint_ns}_{checkpoint_id}"
-        self.db.collection("chat_checkpoints").document(doc_id).set(data)
+        self.db.collection(CHECKPOINT_COLLECTION).document(doc_id).set(data)
         return config
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = config["configurable"].get("checkpoint_id")
+        user_id = config["configurable"].get("user_id")
 
-        col = self.db.collection("chat_checkpoints")
+        col = self.db.collection(CHECKPOINT_COLLECTION)
         if checkpoint_id:
             doc_id = f"{thread_id}_{checkpoint_ns}_{checkpoint_id}"
             doc = col.document(doc_id).get()
             if doc.exists:
                 d = doc.to_dict()
+                if d.get("user_id") and user_id and d.get("user_id") != user_id:
+                    raise PermissionError("Access denied: You do not have permission to access this chat thread.")
                 return CheckpointTuple(
                     config=config,
                     checkpoint=_safe_deserialize(d["checkpoint"]),
@@ -91,19 +102,22 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
                 )
         else:
             docs = (
-                col.where("thread_id", "==", thread_id)
-                .where("checkpoint_ns", "==", checkpoint_ns)
+                col.where(filter=FieldFilter("thread_id", "==", thread_id))
+                .where(filter=FieldFilter("checkpoint_ns", "==", checkpoint_ns))
                 .limit(1)
                 .get()
             )
             if docs:
                 d = docs[0].to_dict()
+                if d.get("user_id") and user_id and d.get("user_id") != user_id:
+                    raise PermissionError("Access denied: You do not have permission to access this chat thread.")
                 return CheckpointTuple(
                     config={
                         "configurable": {
                             "thread_id": thread_id,
                             "checkpoint_ns": checkpoint_ns,
                             "checkpoint_id": d["checkpoint_id"],
+                            "user_id": user_id,
                         }
                     },
                     checkpoint=_safe_deserialize(d["checkpoint"]),
@@ -120,22 +134,27 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
-        col = self.db.collection("chat_checkpoints")
+        col = self.db.collection(CHECKPOINT_COLLECTION)
         query = col
+        user_id = config["configurable"].get("user_id") if config else None
+
         if config:
             thread_id = config["configurable"]["thread_id"]
             checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-            query = query.where("thread_id", "==", thread_id).where("checkpoint_ns", "==", checkpoint_ns)
-            
+            query = query.where(filter=FieldFilter("thread_id", "==", thread_id)).where(filter=FieldFilter("checkpoint_ns", "==", checkpoint_ns))
+
         docs = query.get()
         for doc in docs:
             d = doc.to_dict()
+            if d.get("user_id") and user_id and d.get("user_id") != user_id:
+                continue
             yield CheckpointTuple(
                 config={
                     "configurable": {
                         "thread_id": d["thread_id"],
                         "checkpoint_ns": d["checkpoint_ns"],
                         "checkpoint_id": d["checkpoint_id"],
+                        "user_id": user_id,
                     }
                 },
                 checkpoint=_safe_deserialize(d["checkpoint"]),

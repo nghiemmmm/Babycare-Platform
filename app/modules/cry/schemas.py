@@ -11,8 +11,9 @@ class CryLogBase(BaseModel):
     audio_url: str = Field(..., description="Đường dẫn lưu trữ tệp ghi âm tiếng khóc (.wav, .mp3) trên Firebase Storage")
     
     # Kết quả chẩn đoán từ AI
-    prediction: str = Field(..., description="Dự đoán của AI: hungry, tired, pain, diaper, discomfort")
-    confidence: float = Field(..., description="Độ tin cậy của dự đoán (từ 0.0 đến 1.0)")
+    prediction: str = Field(..., description="Dự đoán của AI: hungry, tired, pain, diaper, discomfort, v.v.")
+    confidence: float = Field(..., description="Độ tin cậy của dự đoán chính (từ 0.0 đến 1.0)")
+    reason_scores: Optional[dict[str, float]] = Field(None, description="Chi tiết độ tin cậy của tất cả các nguyên nhân khóc (dạng dictionary/map)")
     
     # Phản hồi từ phụ huynh & Kích hoạt âm thanh vỗ về tự động
     feedback_accurate: Optional[bool] = Field(None, description="Đánh giá từ phụ huynh xem AI đoán đúng hay sai")
