@@ -191,7 +191,7 @@ export default function App() {
           details: f.details,
           amount: f.amount,
           time: f.time,
-          date: "Today"
+          date: f.date || ""
         })));
       }
 

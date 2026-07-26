@@ -104,7 +104,8 @@ async def get_nutrition_feeds(
             type=d.get("type", ""),
             details=d.get("details", ""),
             amount=d.get("amount", 0.0),
-            time=d.get("time", "")
+            time=d.get("time", ""),
+            date=d.get("date", "")
         ))
     
     # Sắp xếp theo time (đơn giản hoá thành chuỗi thời gian) hoặc theo ngày tạo

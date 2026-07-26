@@ -41,6 +41,10 @@ export default function FeedingLogView({
     return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   };
 
+  // So khớp với "date" backend lưu (UTC, xem router.py add_nutrition_feed) - dùng cùng quy ước
+  // UTC ở đây để tránh entry ghi lúc gần nửa đêm bị lệch ngày so với backend.
+  const todayDateStr = new Date().toISOString().split("T")[0];
+
   React.useEffect(() => {
     setFeedTime(getCurrentTimeStr());
   }, []);
@@ -80,13 +84,13 @@ export default function FeedingLogView({
 
   // Compute stats
   const totalMilk = feeds
-    .filter((f) => f.babyId === activeBaby.id && f.type !== "Solids" && f.date === "Today")
+    .filter((f) => f.babyId === activeBaby.id && f.type !== "Solids" && f.date === todayDateStr)
     .reduce((acc, f) => acc + f.amount, 0);
 
-  const solidsCount = feeds.filter((f) => f.babyId === activeBaby.id && f.type === "Solids" && f.date === "Today").length;
+  const solidsCount = feeds.filter((f) => f.babyId === activeBaby.id && f.type === "Solids" && f.date === todayDateStr).length;
 
   const todaysMilkFeeds = feeds
-    .filter((f) => f.babyId === activeBaby.id && f.type !== "Solids" && f.date === "Today")
+    .filter((f) => f.babyId === activeBaby.id && f.type !== "Solids" && f.date === todayDateStr)
     .map((f) => ({ ...f, minutes: parseTimeToMinutes(f.time) }))
     .filter((f): f is typeof f & { minutes: number } => f.minutes !== null)
     .sort((a, b) => b.minutes - a.minutes);
@@ -294,7 +298,9 @@ export default function FeedingLogView({
 
         <div className="relative pl-6 border-l border-slate-100 space-y-5">
           {feeds
-            .filter((f) => f.babyId === activeBaby.id && f.date === "Today")
+            .filter((f) => f.babyId === activeBaby.id && f.date === todayDateStr)
+            .slice()
+            .sort((a, b) => (parseTimeToMinutes(b.time) ?? 0) - (parseTimeToMinutes(a.time) ?? 0))
             .map((feed) => (
               <div key={feed.id} className="relative group flex items-start justify-between gap-4">
                 <span className="absolute -left-[30.5px] top-1 w-2.5 h-2.5 rounded-full ring-4 bg-primary ring-primary/10" />
@@ -321,7 +327,7 @@ export default function FeedingLogView({
               </div>
             ))}
 
-          {feeds.filter((f) => f.babyId === activeBaby.id && f.date === "Today").length === 0 && (
+          {feeds.filter((f) => f.babyId === activeBaby.id && f.date === todayDateStr).length === 0 && (
             <div className="text-center py-6 text-slate-400 text-xs font-semibold">
               Không có nhật ký bú/ăn dặm nào hôm nay.
             </div>
