@@ -1,122 +1,152 @@
 [
   {
-    "input_query": "Chào trợ lý, tôi cần một vài lời khuyên về cách rèn bé sơ sinh tự ngủ.",
+    "input_query": "Chao tro ly, toi can mot vai loi khuyen ve cach ren be so sinh tu ngu.",
     "expected_intent": "chat",
     "expected_entities": {},
-    "expected_context_keywords": ["tự ngủ", "sơ sinh", "rèn ngủ"],
-    "expected_response_notes": "Cung cấp lời khuyên thân thiện về phương pháp rèn ngủ an sau như EASY, CIO hoặc Fading, khuyến nghị tạo môi trường ngủ tối và yên tĩnh."
+    "expected_context_keywords": [
+      "infant",
+      "skin-to-skin",
+      "sleep",
+      "preterm"
+    ],
+    "expected_response_notes": "Cung cap loi khuyen than thien ve phuong phap ren ngu."
   },
   {
-    "input_query": "Bé mấy tháng tuổi thì có thể bắt đầu tập ngồi được vậy bạn?",
+    "input_query": "Be may thang tuoi thi co the bat dau tap ngoi duoc vay ban?",
     "expected_intent": "chat",
     "expected_entities": {},
-    "expected_context_keywords": ["tập ngồi", "mấy tháng"],
-    "expected_response_notes": "Giải thích trẻ thường bắt đầu tập ngồi từ 4-7 tháng tuổi, lưu ý các dấu hiệu sẵn sàng của bé và không nên ép bé ngồi quá sớm."
+    "expected_context_keywords": [
+      "cognitive",
+      "development",
+      "months",
+      "infant"
+    ],
+    "expected_response_notes": "Giai thich tre thuong bat dau tap ngoi tu 4-7 thang tuoi."
   },
   {
-    "input_query": "Ghi nhận giúp mình bé Bo vừa bú bình 120ml sữa công thức lúc 9h30 sáng nay.",
+    "input_query": "Ghi nhan giup minh be Bo vua bu binh 120ml sua cong thuc luc 9h30 sang nay.",
     "expected_intent": "log_activity",
     "expected_entities": {
       "activity_type": "feeding",
       "data": {
-        "food_name": "sữa công thức",
+        "food_name": "sua cong thuc",
         "amount_g": 120.0
       }
     },
     "expected_context_keywords": [],
-    "expected_response_notes": "Xác nhận đã ghi nhận cữ bú sữa công thức 120ml của bé Bo thành công vào lúc 09:30."
+    "expected_response_notes": "Xac nhan da ghi nhan cu bu sua cong thuc 120ml."
   },
   {
-    "input_query": "Bé đi ị phân lỏng màu vàng, có nhầy lúc 14h chiều.",
+    "input_query": "Be di i phan long mau vang, co nhay luc 14h chieu.",
     "expected_intent": "log_activity",
     "expected_entities": {
       "activity_type": "diaper",
       "data": {
-        "status": "lỏng",
-        "color": "vàng",
+        "status": "long",
+        "color": "vang",
         "has_mucus": true
       }
     },
     "expected_context_keywords": [],
-    "expected_response_notes": "Xác nhận đã ghi nhận nhật ký thay tã của bé với mô tả phân lỏng, màu vàng có nhầy vào lúc 14:00."
+    "expected_response_notes": "Xac nhan da ghi nhan nhat ky thay ta."
   },
   {
-    "input_query": "Phân tích giúp tôi file âm thanh tiếng khóc hungry_cry_baby.wav vừa tải lên.",
+    "input_query": "Phan tich giup toi file am thanh tieng khoc hungry_cry_baby.wav vua tai len.",
     "expected_intent": "analyze_cry",
     "expected_entities": {
       "audio_file": "hungry_cry_baby.wav"
     },
-    "expected_context_keywords": ["tiếng khóc đói", "hungry cry"],
-    "expected_response_notes": "Đưa ra nhận diện tiếng khóc có xác suất đói (hungry) cao và hướng dẫn mẹ kiểm tra cữ bú gần nhất, đề xuất phát nhạc ru xoa dịu."
+    "expected_context_keywords": [],
+    "expected_response_notes": "Dua ra nhan dien tieng khoc co xac suat doi (hungry) cao."
   },
   {
-    "input_query": "Nghe tiếng khóc bé gắt ngủ quấy quá, bật tiếng ồn trắng dỗ bé giúp tôi.",
+    "input_query": "Nghe tieng khoc be gat ngu quay qua, bat tieng on trang do be giup toi.",
     "expected_intent": "analyze_cry",
     "expected_entities": {
       "action": "play_white_noise"
     },
     "expected_context_keywords": [],
-    "expected_response_notes": "Thông báo đang kích hoạt trình phát tiếng ồn trắng (white noise) để dỗ bé ngủ."
+    "expected_response_notes": "Thong bao dang kich hoat trinh phat tieng on trang."
   },
   {
-    "input_query": "Bé Bo nhà tôi bị sốt nóng đầu, cặp nhiệt độ thấy 38.8 độ C thì phải làm sao?",
+    "input_query": "Be Bo nha toi bi sot nong dau, cap nhiet do thay 38.8 do C thi phai lam sao?",
     "expected_intent": "check_health",
     "expected_entities": {
       "symptom": "fever",
       "temperature": 38.8
     },
-    "expected_context_keywords": ["sốt trẻ em", "38.8 độ", "hạ sốt"],
-    "expected_response_notes": "Hướng dẫn chườm ấm, mặc quần áo thoáng mát. Khuyên dùng Paracetamol đúng liều lượng nếu cần và cảnh báo đưa đi viện nếu sốt cao liên tục hoặc có dấu hiệu li bì. Đính kèm khuyến cáo y tế chuyên khoa."
+    "expected_context_keywords": [
+      "temperature",
+      "fever",
+      "danger",
+      "health"
+    ],
+    "expected_response_notes": "Huong dan chuom am, mac quan ao thoang mat."
   },
   {
-    "input_query": "Bé uống thuốc hạ sốt Hapacol 150mg lúc 8h sáng, giờ 11h bé lại nóng thì có uống tiếp được không?",
+    "input_query": "Be uong thuoc ha sot Hapacol 150mg luc 8h sang, gio 11h be lai nong thi co uong tiep duoc khong?",
     "expected_intent": "check_health",
     "expected_entities": {
       "medication": "Hapacol",
       "dose": "150mg",
       "last_taken": "08:00"
     },
-    "expected_context_keywords": ["khoảng cách liều", "hạ sốt"],
-    "expected_response_notes": "Cảnh báo khẩn cấp: Khoảng cách giữa 2 liều Paracetamol/Hapacol phải từ 4-6 tiếng. Thời gian hiện tại mới được 3 tiếng, không được tự ý cho uống thêm để tránh ngộ độc gan. Khuyên chườm ấm hạ sốt và theo dõi sát sao."
+    "expected_context_keywords": [
+      "temperature",
+      "health",
+      "care",
+      "infant"
+    ],
+    "expected_response_notes": "Canh bao khoang cach giua 2 lieu Paracetamol."
   },
   {
-    "input_query": "Bé 6 tháng nặng 7.2kg, dài 66cm thì có đạt chuẩn WHO không trợ lý?",
+    "input_query": "Be 6 thang nang 7.2kg, dai 66cm thi co dat chuan WHO khong tro ly?",
     "expected_intent": "check_nutrition",
     "expected_entities": {
       "age_months": 6,
       "weight_kg": 7.2,
       "height_cm": 66.0
     },
-    "expected_context_keywords": ["chuẩn tăng trưởng WHO", "6 tháng tuổi"],
-    "expected_response_notes": "Tính toán và so sánh chỉ số với bảng chuẩn WHO dành cho bé trai/bé gái 6 tháng tuổi. Đưa ra nhận xét bé đang ở ngưỡng phát triển bình thường hay thiếu cân/thấp còi."
+    "expected_context_keywords": [
+      "WHO",
+      "weight",
+      "birth",
+      "growth"
+    ],
+    "expected_response_notes": "Tinh toan va so sanh chi so voi bang chuan WHO."
   },
   {
-    "input_query": "Lên thực đơn ăn dặm tuần đầu tiên cho bé bắt đầu tập ăn dặm từ ngày mai.",
+    "input_query": "Len thuc don an dam tuan dau tien cho be bat dau tap an dam tu ngay mai.",
     "expected_intent": "check_nutrition",
     "expected_entities": {
-      "stage": "bắt đầu ăn dặm"
+      "stage": "bat dau an dam"
     },
-    "expected_context_keywords": ["ăn dặm tuần đầu", "cháo rây"],
-    "expected_response_notes": "Gợi ý thực đơn tuần đầu tiên chủ yếu là cháo rây loãng tỷ lệ 1:10, kết hợp thử một số loại rau củ rây ngọt dịu (bí đỏ, cà rốt) để theo dõi dị ứng."
+    "expected_context_keywords": [
+      "complementary",
+      "feeding",
+      "food",
+      "months"
+    ],
+    "expected_response_notes": "Goi y thuc don tuan dau tien chu yeu la chao ray loang."
   },
   {
-    "input_query": "Hãy xuất báo cáo tổng hợp tình hình sức khỏe và cân nặng của bé Bo trong tháng này.",
+    "input_query": "Hay xuat bao cao tong hop tinh hinh suc khoe va can nang cua be Bo trong thang nay.",
     "expected_intent": "generate_report",
     "expected_entities": {
       "report_type": "monthly",
       "target": "health_and_growth"
     },
     "expected_context_keywords": [],
-    "expected_response_notes": "Xác nhận đang tiến hành tổng hợp dữ liệu sức khỏe, dinh dưỡng và chỉ số cân nặng trong tháng và xuất file báo cáo (PDF/Word) cho phụ huynh."
+    "expected_response_notes": "Xac nhan dang tien hanh tong hop du lieu suc khoe."
   },
   {
-    "input_query": "Tải giúp tôi file báo cáo tuần của bé dưới dạng PDF.",
+    "input_query": "Tai giup toi file bao cao tuan cua be duoi dang PDF.",
     "expected_intent": "generate_report",
     "expected_entities": {
       "format": "PDF",
       "report_type": "weekly"
     },
     "expected_context_keywords": [],
-    "expected_response_notes": "Xác nhận và gửi đường dẫn tải tệp PDF báo cáo tuần của bé."
+    "expected_response_notes": "Xac nhan va gui duong dan tai tep PDF bao cao tuan."
   }
 ]

@@ -4,19 +4,9 @@ from app.AI_agents.core.reasoner import AIReasoner
 from app.AI_agents.tools.implementation.health_tools import HealthRecordsTool
 from app.AI_agents.knowledge.retriever import MedicalRetriever
 from langchain_core.messages import AIMessage
-
-HEALTH_SYSTEM_PROMPT = """
-Bạn là trợ lý nhi khoa chuyên về theo dõi sức khỏe bé. Nhiệm vụ của bạn là:
-1. Xem xét triệu chứng và lịch sử bệnh án của bé.
-2. Đưa ra lời khuyên chăm sóc tại nhà phù hợp.
-3. Cảnh báo rõ ràng khi nào cần đưa bé đến gặp bác sĩ.
-4. Kiểm tra tính an toàn của thuốc nếu được hỏi.
-
-RÀNG BUỘC QUAN TRỌNG: Chỉ trả lời dựa trên thông tin y khoa được cung cấp trong phần "Tài liệu y khoa tham chiếu". 
-Nếu tài liệu y khoa không có thông tin hoặc không liên quan đến câu hỏi, hãy nói rõ: "Tôi không tìm thấy thông tin này trong tài liệu y tế chính thức, tuy nhiên bạn có thể tham khảo ý kiến bác sĩ nhi khoa..." và không tự ý đưa ra các hướng dẫn điều trị chi tiết không có trong tài liệu.
-
-Luôn ưu tiên sự an toàn của bé. Không chẩn đoán bệnh, chỉ tư vấn và hướng dẫn.
-"""
+from app.AI_agents.core.constant import HEALTH_SYSTEM_PROMPT
+from app.modules.baby.service import BabyService
+from datetime import date
 
 class HealthGraph:
     """
@@ -27,8 +17,9 @@ class HealthGraph:
     - Cảnh báo khi cần gặp bác sĩ
     """
     def __init__(self):
-        self.reasoner = AIReasoner(model_name="gemini-flash-latest")
+        self.reasoner = AIReasoner()
         self.health_tool = HealthRecordsTool()
+        self.baby_service = BabyService()
         self._retriever = None  # lazy init to avoid embedding API call on startup
 
     @property
@@ -42,10 +33,19 @@ class HealthGraph:
         baby_id = state.get("baby_id")
         user_id = state.get("current_user_id")
 
-        # Lấy lịch sử bệnh án gần nhất
+        # Lấy lịch sử bệnh án gần nhất và tính tuổi bé
         health_context = ""
+        baby_age = None
         if baby_id and user_id:
             try:
+                # 1. Lấy thông tin bé để tính tuổi
+                baby = self.baby_service.get_baby_by_id(baby_id, user_id)
+                if baby and baby.birth_date:
+                    birth = date.fromisoformat(baby.birth_date[:10])
+                    today = date.today()
+                    baby_age = (today.year - birth.year) * 12 + today.month - birth.month
+
+                # 2. Lấy bệnh án gần nhất
                 records = self.health_tool._run(action="get_records", baby_id=baby_id, user_id=user_id)
                 if records:
                     recent = records[:3]
@@ -55,8 +55,12 @@ class HealthGraph:
             except Exception:
                 pass
 
-        # Tra cứu kiến thức y khoa RAG
-        rag_context = self.retriever.retrieve_context(user_message)
+        # Tra cứu kiến thức y khoa RAG có kèm bộ lọc
+        metadata_filter = {"category": "health"}
+        if baby_age is not None:
+            metadata_filter["baby_age"] = baby_age
+            
+        rag_context = self.retriever.retrieve_context(user_message, metadata_filter=metadata_filter)
 
         full_prompt = f"{user_message}\n\n{health_context}\n\nTài liệu y khoa tham chiếu:\n{rag_context}"
         

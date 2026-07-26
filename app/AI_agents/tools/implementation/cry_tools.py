@@ -7,11 +7,12 @@ class CryAnalysisTool(BaseTool):
 
     def _run(self, baby_id: str, audio_file: str, user_id: str):
         classifier = CryClassifier()
-        prediction, confidence = classifier.predict(audio_file)
+        prediction, confidence, reason_scores = classifier.predict(audio_file)
         sound = classifier.get_soothing_sound(prediction)
         return {
             "baby_id": baby_id,
             "prediction": prediction,
             "confidence": confidence,
+            "reason_scores": reason_scores,
             "soothing_sound": sound
         }

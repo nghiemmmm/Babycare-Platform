@@ -16,6 +16,8 @@ from app.shared.exceptions import (
     InvalidRegistrationDataError,
     InvalidPasswordResetCodeError,
     RateLimitExceededError,
+    AIGenerationError,
+    MealPlanLockedError,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,6 +88,22 @@ def init_app(app: FastAPI) -> None:
         logger.warning(f"Rate limit exceeded: {exc.message} on path {request.url.path}")
         return JSONResponse(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={"message": exc.message}
+        )
+
+    @app.exception_handler(AIGenerationError)
+    async def ai_generation_error_handler(request: Request, exc: AIGenerationError) -> JSONResponse:
+        logger.warning(f"AI generation error: {exc.message} on path {request.url.path}")
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={"message": exc.message}
+        )
+
+    @app.exception_handler(MealPlanLockedError)
+    async def meal_plan_locked_handler(request: Request, exc: MealPlanLockedError) -> JSONResponse:
+        logger.warning(f"Meal plan locked: {exc.message} on path {request.url.path}")
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
             content={"message": exc.message}
         )
 

@@ -5,19 +5,9 @@ from app.AI_agents.tools.implementation.nutrition_tools import NutritionTracking
 from app.AI_agents.tools.implementation.growth_tools import GrowthTrackingTool
 from app.AI_agents.knowledge.retriever import MedicalRetriever
 from langchain_core.messages import AIMessage
-
-NUTRITION_SYSTEM_PROMPT = """
-Bạn là chuyên gia dinh dưỡng nhi khoa. Nhiệm vụ của bạn là:
-1. Tư vấn thực đơn ăn dặm phù hợp với độ tuổi của bé.
-2. Đánh giá chỉ số cân nặng và chiều cao của bé theo chuẩn WHO.
-3. Đưa ra gợi ý thực phẩm bổ sung dinh dưỡng khi cần thiết.
-4. Cảnh báo khi chỉ số tăng trưởng của bé bất thường.
-
-RÀNG BUỘC QUAN TRỌNG: Chỉ tư vấn dinh dưỡng và thực đơn dựa trên thông tin được cung cấp trong phần "Tài liệu dinh dưỡng tham chiếu".
-Nếu tài liệu không có thông tin, hãy nói rõ: "Tôi không tìm thấy thông tin này trong hướng dẫn dinh dưỡng chính thức..." và khuyên phụ huynh tham khảo ý kiến chuyên gia dinh dưỡng.
-
-Trả lời bằng tiếng Việt, ấm áp và dễ hiểu. Dẫn chiếu chuẩn WHO khi đề cập chỉ số phát triển.
-"""
+from app.AI_agents.utils.prompts import load_prompt
+from app.modules.baby.service import BabyService
+from datetime import date
 
 class NutritionGraph:
     """
@@ -28,9 +18,11 @@ class NutritionGraph:
     - Cảnh báo bé thiếu dinh dưỡng hoặc thừa cân
     """
     def __init__(self):
-        self.reasoner = AIReasoner(model_name="gemini-flash-latest")
+        self.reasoner = AIReasoner()
         self.nutrition_tool = NutritionTrackingTool()
         self.growth_tool = GrowthTrackingTool()
+        self.baby_service = BabyService()
+        self.nutrition_prompt = load_prompt("nutrition.txt")
         self._retriever = None  # lazy init to avoid embedding API call on startup
 
     @property
@@ -46,9 +38,20 @@ class NutritionGraph:
 
         nutrition_context = ""
         growth_context = ""
+        baby_age = None
 
         if baby_id and user_id:
-            # Lấy nhật ký ăn dặm gần nhất
+            # 1. Tính tuổi bé
+            try:
+                baby = self.baby_service.get_baby_by_id(baby_id, user_id)
+                if baby and baby.birth_date:
+                    birth = date.fromisoformat(baby.birth_date[:10])
+                    today = date.today()
+                    baby_age = (today.year - birth.year) * 12 + today.month - birth.month
+            except Exception:
+                pass
+
+            # 2. Lấy nhật ký ăn dặm gần nhất
             try:
                 logs = self.nutrition_tool._run(action="get_logs", baby_id=baby_id, user_id=user_id)
                 if logs:
@@ -59,7 +62,7 @@ class NutritionGraph:
             except Exception:
                 pass
 
-            # Lấy chỉ số tăng trưởng gần nhất
+            # 3. Lấy chỉ số tăng trưởng gần nhất
             try:
                 growth_logs = self.growth_tool._run(action="get_history", baby_id=baby_id, user_id=user_id)
                 if growth_logs:
@@ -68,8 +71,12 @@ class NutritionGraph:
             except Exception:
                 pass
 
-        # Tra cứu kiến thức dinh dưỡng nhi khoa
-        rag_context = self.retriever.retrieve_context(user_message)
+        # Tra cứu kiến thức dinh dưỡng nhi khoa có lọc
+        metadata_filter = {"category": "nutrition"}
+        if baby_age is not None:
+            metadata_filter["baby_age"] = baby_age
+            
+        rag_context = self.retriever.retrieve_context(user_message, metadata_filter=metadata_filter)
 
         full_prompt = (
             f"{user_message}\n\n"
@@ -81,7 +88,7 @@ class NutritionGraph:
         try:
             response = await self.reasoner.areason(
                 prompt=full_prompt,
-                system_instruction=NUTRITION_SYSTEM_PROMPT
+                system_instruction=self.nutrition_prompt
             )
         except Exception as e:
             response = f"Xin lỗi, tôi không thể xử lý câu hỏi dinh dưỡng lúc này: {str(e)}"

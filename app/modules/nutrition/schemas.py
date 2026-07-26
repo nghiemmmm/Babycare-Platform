@@ -57,3 +57,81 @@ class IngredientCreateResponse(BaseModel):
 class SuccessResponse(BaseModel):
     success: bool
     message: Optional[str] = None
+
+
+# Schemas cho tính năng gợi ý dinh dưỡng AI (RAG, cá nhân hoá theo dị ứng/bệnh lý)
+class FoodRecommendationItem(BaseModel):
+    food_name: str
+    reason: str
+
+class FoodAvoidanceItem(BaseModel):
+    food_name: str
+    reason: str
+    linked_to: str  # Tên dị ứng/bệnh lý cụ thể gắn với lý do tránh món này
+
+class NutritionRecommendationResponse(BaseModel):
+    id: Optional[str] = None
+    baby_id: str
+    generated_at: str
+    recommended_foods: list[FoodRecommendationItem]
+    foods_to_avoid: list[FoodAvoidanceItem]
+    summary: str
+    based_on_allergies: list[str]
+    based_on_conditions: list[str]
+
+
+# Schemas cho thực đơn ăn dặm 7 ngày (RAG, có state pending/accepted + khoá tạo mới)
+class MealSlot(BaseModel):
+    meal_type: str  # "sáng" | "trưa" | "tối" | "phụ"
+    food_name: str
+    note: Optional[str] = None
+
+class DayPlan(BaseModel):
+    date: str  # YYYY-MM-DD - ngày thật, server tự tính từ hôm nay
+    meals: list[MealSlot]
+
+class WeeklyMealPlanResponse(BaseModel):
+    id: Optional[str] = None
+    baby_id: str
+    generated_at: str
+    start_date: str
+    end_date: str
+    status: str = "pending"  # "pending" | "accepted"
+    accepted_at: Optional[str] = None
+    days: list[DayPlan]
+    summary: str
+    based_on_allergies: list[str]
+    based_on_conditions: list[str]
+
+class GenerateWeeklyMealPlanRequest(BaseModel):
+    baby_id: str
+    feedback: Optional[str] = Field(
+        None, description="Phản hồi của phụ huynh khi tạo lại (vd: bé không thích cá, tránh món cay)"
+    )
+
+
+# Schemas cho hướng dẫn an toàn dinh dưỡng & cẩm nang y khoa (dữ liệu tĩnh + Firestore, không dùng RAG)
+class FoodSafetyItemResponse(BaseModel):
+    name: str
+    reason: str
+    category: str = "under_1_year"
+    min_age_months: int = 12
+
+class AllergenAlertResponse(BaseModel):
+    allergens: list[str] = Field(default_factory=list)
+    warning_message: str = ""
+    has_alert: bool = False
+
+class NutritionSafetyResponse(BaseModel):
+    foods_to_avoid: list[FoodSafetyItemResponse]
+    allergen_alerts: AllergenAlertResponse
+
+class SafetyHandbookSection(BaseModel):
+    title: str
+    description: str
+    items: Optional[list[str]] = None
+    level: str = "info"
+
+class SafetyHandbookResponse(BaseModel):
+    title: str = "Cẩm nang An toàn Dinh dưỡng (WHO/AAP)"
+    sections: list[SafetyHandbookSection]

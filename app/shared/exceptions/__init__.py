@@ -63,3 +63,17 @@ class RateLimitExceededError(AppException):
     def __init__(self, message: str = "Bạn đã thực hiện quá nhiều lần, vui lòng thử lại sau."):
         self.message = message
         super().__init__(self.message)
+
+
+class AIGenerationError(AppException):
+    """Ngoại lệ xảy ra khi mô hình AI không tạo được nội dung hợp lệ (lỗi gọi model hoặc lỗi parse kết quả)."""
+    def __init__(self, message: str = "Không thể tạo gợi ý dinh dưỡng lúc này, vui lòng thử lại sau."):
+        self.message = message
+        super().__init__(self.message)
+
+
+class MealPlanLockedError(AppException):
+    """Ngoại lệ xảy ra khi cố tạo thực đơn tuần mới trong lúc thực đơn hiện tại đã được chấp nhận và chưa hết hạn 7 ngày."""
+    def __init__(self, message: str = "Thực đơn tuần hiện tại đang được áp dụng, chưa thể tạo mới."):
+        self.message = message
+        super().__init__(self.message)

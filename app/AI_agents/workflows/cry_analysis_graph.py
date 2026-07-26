@@ -5,38 +5,25 @@ from app.ai.cry_classifier import CryClassifier
 from app.modules.nutrition.service import SolidFoodService
 from langchain_core.messages import AIMessage
 import json
-
-CRY_REASONER_PROMPT = """
-You are the pediatric medical reasoner for BabyCare AI.
-Analyze the baby's cry analysis results and recent activity context to determine the most likely cause of their distress and give actionable tips.
-
-Input Context:
-- Audio prediction reason: {predicted_reason} (confidence: {confidence}%)
-- Recent feeding history: {feeding_history}
-
-Guidelines:
-1. If the audio says "hungry" but they fed very recently (less than 30 mins ago), suggest it might be gas/ colic or wanting comfort rather than hunger.
-2. If they haven't fed for over 3 hours, confirm it is likely hunger.
-3. If they are tired, recommend a dim environment and white noise.
-4. Keep the response short, warm, and highly practical.
-"""
+from app.AI_agents.core.constant import CRY_REASONER_PROMPT
 
 class CryAnalysisGraph:
     def __init__(self):
         self.classifier = CryClassifier()
-        self.reasoner = AIReasoner(model_name="gemini-flash-latest")
+        self.reasoner = AIReasoner()
         self.nutrition_service = SolidFoodService()
 
     async def detect_cry_node(self, state: OverallState) -> dict:
         data = state.get("extracted_data") or {}
         filename = data.get("audio_file", "unknown_cry_tired.wav")
-        prediction, confidence = self.classifier.predict(filename)
+        prediction, confidence, reason_scores = self.classifier.predict(filename)
         soothing_sound = self.classifier.get_soothing_sound(prediction)
         
         updated_data = state.get("extracted_data", {}).copy()
         updated_data.update({
             "cry_prediction": prediction,
             "cry_confidence": confidence,
+            "reason_scores": reason_scores,
             "soothing_sound": soothing_sound
         })
         return {"extracted_data": updated_data}

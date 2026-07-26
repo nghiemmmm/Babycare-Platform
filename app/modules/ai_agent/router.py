@@ -3,10 +3,12 @@ from typing import Optional, List, Any
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.schemas import UserRecord
 from app.AI_agents.orchestrator.agent_orchestrator import AgentOrchestrator
+from google.cloud.firestore import FieldFilter
 from app.infrastructure.database import get_firestore_db
 from app.modules.baby.service import BabyService
 from datetime import datetime, timezone, timedelta
 import uuid
+import os
 
 from app.modules.ai_agent.schemas import (
     ChatRequest,
@@ -20,7 +22,9 @@ from app.modules.ai_agent.schemas import (
     MessageCreateResponse,
     SleepTimerRequest,
     SleepTimerResponse,
-    ChatMessageResponse
+    ChatMessageResponse,
+    VoiceExtractRequest,
+    VoiceExtractResponse
 )
 
 ai_agent_router = APIRouter(prefix="/ai", tags=["AI Agent"])
@@ -56,7 +60,7 @@ async def list_chat_threads(
     Lấy danh sách lịch sử các phiên chat của người dùng.
     """
     db = get_firestore_db()
-    docs = db.collection("chat_threads").where("user_id", "==", current_user.uid).stream()
+    docs = db.collection("chat_threads").where(filter=FieldFilter("user_id", "==", current_user.uid)).stream()
     
     threads = []
     for doc in docs:
@@ -67,8 +71,9 @@ async def list_chat_threads(
             last_updated=d.get("last_updated", "")
         ))
         
-    # Sắp xếp cuộc trò chuyện gần nhất lên đầu
+    # Sắp xếp cuộc trò chuyện gần nhất lên đầu và giới hạn 6 phiên
     threads.sort(key=lambda x: x.last_updated, reverse=True)
+    threads = threads[:6]
     
     # Nếu chưa có thread nào, tự động tạo một thread ban đầu cho người dùng
     if not threads:
@@ -86,7 +91,7 @@ async def list_chat_threads(
             last_updated=datetime.now(timezone.utc).isoformat()
         ))
         
-    return threads
+    return threads[:6]
 
 @ai_agent_router.post("/threads", response_model=ThreadCreateResponse)
 async def create_chat_thread(
@@ -139,7 +144,8 @@ async def get_thread_messages(
             content=msg.content,
             timestamp=ts
         ))
-    return result
+    # Chỉ trả về 6 tin nhắn mới nhất trong phiên chat
+    return result[-6:]
 
 @ai_agent_router.post("/threads/{thread_id}/messages", response_model=MessageCreateResponse)
 async def create_thread_message(
@@ -299,3 +305,162 @@ async def handle_sleep_timer(
             status="Stopped",
             start_time=start_time_str
         )
+
+@ai_agent_router.delete("/threads/{thread_id}/messages")
+async def delete_thread_messages(
+    thread_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Xóa toàn bộ tin nhắn/lịch sử chat trong phiên chat này (reset checkpoint).
+    """
+    db = get_firestore_db()
+    # 1. Check if thread exists and belongs to this user
+    thread_ref = db.collection("chat_threads").document(thread_id)
+    thread_doc = thread_ref.get()
+    if thread_doc.exists:
+        thread_data = thread_doc.to_dict()
+        if thread_data.get("user_id") != current_user.uid:
+            raise HTTPException(status_code=403, detail="Access denied")
+            
+    # 2. Xoá checkpoint của LangGraph trong Firestore
+    from app.AI_agents.core.constant import CHECKPOINT_COLLECTION
+    docs = db.collection(CHECKPOINT_COLLECTION).where(filter=FieldFilter("thread_id", "==", thread_id)).stream()
+    for doc in docs:
+        doc.reference.delete()
+        
+    return {"success": True, "message": "Thread history reset successfully."}
+
+@ai_agent_router.post("/voice-extract", response_model=VoiceExtractResponse)
+async def extract_from_voice(
+    req: VoiceExtractRequest,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Bóc tách câu thoại tiếng Việt thu được từ Web Speech API thành dữ liệu cấu trúc
+    cho các biểu mẫu ghi chép (sữa, thuốc, tã, ngủ, tăng trưởng).
+    Xử lý phản hồi cực nhanh (< 50ms) để không bị treo loading.
+    """
+    import re
+    import asyncio
+    text = req.transcript.lower().strip()
+    intent = "feeding"
+    extracted_data = {}
+    
+    # 1. Fast & Reliable Local Parsing (Phản hồi tức thì < 50ms)
+    if "sữa" in text or "bú" in text or "ml" in text:
+        intent = "feeding"
+        ml_match = re.search(r"(\d+)\s*(ml|cc)?", text)
+        if ml_match:
+            extracted_data["amount"] = float(ml_match.group(1))
+        else:
+            extracted_data["amount"] = 150.0
+            
+        if "công thức" in text or "bình" in text:
+            extracted_data["type"] = "Formula"
+            extracted_data["details"] = f"{extracted_data.get('amount', 150)}ml Sữa công thức"
+        elif "mẹ" in text:
+            extracted_data["type"] = "Breast"
+            extracted_data["details"] = f"{extracted_data.get('amount', 120)}ml Sữa mẹ"
+        else:
+            extracted_data["type"] = "Formula"
+            extracted_data["details"] = f"{extracted_data.get('amount', 150)}ml Sữa công thức"
+
+    elif "thuốc" in text or "hapacol" in text or "paracetamol" in text or "vitamin" in text or "mg" in text or "giọt" in text:
+        intent = "medication"
+        dose_match = re.search(r"(\d+)\s*(mg|giọt|viên)", text)
+        if dose_match:
+            extracted_data["dosage"] = f"{dose_match.group(1)}{dose_match.group(2)}"
+        else:
+            extracted_data["dosage"] = "150mg"
+            
+        if "hapacol" in text:
+            extracted_data["medication_name"] = "Hapacol 150mg"
+        elif "paracetamol" in text:
+            extracted_data["medication_name"] = "Paracetamol"
+        elif "vitamin" in text:
+            extracted_data["medication_name"] = "Vitamin D3 K2"
+        else:
+            extracted_data["medication_name"] = "Hapacol 150mg"
+
+    elif "cân" in text or "ký" in text or "kg" in text or "cao" in text or "cm" in text:
+        intent = "growth"
+        kg_match = re.search(r"(\d+(\.\d+)?)\s*(kg|ký|kí)", text)
+        cm_match = re.search(r"(\d+(\.\d+)?)\s*(cm)", text)
+        if kg_match:
+            extracted_data["weight"] = float(kg_match.group(1))
+        if cm_match:
+            extracted_data["height"] = float(cm_match.group(1))
+
+    elif "tã" in text or "bỉm" in text or "tè" in text or "ỉa" in text:
+        intent = "diaper"
+        if "bẩn" in text or "ỉa" in text:
+            extracted_data["type"] = "Dirty"
+        else:
+            extracted_data["type"] = "Wet"
+
+    elif "ngủ" in text or "thức" in text or "dậy" in text:
+        intent = "sleep"
+        extracted_data["details"] = text
+
+    # 2. LLM Fallback nếu chưa nhận diện được bằng Fast Parser
+    if not extracted_data:
+        try:
+            orchestrator = AgentOrchestrator()
+            temp_thread_id = f"voice_{uuid.uuid4().hex[:8]}"
+            result = await asyncio.wait_for(
+                orchestrator.run_agent(
+                    message=f"Bóc tách nhật ký ghi chép từ câu thoại: {req.transcript}",
+                    thread_id=temp_thread_id,
+                    baby_id=req.baby_id,
+                    user_id=current_user.uid
+                ),
+                timeout=2.5
+            )
+            intent = result.get("next_step") or intent
+            extracted_data = result.get("extracted_data") or extracted_data
+        except Exception as e:
+            print(f"Voice LLM extraction fallback/timeout: {e}")
+
+    return VoiceExtractResponse(
+        intent=intent,
+        extracted_data=extracted_data,
+        confidence_message="Bóc tách dữ liệu từ giọng nói thành công."
+    )
+
+@ai_agent_router.post("/reports/generate")
+async def generate_baby_report(
+    baby_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Kích hoạt AI tổng hợp dữ liệu và xuất bản tệp PDF Báo cáo Tăng trưởng & Y khoa.
+    """
+    from app.AI_agents.workflows.report_graph import ReportGraph, generate_pdf_report
+    graph = ReportGraph().compile()
+    
+    initial_state = {
+        "messages": [],
+        "baby_id": baby_id,
+        "current_user_id": current_user.uid,
+        "extracted_data": {}
+    }
+    
+    res = await graph.ainvoke(initial_state)
+    extracted = res.get("extracted_data", {})
+    summary = extracted.get("report_text_summary", "Chưa có dữ liệu báo cáo.")
+    
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    pdf_filename = f"report_{baby_id}_{timestamp}.pdf"
+    pdf_path = os.path.join("app", "static", "reports", pdf_filename)
+    
+    os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
+    generate_pdf_report(pdf_path, "Báo Cáo Tăng Trưởng & Y Khoa Cho Bé", summary)
+    
+    pdf_url = f"/static/reports/{pdf_filename}"
+    return {
+        "success": True,
+        "summary": summary,
+        "pdf_url": pdf_url,
+        "message": "Đã tạo báo cáo PDF thành công."
+    }

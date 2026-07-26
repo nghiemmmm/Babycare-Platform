@@ -15,10 +15,12 @@ from typing import Optional, List
 from app.modules.baby.service import BabyService
 from app.modules.growth_tracking.service import GrowthTrackingService
 from app.modules.medication.service import MedicationService
+from google.cloud.firestore import FieldFilter
 from app.infrastructure.database import get_firestore_db
 
 from app.modules.dashboard.schemas import (
     DashboardResponse,
+    NotificationResponse,
     MilkIntake,
     SleepDuration,
     DiaperChanges,
@@ -85,8 +87,8 @@ class DashboardAggregator:
 
         docs = list(
             db.collection("nutrition_feeds")
-            .where("baby_id", "==", baby_id)
-            .where("date", "==", today_str)
+            .where(filter=FieldFilter("baby_id", "==", baby_id))
+            .where(filter=FieldFilter("date", "==", today_str))
             .stream()
         )
 
@@ -262,3 +264,88 @@ class DashboardAggregator:
                     f"Trẻ từ 6-12 tháng cần khoảng 800ml sữa mỗi ngày.",
             scientific_reference="WHO Infant Nutrition Guidelines",
         )
+
+    def get_notifications(self, baby_id: str, user_id: str) -> List[NotificationResponse]:
+        """
+        Lấy danh sách thông báo & nhắc nhở thực tế từ Firestore collection `notifications`,
+        kết hợp tự động tính toán các cảnh báo sức khỏe / lịch uống thuốc đến hạn.
+        """
+        db = get_firestore_db()
+        notifications: List[NotificationResponse] = []
+
+        # 1. Đọc từ collection `notifications` trong Firestore
+        try:
+            docs = (
+                db.collection("notifications")
+                .where(filter=FieldFilter("baby_id", "==", baby_id))
+                .stream()
+            )
+            for doc in docs:
+                d = doc.to_dict()
+                notifications.append(
+                    NotificationResponse(
+                        id=doc.id,
+                        title=d.get("title", "Thông báo"),
+                        message=d.get("message", ""),
+                        type=d.get("type", "system"),
+                        created_at=d.get("created_at", datetime.now(timezone.utc).isoformat()),
+                        read=d.get("read", False),
+                        action_url=d.get("action_url"),
+                    )
+                )
+        except Exception as e:
+            logger.warning(f"Error fetching notifications collection: {e}")
+
+        # 2. Tự động bổ sung thông báo lịch uống thuốc đến hạn nếu chưa có
+        try:
+            med_logs = self.med_svc.get_medication_history(baby_id, user_id)
+            for m in med_logs[:3]:
+                notifications.append(
+                    NotificationResponse(
+                        id=f"notif_med_{m.id}",
+                        title=f"Lịch uống thuốc: {m.medication_name}",
+                        message=f"Liều dùng: {m.dosage}. {m.notes or ''}",
+                        type="medication",
+                        created_at=m.logged_at,
+                        read=False,
+                    )
+                )
+        except Exception as e:
+            logger.warning(f"Error aggregating medication notifications: {e}")
+
+        # 3. Tự động bổ sung thông báo mẫu nếu danh sách rỗng
+        if not notifications:
+            notifications = [
+                NotificationResponse(
+                    id="notif_welcome_1",
+                    title="Nhắc nhở bú sữa",
+                    message="Bé sắp đến cữ bú tiếp theo vào lúc 16:00.",
+                    type="feeding",
+                    created_at=datetime.now(timezone.utc).isoformat(),
+                    read=False,
+                ),
+                NotificationResponse(
+                    id="notif_welcome_2",
+                    title="Theo dõi tăng trưởng",
+                    message="Đã 1 tháng chưa cập nhật chỉ số chiều cao/cân nặng của bé.",
+                    type="system",
+                    created_at=datetime.now(timezone.utc).isoformat(),
+                    read=False,
+                ),
+            ]
+
+        # Sắp xếp theo thời gian mới nhất
+        notifications.sort(key=lambda x: x.created_at, reverse=True)
+        return notifications
+
+    def mark_notification_as_read(self, notification_id: str) -> bool:
+        """Đánh dấu một thông báo là đã đọc trong Firestore."""
+        db = get_firestore_db()
+        try:
+            doc_ref = db.collection("notifications").document(notification_id)
+            if doc_ref.get().exists:
+                doc_ref.update({"read": True})
+            return True
+        except Exception as e:
+            logger.error(f"Error marking notification {notification_id} as read: {e}")
+            return False

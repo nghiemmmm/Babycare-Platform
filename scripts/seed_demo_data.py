@@ -7,6 +7,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from datetime import datetime, timezone, date, timedelta
+from google.cloud.firestore import FieldFilter
 from app.infrastructure.database import get_firestore_db
 
 # ─── Config ────────────────────────────────────────────────────────────────────
@@ -18,7 +19,7 @@ NOW = datetime.now(timezone.utc)
 
 def get_baby_id(db) -> str:
     """Lấy baby_id đầu tiên của mock-user-id."""
-    docs = list(db.collection("babies").where("guardians", "array_contains", USER_ID).limit(1).stream())
+    docs = list(db.collection("babies").where(filter=FieldFilter("guardians", "array_contains", USER_ID)).limit(1).stream())
     if not docs:
         raise RuntimeError("Khong tim thay be. Hay chay backend truoc de auto-seed Leo.")
     baby_id = docs[0].id
@@ -87,7 +88,7 @@ def seed_medication_logs(db, baby_id: str):
 def seed_nutrition_feeds(db, baby_id: str):
     """Seed feeds vào collection nutrition_feeds."""
 
-    existing = list(db.collection("nutrition_feeds").where("baby_id", "==", baby_id).stream())
+    existing = list(db.collection("nutrition_feeds").where(filter=FieldFilter("baby_id", "==", baby_id)).stream())
     for doc in existing:
         doc.reference.delete()
 
@@ -121,7 +122,7 @@ def seed_nutrition_feeds(db, baby_id: str):
 def seed_ingredients(db, baby_id: str):
     """Seed ingredients vào nutrition_ingredients."""
 
-    existing = list(db.collection("nutrition_ingredients").where("baby_id", "==", baby_id).stream())
+    existing = list(db.collection("nutrition_ingredients").where(filter=FieldFilter("baby_id", "==", baby_id)).stream())
     for doc in existing:
         doc.reference.delete()
 

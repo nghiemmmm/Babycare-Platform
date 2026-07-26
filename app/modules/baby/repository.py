@@ -3,6 +3,7 @@ Baby Repository Module
 
 Handles Firestore collection operations for baby profiles.
 """
+from google.cloud.firestore import FieldFilter
 from app.shared.repository.base import BaseRepository
 from app.modules.baby.schemas import BabyResponse
 
@@ -21,7 +22,7 @@ class BabyRepository(BaseRepository[BabyResponse]):
             Danh sách đối tượng BabyResponse.
         """
         docs = self.db.collection(self.collection_name).where(
-            "guardians", "array_contains", user_id
+            filter=FieldFilter("guardians", "array_contains", user_id)
         ).stream()
         results = []
         for doc in docs:

@@ -13,7 +13,84 @@ export interface BabyProfile {
   isActive: boolean;
   bloodType?: string;
   pediatricianName?: string;
-  allergies?: string; // Chuỗi tự do, ngăn cách bởi dấu phẩy (vd. "Sữa bò, Đậu phộng")
+  allergies: string[];
+}
+
+export interface NutritionRecommendationItem {
+  foodName: string;
+  reason: string;
+}
+
+export interface NutritionAvoidanceItem {
+  foodName: string;
+  reason: string;
+  linkedTo: string;
+}
+
+export interface NutritionRecommendation {
+  id: string;
+  babyId: string;
+  generatedAt: string;
+  recommendedFoods: NutritionRecommendationItem[];
+  foodsToAvoid: NutritionAvoidanceItem[];
+  summary: string;
+  basedOnAllergies: string[];
+  basedOnConditions: string[];
+}
+
+export interface MealSlot {
+  mealType: string; // "sáng" | "trưa" | "tối" | "phụ"
+  foodName: string;
+  note?: string;
+}
+
+export interface DayPlan {
+  date: string; // YYYY-MM-DD
+  meals: MealSlot[];
+}
+
+export interface WeeklyMealPlan {
+  id: string;
+  babyId: string;
+  generatedAt: string;
+  startDate: string;
+  endDate: string;
+  status: "pending" | "accepted";
+  acceptedAt?: string;
+  days: DayPlan[];
+  summary: string;
+  basedOnAllergies: string[];
+  basedOnConditions: string[];
+}
+
+export interface FoodSafetyItem {
+  name: string;
+  reason: string;
+  category: string; // "under_1_year" | "choking_hazard"
+  minAgeMonths: number;
+}
+
+export interface AllergenAlert {
+  allergens: string[];
+  warningMessage: string;
+  hasAlert: boolean;
+}
+
+export interface NutritionSafety {
+  foodsToAvoid: FoodSafetyItem[];
+  allergenAlerts: AllergenAlert;
+}
+
+export interface SafetyHandbookSection {
+  title: string;
+  description: string;
+  items?: string[];
+  level: string; // "info" | "danger" | "warning" | "success"
+}
+
+export interface SafetyHandbook {
+  title: string;
+  sections: SafetyHandbookSection[];
 }
 
 export interface Measurement {
@@ -87,4 +164,14 @@ export interface ChatMessage {
   citations?: Citation[];
   isVoice?: boolean;
   voiceDuration?: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  type: "medication" | "safety" | "feeding" | "system";
+  created_at: string;
+  read: boolean;
+  action_url?: string;
 }

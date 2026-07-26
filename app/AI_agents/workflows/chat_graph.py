@@ -5,27 +5,13 @@ from app.AI_agents.memory.memory_manager import MemoryManager
 from app.modules.baby.service import BabyService
 from app.modules.growth_tracking.service import GrowthTrackingService
 from langchain_core.messages import AIMessage
+from app.AI_agents.core.constant import CHAT_SYSTEM_PROMPT_TEMPLATE
 
-SYSTEM_PROMPT_TEMPLATE = """
-You are a highly experienced and professional pediatric assistant named "BabyCare AI".
-Your goal is to provide warm, scientific, and empathetic parenting advice to the parent.
-
-Baby context for this conversation:
-- Name: {baby_name}
-- Gender: {baby_gender}
-- Age: {baby_age} months
-- Birth Date: {baby_birth_date}
-- Latest Growth: {growth_info}
-
-Guidelines:
-1. Always address the parent warmly and refer to the baby by name: {baby_name}.
-2. Provide scientific information but write in an easy-to-understand tone.
-3. Remind the parent to consult a medical professional for severe conditions.
-"""
+SYSTEM_PROMPT_TEMPLATE = CHAT_SYSTEM_PROMPT_TEMPLATE
 
 class ChatGraph:
     def __init__(self):
-        self.reasoner = AIReasoner(model_name="gemini-flash-latest")
+        self.reasoner = AIReasoner()
         self.baby_service = BabyService()
         self.growth_service = GrowthTrackingService(self.baby_service)
         self.memory_manager = MemoryManager()

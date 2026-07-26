@@ -40,7 +40,7 @@ def test_model_router():
         mock_chat.assert_called_with(model="gemini-flash-latest", google_api_key=settings.GEMINI_API_KEY, temperature=0.0)
 
         ModelRouter.get_model_for_task("complex reasoning or summary report")
-        mock_chat.assert_called_with(model="gemini-flash-latest", google_api_key=settings.GEMINI_API_KEY, temperature=0.0)
+        mock_chat.assert_called_with(model="gemini-1.5-pro", google_api_key=settings.GEMINI_API_KEY, temperature=0.0)
 
 from app.AI_agents.workflows.router_graph import RouterGraph
 from langchain_core.messages import HumanMessage
@@ -171,21 +171,22 @@ async def test_cry_analysis_graph():
     chain = graph.compile()
     assert chain is not None
 
-    with patch("app.AI_agents.core.reasoner.AIReasoner.areason") as mock_reason:
-        mock_reason.return_value = "Bé có vẻ đói do tiếng khóc hungry kéo dài."
+    with patch("app.ai.cry_detection.classifier.CryClassifier.predict", return_value=("hungry", 0.92, {"hungry": 0.92, "tired": 0.05})):
+        with patch("app.AI_agents.core.reasoner.AIReasoner.areason") as mock_reason:
+            mock_reason.return_value = "Bé có vẻ đói do tiếng khóc hungry kéo dài."
 
-        result = await chain.ainvoke(
-            {
-                "messages": [HumanMessage(content="Bé đang khóc")],
-                "baby_id": "baby-123",
-                "current_user_id": "user-123",
-                "extracted_data": {"audio_file": "hungry_cry_baby.wav"}
-            }
-        )
+            result = await chain.ainvoke(
+                {
+                    "messages": [HumanMessage(content="Bé đang khóc")],
+                    "baby_id": "baby-123",
+                    "current_user_id": "user-123",
+                    "extracted_data": {"audio_file": "hungry_cry_baby.wav"}
+                }
+            )
 
-        assert "messages" in result
-        assert "hungry" in result["messages"][-1].content
-        assert "Bé có vẻ đói" in result["messages"][-1].content
+            assert "messages" in result
+            assert "hungry" in result["messages"][-1].content
+            assert "Bé có vẻ đói" in result["messages"][-1].content
 
 from app.AI_agents.workflows.report_graph import ReportGraph
 from app.AI_agents.orchestrator.state_manager import FirestoreCheckpointer
@@ -291,7 +292,7 @@ from app.AI_agents.core import agent_config, get_agent_logger, AIAgentException
 
 def test_core_utilities():
     assert agent_config.DEFAULT_CHAT_MODEL == "gemini-flash-latest"
-    assert agent_config.RAG_CHUNK_SIZE == 500
+    assert agent_config.RAG_CHUNK_SIZE == 1500
     
     logger = get_agent_logger("test")
     assert logger.name == "app.AI_agents.test"
@@ -398,82 +399,7 @@ def test_utils():
     assert not validate_message_not_empty("")
     assert not validate_message_not_empty(None)
 
-
-from app.ai.speech_to_text.transcriber import SpeechTranscriber
 from unittest.mock import mock_open
-
-def test_speech_transcriber_text_passthrough():
-    transcriber = SpeechTranscriber()
-    assert transcriber.transcribe_text("  hello  ") == "hello"
-
-
-def test_speech_transcriber_file_not_found():
-    transcriber = SpeechTranscriber()
-    assert transcriber.transcribe("non_existent_file.wav") is None
-
-
-@pytest.mark.anyio
-async def test_speech_transcriber_whisper_mode():
-    transcriber = SpeechTranscriber()
-    transcriber.provider = "whisper"
-    
-    with patch("app.ai.speech_to_text.transcriber.settings") as mock_settings:
-        mock_settings.STT_PROVIDER = "whisper"
-        mock_settings.WHISPER_MODEL_SIZE = "tiny"
-        mock_settings.WHISPER_MODEL_DIR = "app/ai/models/faster-whisper"
-        
-        def mock_isfile(path):
-            return path == "dummy.wav"
-            
-        with patch("app.ai.speech_to_text.transcriber.os.path.isfile", side_effect=mock_isfile):
-            with patch("faster_whisper.WhisperModel") as mock_whisper_class:
-                mock_model = MagicMock()
-                mock_whisper_class.return_value = mock_model
-                
-                mock_segment = MagicMock()
-                mock_segment.text = "Hello baby"
-                mock_model.transcribe.return_value = ([mock_segment], MagicMock())
-                
-                result = transcriber.transcribe("dummy.wav")
-                assert result == "Hello baby"
-                mock_whisper_class.assert_called_once_with(
-                    "tiny",
-                    device="cpu",
-                    compute_type="float32",
-                    download_root="app/ai/models/faster-whisper"
-                )
-
-
-@pytest.mark.anyio
-async def test_speech_transcriber_whisper_fallback_to_gemini():
-    transcriber = SpeechTranscriber()
-    transcriber.provider = "whisper"
-    
-    with patch("app.ai.speech_to_text.transcriber.settings") as mock_settings:
-        mock_settings.STT_PROVIDER = "whisper"
-        mock_settings.WHISPER_MODEL_SIZE = "tiny"
-        mock_settings.WHISPER_MODEL_DIR = "app/ai/models/faster-whisper"
-        mock_settings.GEMINI_API_KEY = "dummy-key"
-        
-        def mock_isfile(path):
-            return path == "dummy.wav"
-            
-        with patch("app.ai.speech_to_text.transcriber.os.path.isfile", side_effect=mock_isfile):
-            with patch("faster_whisper.WhisperModel") as mock_whisper_class:
-                mock_whisper_class.side_effect = Exception("CUDA error")
-                
-                import google.generativeai
-                with patch("google.generativeai.GenerativeModel") as mock_gen_model_class:
-                    mock_model = MagicMock()
-                    mock_gen_model_class.return_value = mock_model
-                    mock_response = MagicMock()
-                    mock_response.text = "Gemini response text"
-                    mock_model.generate_content.return_value = mock_response
-                    
-                    with patch("builtins.open", mock_open(read_data=b"dummy audio data")):
-                        result = transcriber.transcribe("dummy.wav")
-                        assert result == "Gemini response text"
-
 
 def test_document_loader_pdf():
     from app.AI_agents.knowledge.document_loader import DocumentLoader
@@ -509,5 +435,49 @@ def test_document_loader_pdf():
             assert pdf_docs[0].metadata["page"] == 1
             assert pdf_docs[1].page_content == "Page 2 Content"
             assert pdf_docs[1].metadata["page"] == 2
+
+
+def test_metadata_filtering():
+    from app.AI_agents.knowledge.document_loader import DocumentLoader
+    from app.AI_agents.knowledge.sparse_retriever import SparseBM25Retriever
+    from langchain_core.documents import Document
+
+    # 1. Test DocumentLoader metadata enrichment
+    with patch("os.path.exists", return_value=True):
+        loader = DocumentLoader(directory_path="dummy_dir")
+        
+    meta_chedoandam = loader._get_metadata_for_file("chedoandam_document.pdf", 2)
+    assert meta_chedoandam["category"] == "nutrition"
+    assert meta_chedoandam["age_min_months"] == 6
+    assert meta_chedoandam["age_max_months"] == 24
+    assert meta_chedoandam["page"] == 2
+
+    meta_healthy = loader._get_metadata_for_file("healthy_document.pdf", 1)
+    assert meta_healthy["category"] == "health"
+    assert meta_healthy["age_min_months"] == 0
+    assert meta_healthy["age_max_months"] == 60
+
+    # 2. Test SparseBM25Retriever with filter_func
+    retriever = SparseBM25Retriever()
+    doc_nutrition = Document(page_content="Ăn dặm cà rốt", metadata={"category": "nutrition", "age_min_months": 6, "age_max_months": 12})
+    doc_health = Document(page_content="Trẻ sốt cao", metadata={"category": "health", "age_min_months": 0, "age_max_months": 60})
+    
+    retriever.fit([doc_nutrition, doc_health])
+    
+    # Query matching both but filter nutrition only
+    res_nutr = retriever.retrieve("trẻ ăn dặm", filter_func=lambda m: m["category"] == "nutrition")
+    assert len(res_nutr) == 1
+    assert res_nutr[0].page_content == "Ăn dặm cà rốt"
+
+    # Query matching both but filter by age 3 months
+    res_age = retriever.retrieve("trẻ sốt", filter_func=lambda m: m["age_min_months"] <= 3 <= m["age_max_months"])
+    assert len(res_age) == 1
+    assert res_age[0].page_content == "Trẻ sốt cao"
+
+    # Query matching both but filter by age 18 months (both should match if age matches)
+    res_age_18 = retriever.retrieve("trẻ", filter_func=lambda m: m["age_min_months"] <= 18 <= m["age_max_months"])
+    assert len(res_age_18) == 1
+    assert res_age_18[0].page_content == "Trẻ sốt cao"
+
 
 

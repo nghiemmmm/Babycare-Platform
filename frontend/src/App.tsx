@@ -16,7 +16,8 @@ import {
   Menu,
   X,
   Shield,
-  LogOut
+  LogOut,
+  ClipboardList
 } from "lucide-react";
 
 import {
@@ -28,7 +29,11 @@ import {
   FeedLog,
   IngredientLog,
   ChatMessage,
-  SmartExtraction
+  SmartExtraction,
+  NutritionRecommendation,
+  WeeklyMealPlan,
+  NutritionSafety,
+  SafetyHandbook
 } from "./types";
 
 import { useAuth } from "./auth/AuthContext";
@@ -39,6 +44,7 @@ import GrowthView from "./components/GrowthView";
 import AiHubView from "./components/AiHubView";
 import ProfileView from "./components/ProfileView";
 import NutritionView from "./components/NutritionView";
+import FeedingLogView from "./components/FeedingLogView";
 import HealthView from "./components/HealthView";
 
 export default function App() {
@@ -58,9 +64,19 @@ export default function App() {
   const [feeds, setFeeds] = useState<FeedLog[]>([]);
   const [ingredients, setIngredients] = useState<IngredientLog[]>([]);
   const [chats, setChats] = useState<ChatMessage[]>([]);
+  const [nutritionRecommendation, setNutritionRecommendation] = useState<NutritionRecommendation | null>(null);
+  const [isGeneratingRecommendation, setIsGeneratingRecommendation] = useState(false);
+  const [weeklyMealPlan, setWeeklyMealPlan] = useState<WeeklyMealPlan | null>(null);
+  const [isGeneratingWeeklyPlan, setIsGeneratingWeeklyPlan] = useState(false);
+  const [isAcceptingWeeklyPlan, setIsAcceptingWeeklyPlan] = useState(false);
+  const [threads, setThreads] = useState<Array<{ id: string; title: string }>>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string>("thread_default");
+  const [nutritionSafety, setNutritionSafety] = useState<NutritionSafety | null>(null);
+  const [safetyHandbook, setSafetyHandbook] = useState<SafetyHandbook | null>(null);
+  const [isLoadingSafetyHandbook, setIsLoadingSafetyHandbook] = useState(false);
 
   // App UI state
-  const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health" | "log">("dashboard");
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -100,6 +116,48 @@ export default function App() {
     if (rl.includes("spat") || rl.includes("dislike") || rl === "spat out") return "Spat out";
     return "Neutral";
   };
+
+  const mapNutritionRecommendation = (r: any): NutritionRecommendation => ({
+    id: r.id,
+    babyId: r.baby_id,
+    generatedAt: r.generated_at,
+    recommendedFoods: (r.recommended_foods || []).map((f: any) => ({ foodName: f.food_name, reason: f.reason })),
+    foodsToAvoid: (r.foods_to_avoid || []).map((f: any) => ({ foodName: f.food_name, reason: f.reason, linkedTo: f.linked_to })),
+    summary: r.summary,
+    basedOnAllergies: r.based_on_allergies || [],
+    basedOnConditions: r.based_on_conditions || []
+  });
+
+  const mapNutritionSafety = (s: any): NutritionSafety => ({
+    foodsToAvoid: (s.foods_to_avoid || []).map((f: any) => ({
+      name: f.name,
+      reason: f.reason,
+      category: f.category,
+      minAgeMonths: f.min_age_months
+    })),
+    allergenAlerts: {
+      allergens: s.allergen_alerts?.allergens || [],
+      warningMessage: s.allergen_alerts?.warning_message || "",
+      hasAlert: Boolean(s.allergen_alerts?.has_alert)
+    }
+  });
+
+  const mapWeeklyMealPlan = (p: any): WeeklyMealPlan => ({
+    id: p.id,
+    babyId: p.baby_id,
+    generatedAt: p.generated_at,
+    startDate: p.start_date,
+    endDate: p.end_date,
+    status: p.status,
+    acceptedAt: p.accepted_at || undefined,
+    days: (p.days || []).map((d: any) => ({
+      date: d.date,
+      meals: (d.meals || []).map((m: any) => ({ mealType: m.meal_type, foodName: m.food_name, note: m.note }))
+    })),
+    summary: p.summary,
+    basedOnAllergies: p.based_on_allergies || [],
+    basedOnConditions: p.based_on_conditions || []
+  });
 
   // Fetch active baby's data
   const refreshActiveBabyData = async (babyId: string) => {
@@ -178,19 +236,96 @@ export default function App() {
         })));
       }
 
-      // 6. Fetch chat messages
-      const chatRes = await apiFetch(`/api/v1/ai/threads/thread_default/messages`);
-      if (chatRes.ok) {
-        const chatData = await chatRes.json();
-        setChats(chatData.map((c: any) => ({
+      // 7. Fetch cached AI nutrition recommendation (null nếu chưa từng tạo, không phải lỗi)
+      const recRes = await apiFetch(`/api/v1/nutrition/recommendation?baby_id=${babyId}`);
+      if (recRes.ok) {
+        const recData = await recRes.json();
+        setNutritionRecommendation(recData ? mapNutritionRecommendation(recData) : null);
+      }
+
+      // 8. Fetch cached AI weekly meal plan (null nếu chưa từng tạo, không phải lỗi)
+      const planRes = await apiFetch(`/api/v1/nutrition/meal-plan/weekly?baby_id=${babyId}`);
+      if (planRes.ok) {
+        const planData = await planRes.json();
+        setWeeklyMealPlan(planData ? mapWeeklyMealPlan(planData) : null);
+      }
+
+      // 9. Fetch hướng dẫn an toàn dinh dưỡng - tính đúng theo tuổi thật của bé (server-side)
+      const safetyRes = await apiFetch(`/api/v1/nutrition/safety-guidelines?baby_id=${babyId}`);
+      if (safetyRes.ok) {
+        const safetyData = await safetyRes.json();
+        setNutritionSafety(mapNutritionSafety(safetyData));
+      }
+    } catch (e) {
+      console.error("Error refreshing active baby data:", e);
+    }
+  };
+
+  // Cẩm nang an toàn dinh dưỡng - nội dung tĩnh, chỉ tải khi người dùng thực sự mở ra xem
+  const handleOpenSafetyHandbook = async () => {
+    if (safetyHandbook) return;
+    setIsLoadingSafetyHandbook(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/safety-handbook");
+      if (res.ok) {
+        const data = await res.json();
+        setSafetyHandbook({
+          title: data.title,
+          sections: (data.sections || []).map((s: any) => ({
+            title: s.title,
+            description: s.description,
+            items: s.items,
+            level: s.level
+          }))
+        });
+      }
+    } catch (e) {
+      console.error("Error loading safety handbook:", e);
+    } finally {
+      setIsLoadingSafetyHandbook(false);
+    }
+  };
+
+  // Fetch all chat threads for the user
+  const loadThreads = async () => {
+    try {
+      const res = await apiFetch("/api/v1/ai/threads");
+      if (res.ok) {
+        const data = await res.json();
+        setThreads(data.map((t: any) => ({
+          id: t.id,
+          title: t.title
+        })));
+        if (data.length > 0) {
+          const threadIds = data.map((t: any) => t.id);
+          if (!threadIds.includes(activeThreadId)) {
+            setActiveThreadId(data[0].id);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load chat threads:", e);
+    }
+  };
+
+  // Fetch messages inside the selected thread
+  const loadThreadMessages = async (threadId: string) => {
+    try {
+      const res = await apiFetch(`/api/v1/ai/threads/${threadId}/messages`);
+      if (res.ok) {
+        const data = await res.json();
+        setChats(data.map((c: any) => ({
           id: c.id,
           role: c.role,
           content: c.content,
           timestamp: c.timestamp.includes("T") ? c.timestamp.slice(11, 16) : c.timestamp
         })));
+      } else {
+        setChats([]);
       }
     } catch (e) {
-      console.error("Error refreshing active baby data:", e);
+      console.error("Failed to load thread messages:", e);
+      setChats([]);
     }
   };
 
@@ -216,7 +351,7 @@ export default function App() {
               isActive: Boolean(b.is_active),
               bloodType: b.blood_type,
               pediatricianName: b.pediatrician_name,
-              allergies: b.allergies
+              allergies: b.allergies || []
             }));
             // Fallback phòng dữ liệu cũ/hỏng chưa có bé nào active - chỉ áp dụng khi THỰC SỰ
             // không có bé nào active, không phải mặc định luôn ép bé đầu tiên.
@@ -235,12 +370,58 @@ export default function App() {
     loadInitialBabies();
   }, []);
 
+  // Check URL query parameters for invitation acceptance link
+  useEffect(() => {
+    const handleAcceptInviteFromUrl = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const inviteId = searchParams.get("accept_invite");
+      if (inviteId) {
+        try {
+          const res = await apiFetch(`/api/v1/guardians/accept/${inviteId}`, {
+            method: "POST"
+          });
+          if (res.ok) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            const resBabies = await apiFetch("/api/v1/babies");
+            if (resBabies.ok) {
+              const dataBabies = await resBabies.json();
+              if (Array.isArray(dataBabies) && dataBabies.length > 0) {
+                setBabies(dataBabies.map((b: any) => ({
+                  id: b.id,
+                  name: b.name,
+                  birthDate: b.birth_date,
+                  gender: mapBackendGender(b.gender),
+                  avatarUrl: b.avatar_url || "/static/img/leo.png",
+                  isActive: Boolean(b.is_active),
+                  bloodType: b.blood_type,
+                  pediatricianName: b.pediatrician_name,
+                  allergies: b.allergies || []
+                })));
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error accepting invitation from URL:", e);
+        }
+      }
+    };
+    handleAcceptInviteFromUrl();
+  }, []);
+
   // Sync active baby details
   useEffect(() => {
     if (activeBaby?.id) {
       refreshActiveBabyData(activeBaby.id);
+      loadThreads();
     }
   }, [activeBaby?.id]);
+
+  // Sync active thread with messages list
+  useEffect(() => {
+    if (activeThreadId) {
+      loadThreadMessages(activeThreadId);
+    }
+  }, [activeThreadId]);
 
   // Bootstrap xong mà chưa có bé nào -> mở onboarding, khoá vào tab Hồ sơ.
   // Ngay khi bé đầu tiên được tạo -> tắt onboarding, chuyển sang Dashboard.
@@ -610,7 +791,73 @@ export default function App() {
     }
   };
 
-  // AI assistant messaging with proxy backend
+  const handleGenerateNutritionRecommendation = async () => {
+    if (!activeBaby) return;
+    setIsGeneratingRecommendation(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/recommendation/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baby_id: activeBaby.id })
+      });
+      if (!res.ok) {
+        throw new Error("Không thể tạo gợi ý dinh dưỡng lúc này, vui lòng thử lại sau.");
+      }
+      const data = await res.json();
+      setNutritionRecommendation(mapNutritionRecommendation(data));
+    } finally {
+      setIsGeneratingRecommendation(false);
+    }
+  };
+
+  const handleGenerateWeeklyMealPlan = async (feedback?: string) => {
+    if (!activeBaby) return;
+    setIsGeneratingWeeklyPlan(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/meal-plan/weekly/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baby_id: activeBaby.id, feedback: feedback || undefined })
+      });
+      if (!res.ok) {
+        // Backend trả message tiếng Việt cụ thể (vd "còn X ngày" khi bị khoá 409) - ưu tiên đọc
+        // thẳng từ response thay vì thông báo lỗi chung chung.
+        let message = "Không thể tạo thực đơn 7 ngày lúc này, vui lòng thử lại sau.";
+        try {
+          const errBody = await res.json();
+          if (errBody?.message) message = errBody.message;
+        } catch {
+          // ignore parse error, dùng message mặc định
+        }
+        throw new Error(message);
+      }
+      const data = await res.json();
+      setWeeklyMealPlan(mapWeeklyMealPlan(data));
+    } finally {
+      setIsGeneratingWeeklyPlan(false);
+    }
+  };
+
+  const handleAcceptWeeklyMealPlan = async () => {
+    if (!activeBaby) return;
+    setIsAcceptingWeeklyPlan(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/meal-plan/weekly/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baby_id: activeBaby.id })
+      });
+      if (!res.ok) {
+        throw new Error("Không thể chấp nhận thực đơn lúc này, vui lòng thử lại sau.");
+      }
+      const data = await res.json();
+      setWeeklyMealPlan(mapWeeklyMealPlan(data));
+    } finally {
+      setIsAcceptingWeeklyPlan(false);
+    }
+  };
+
+  // AI assistant messaging with direct API calls to FastAPI backend (thread-scoped)
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
       id: `u_${Date.now()}`,
@@ -623,39 +870,54 @@ export default function App() {
     setIsAiLoading(true);
 
     try {
-      const response = await apiFetch("/api/chat", {
+      const response = await apiFetch(`/api/v1/ai/threads/${activeThreadId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...chats, userMsg].map(c => ({ role: c.role, content: c.content })),
-          babyProfile: {
-            name: activeBaby.name,
-            gender: activeBaby.gender,
-            birthDate: activeBaby.birthDate,
-            weight: measurements[0]?.weight || 7.2
-          },
-          recentLogs: {
-            medications: medications.slice(0, 3),
-            feeds: feeds.slice(0, 3)
-          }
+          content: userMsg.content,
+          type: "text"
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`Backend returned ${response.status}`);
+      }
+
       const data = await response.json();
+      loadThreads(); // Refresh thread list to fetch any updated titles
+
+      // Convert from Backend format (MessageCreateResponse) to App.tsx format
+      const aiContent = data.ai_response?.content || "Tôi đã ghi nhận thông tin đó!";
+      const citations = data.ai_response?.citations || [];
+      const extractedLogs = data.extracted_logs || [];
+
+      // Convert first extracted_log to extraction widget if present
+      let extraction = null;
+      if (extractedLogs.length > 0) {
+        const log = extractedLogs[0];
+        extraction = {
+          type: log.type,
+          title: log.title,
+          detail: log.detail,
+          value: log.value,
+          time: log.time,
+          pending: false,
+        };
+      }
 
       setChats((prev) => [
         ...prev,
         {
           id: `ai_${Date.now()}`,
           role: "assistant",
-          content: data.text,
+          content: aiContent,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          extraction: data.extraction,
-          citations: data.citations
+          extraction,
+          citations
         }
       ]);
     } catch (error) {
-      console.error("Failed to message Gemini proxy:", error);
+      console.error("Failed to message Gemini API:", error);
       // Fallback
       setChats((prev) => [
         ...prev,
@@ -669,6 +931,29 @@ export default function App() {
     } finally {
       setIsAiLoading(false);
     }
+  };
+
+  const handleCreateThread = async () => {
+    try {
+      const res = await apiFetch("/api/v1/ai/threads", {
+        method: "POST"
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const newThreadId = data.thread_id;
+
+        // Add new thread to the list and select it
+        setThreads(prev => [{ id: newThreadId, title: data.title }, ...prev]);
+        setActiveThreadId(newThreadId);
+        setChats([]); // Clear messages locally immediately
+      }
+    } catch (e) {
+      console.error("Failed to create new thread:", e);
+    }
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    setActiveThreadId(threadId);
   };
 
   const handleConfirmExtraction = (ext: SmartExtraction) => {
@@ -827,7 +1112,7 @@ export default function App() {
 
           <button
             onClick={() => {
-              setActiveTab("nutrition");
+              setActiveTab("log");
               setIsMobileMenuOpen(false);
             }}
             disabled={!hasBaby}
@@ -835,12 +1120,12 @@ export default function App() {
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
               !hasBaby
                 ? "text-slate-300 cursor-not-allowed"
-                : activeTab === "nutrition"
+                : activeTab === "log"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
           >
-            <Coffee className="w-4 h-4" />
+            <ClipboardList className="w-4 h-4" />
             Nhật ký
           </button>
 
@@ -1007,6 +1292,7 @@ export default function App() {
                   onDeleteFeed={handleDeleteFeed}
                   onAddMeasurement={handleAddMeasurement}
                   onDeleteMeasurement={handleDeleteMeasurement}
+                  onNavigateTab={(tab) => setActiveTab(tab as any)}
                 />
               )}
 
@@ -1038,6 +1324,10 @@ export default function App() {
                   onStartNapTimer={handleStartNapTimer}
                   isNapTimerRunning={isNapTimerRunning}
                   napElapsedTime={napElapsedTime}
+                  threads={threads}
+                  activeThreadId={activeThreadId}
+                  onSelectThread={handleSelectThread}
+                  onCreateThread={handleCreateThread}
                 />
               )}
 
@@ -1055,8 +1345,8 @@ export default function App() {
                 />
               )}
 
-              {activeTab === "nutrition" && (
-                <NutritionView
+              {activeTab === "log" && (
+                <FeedingLogView
                   activeBaby={activeBaby}
                   feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
                   ingredients={ingredients.filter((i) => i.babyId === activeBaby.id)}
@@ -1064,6 +1354,24 @@ export default function App() {
                   onDeleteFeed={handleDeleteFeed}
                   onAddIngredient={handleAddIngredient}
                   onDeleteIngredient={handleDeleteIngredient}
+                />
+              )}
+
+              {activeTab === "nutrition" && (
+                <NutritionView
+                  activeBaby={activeBaby}
+                  recommendation={nutritionRecommendation}
+                  isGeneratingRecommendation={isGeneratingRecommendation}
+                  onGenerateRecommendation={handleGenerateNutritionRecommendation}
+                  weeklyMealPlan={weeklyMealPlan}
+                  isGeneratingWeeklyPlan={isGeneratingWeeklyPlan}
+                  isAcceptingWeeklyPlan={isAcceptingWeeklyPlan}
+                  onGenerateWeeklyMealPlan={handleGenerateWeeklyMealPlan}
+                  onAcceptWeeklyMealPlan={handleAcceptWeeklyMealPlan}
+                  nutritionSafety={nutritionSafety}
+                  safetyHandbook={safetyHandbook}
+                  isLoadingSafetyHandbook={isLoadingSafetyHandbook}
+                  onOpenSafetyHandbook={handleOpenSafetyHandbook}
                 />
               )}
                 </>

@@ -397,6 +397,27 @@ export default function HealthView({
             </button>
           </div>
 
+          {/* Allergies & Medical Warnings Card */}
+          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-3">
+            <h3 className="text-primary font-bold text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              Dị ứng & Cảnh báo Y khoa
+            </h3>
+            <div className="p-3.5 bg-red-50/70 border border-red-100 rounded-2xl space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <span className="px-3 py-1 bg-red-100 border border-red-200 text-red-700 font-bold rounded-full text-[10px]">
+                  🥛 Nhạy cảm sữa bò
+                </span>
+                <span className="px-3 py-1 bg-orange-100 border border-orange-200 text-orange-700 font-bold rounded-full text-[10px]">
+                  🥜 Đề phòng Đậu phộng
+                </span>
+              </div>
+              <p className="text-[11px] text-red-700 leading-snug font-medium pt-1">
+                Cần theo dõi phản ứng dị ứng khi cho bé dùng thực phẩm mới hoặc khi bác sĩ chỉ định kê đơn thuốc.
+              </p>
+            </div>
+          </div>
+
         </div>
 
       </div>
