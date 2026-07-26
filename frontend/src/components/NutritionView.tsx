@@ -8,7 +8,7 @@ import {
   BookOpen,
   RefreshCw
 } from "lucide-react";
-import { BabyProfile, NutritionRecommendation, WeeklyMealPlan } from "../types";
+import { BabyProfile, NutritionRecommendation, WeeklyMealPlan, NutritionSafety, SafetyHandbook, FoodSafetyItem } from "../types";
 
 interface NutritionViewProps {
   activeBaby: BabyProfile;
@@ -20,7 +20,23 @@ interface NutritionViewProps {
   isAcceptingWeeklyPlan: boolean;
   onGenerateWeeklyMealPlan: (feedback?: string) => Promise<void> | void;
   onAcceptWeeklyMealPlan: () => Promise<void> | void;
+  nutritionSafety: NutritionSafety | null;
+  safetyHandbook: SafetyHandbook | null;
+  isLoadingSafetyHandbook: boolean;
+  onOpenSafetyHandbook: () => Promise<void> | void;
 }
+
+const SAFETY_CATEGORY_LABELS: Record<string, string> = {
+  under_1_year: "Thực phẩm cần tránh (Dưới 1 tuổi)",
+  choking_hazard: "Nguy cơ hóc dị vật (Dưới 3 tuổi)"
+};
+
+const HANDBOOK_LEVEL_STYLES: Record<string, string> = {
+  info: "bg-blue-50 border-blue-100 text-blue-700",
+  danger: "bg-red-50 border-red-100 text-red-700",
+  warning: "bg-amber-50 border-amber-100 text-amber-700",
+  success: "bg-emerald-50 border-emerald-100 text-emerald-700"
+};
 
 const MEAL_TYPE_ORDER = ["sáng", "trưa", "tối", "phụ"];
 const MEAL_TYPE_LABELS: Record<string, string> = { "sáng": "Sáng", "trưa": "Trưa", "tối": "Tối", "phụ": "Phụ" };
@@ -38,12 +54,6 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-interface FoodSafetyItem {
-  name: string;
-  reason: string;
-  showInfo: boolean;
-}
-
 export default function NutritionView({
   activeBaby,
   recommendation,
@@ -53,18 +63,33 @@ export default function NutritionView({
   isGeneratingWeeklyPlan,
   isAcceptingWeeklyPlan,
   onGenerateWeeklyMealPlan,
-  onAcceptWeeklyMealPlan
+  onAcceptWeeklyMealPlan,
+  nutritionSafety,
+  safetyHandbook,
+  isLoadingSafetyHandbook,
+  onOpenSafetyHandbook
 }: NutritionViewProps) {
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [regenerateFeedback, setRegenerateFeedback] = useState("");
   const [weeklyPlanError, setWeeklyPlanError] = useState<string | null>(null);
+  const [showSafetyHandbookModal, setShowSafetyHandbookModal] = useState(false);
 
-  // Foods to avoid list with local explanation toggle states
-  const [foodsToAvoid, setFoodsToAvoid] = useState<FoodSafetyItem[]>([
-    { name: "Mật ong", reason: "Nguy cơ ngộ độc clostridium botulinum ở trẻ dưới 12 tháng, một bệnh nhiễm độc đường tiêu hóa hiếm gặp nhưng rất nghiêm trọng.", showInfo: false },
-    { name: "Muối gia vị", reason: "Thận của trẻ dưới 1 tuổi chưa đủ phát triển để lọc muối bổ sung.", showInfo: false },
-    { name: "Đường gia vị", reason: "Có thể gây sâu răng, hình thành thói quen ăn ngọt có hại cho sức khỏe và thiếu giá trị dinh dưỡng.", showInfo: false }
-  ]);
+  // Trạng thái mở/thu gọn lý do cho từng thực phẩm cần tránh - key theo tên món, độc lập với
+  // dữ liệu foodsToAvoid (giờ lấy từ backend theo đúng tuổi thật của bé, không hardcode nữa).
+  const [expandedFoodInfo, setExpandedFoodInfo] = useState<Record<string, boolean>>({});
+
+  const foodsToAvoidByCategory = (nutritionSafety?.foodsToAvoid || []).reduce<Record<string, FoodSafetyItem[]>>(
+    (acc, item) => {
+      (acc[item.category] = acc[item.category] || []).push(item);
+      return acc;
+    },
+    {}
+  );
+
+  const handleOpenSafetyHandbookModal = () => {
+    setShowSafetyHandbookModal(true);
+    onOpenSafetyHandbook();
+  };
 
   const handleGenerateWeeklyPlanClick = async () => {
     setWeeklyPlanError(null);
@@ -96,10 +121,8 @@ export default function NutritionView({
     }
   };
 
-  const toggleAvoidInfo = (index: number) => {
-    setFoodsToAvoid(prev =>
-      prev.map((item, idx) => (idx === index ? { ...item, showInfo: !item.showInfo } : item))
-    );
+  const toggleAvoidInfo = (name: string) => {
+    setExpandedFoodInfo((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
   return (
@@ -143,45 +166,54 @@ export default function NutritionView({
               </div>
             )}
 
-            {/* Foods to Avoid (Until 1 year) */}
-            <div className="space-y-2">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Thực phẩm cần tránh (Dưới 1 tuổi)
-              </span>
+            {/* Foods to Avoid - lấy từ backend, tính đúng theo tuổi thật của bé */}
+            {!nutritionSafety ? (
+              <p className="text-[11px] text-slate-400 font-semibold text-center py-2">Đang tải hướng dẫn an toàn…</p>
+            ) : (
+              Object.entries(foodsToAvoidByCategory).map(([category, items]) => (
+                <div key={category} className="space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    {SAFETY_CATEGORY_LABELS[category] || "Thực phẩm cần lưu ý"}
+                  </span>
 
-              <div className="space-y-2">
-                {foodsToAvoid.map((food, idx) => (
-                  <div key={idx} className="bg-white/40 border border-white/20 rounded-xl p-2.5 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700">{food.name}</span>
-                      <button
-                        onClick={() => toggleAvoidInfo(idx)}
-                        className="text-slate-400 hover:text-slate-600 cursor-pointer"
-                        title="Xem lý do"
-                      >
-                        <Info className="w-4 h-4 text-primary" />
-                      </button>
-                    </div>
+                  <div className="space-y-2">
+                    {items.map((food) => (
+                      <div key={food.name} className="bg-white/40 border border-white/20 rounded-xl p-2.5 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700">{food.name}</span>
+                          <button
+                            onClick={() => toggleAvoidInfo(food.name)}
+                            className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                            title="Xem lý do"
+                          >
+                            <Info className="w-4 h-4 text-primary" />
+                          </button>
+                        </div>
 
-                    <AnimatePresence>
-                      {food.showInfo && (
-                        <motion.p
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="text-[10px] text-slate-500 leading-relaxed font-semibold"
-                        >
-                          {food.reason}
-                        </motion.p>
-                      )}
-                    </AnimatePresence>
+                        <AnimatePresence>
+                          {expandedFoodInfo[food.name] && (
+                            <motion.p
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="text-[10px] text-slate-500 leading-relaxed font-semibold"
+                            >
+                              {food.reason}
+                            </motion.p>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              ))
+            )}
 
             {/* View Full Safety Guide Button */}
-            <button className="w-full inline-flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-100 text-blue-700 text-[10px] font-bold py-2 rounded-xl transition-all cursor-pointer">
+            <button
+              onClick={handleOpenSafetyHandbookModal}
+              className="w-full inline-flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-100 text-blue-700 text-[10px] font-bold py-2 rounded-xl transition-all cursor-pointer"
+            >
               <BookOpen className="w-4.5 h-4.5 text-blue-600" />
               Xem toàn bộ Hướng dẫn An toàn
             </button>
@@ -448,6 +480,57 @@ export default function NutritionView({
                   {isGeneratingWeeklyPlan ? "Đang tạo lại…" : "Tạo thực đơn mới"}
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* --- SAFETY HANDBOOK MODAL --- */}
+      <AnimatePresence>
+        {showSafetyHandbookModal && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-xl space-y-4 max-h-[80vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-800">
+                  {safetyHandbook?.title || "Cẩm nang An toàn Dinh dưỡng"}
+                </h3>
+                <button
+                  onClick={() => setShowSafetyHandbookModal(false)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
+
+              {isLoadingSafetyHandbook && !safetyHandbook && (
+                <p className="text-[11px] text-slate-400 font-semibold text-center py-6">Đang tải cẩm nang…</p>
+              )}
+
+              {safetyHandbook && (
+                <div className="space-y-3">
+                  {safetyHandbook.sections.map((section, idx) => (
+                    <div
+                      key={idx}
+                      className={`border rounded-2xl p-3.5 space-y-1.5 ${HANDBOOK_LEVEL_STYLES[section.level] || HANDBOOK_LEVEL_STYLES.info}`}
+                    >
+                      <h4 className="text-xs font-bold">{section.title}</h4>
+                      <p className="text-[11px] leading-relaxed font-medium">{section.description}</p>
+                      {section.items && section.items.length > 0 && (
+                        <ul className="list-disc list-inside text-[11px] leading-relaxed font-medium space-y-0.5">
+                          {section.items.map((item, itemIdx) => (
+                            <li key={itemIdx}>{item}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           </div>
         )}

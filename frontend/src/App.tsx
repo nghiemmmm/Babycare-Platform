@@ -31,7 +31,9 @@ import {
   ChatMessage,
   SmartExtraction,
   NutritionRecommendation,
-  WeeklyMealPlan
+  WeeklyMealPlan,
+  NutritionSafety,
+  SafetyHandbook
 } from "./types";
 
 import { useAuth } from "./auth/AuthContext";
@@ -69,6 +71,9 @@ export default function App() {
   const [isAcceptingWeeklyPlan, setIsAcceptingWeeklyPlan] = useState(false);
   const [threads, setThreads] = useState<Array<{ id: string; title: string }>>([]);
   const [activeThreadId, setActiveThreadId] = useState<string>("thread_default");
+  const [nutritionSafety, setNutritionSafety] = useState<NutritionSafety | null>(null);
+  const [safetyHandbook, setSafetyHandbook] = useState<SafetyHandbook | null>(null);
+  const [isLoadingSafetyHandbook, setIsLoadingSafetyHandbook] = useState(false);
 
   // App UI state
   const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health" | "log">("dashboard");
@@ -121,6 +126,20 @@ export default function App() {
     summary: r.summary,
     basedOnAllergies: r.based_on_allergies || [],
     basedOnConditions: r.based_on_conditions || []
+  });
+
+  const mapNutritionSafety = (s: any): NutritionSafety => ({
+    foodsToAvoid: (s.foods_to_avoid || []).map((f: any) => ({
+      name: f.name,
+      reason: f.reason,
+      category: f.category,
+      minAgeMonths: f.min_age_months
+    })),
+    allergenAlerts: {
+      allergens: s.allergen_alerts?.allergens || [],
+      warningMessage: s.allergen_alerts?.warning_message || "",
+      hasAlert: Boolean(s.allergen_alerts?.has_alert)
+    }
   });
 
   const mapWeeklyMealPlan = (p: any): WeeklyMealPlan => ({
@@ -230,8 +249,40 @@ export default function App() {
         const planData = await planRes.json();
         setWeeklyMealPlan(planData ? mapWeeklyMealPlan(planData) : null);
       }
+
+      // 9. Fetch hướng dẫn an toàn dinh dưỡng - tính đúng theo tuổi thật của bé (server-side)
+      const safetyRes = await apiFetch(`/api/v1/nutrition/safety-guidelines?baby_id=${babyId}`);
+      if (safetyRes.ok) {
+        const safetyData = await safetyRes.json();
+        setNutritionSafety(mapNutritionSafety(safetyData));
+      }
     } catch (e) {
       console.error("Error refreshing active baby data:", e);
+    }
+  };
+
+  // Cẩm nang an toàn dinh dưỡng - nội dung tĩnh, chỉ tải khi người dùng thực sự mở ra xem
+  const handleOpenSafetyHandbook = async () => {
+    if (safetyHandbook) return;
+    setIsLoadingSafetyHandbook(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/safety-handbook");
+      if (res.ok) {
+        const data = await res.json();
+        setSafetyHandbook({
+          title: data.title,
+          sections: (data.sections || []).map((s: any) => ({
+            title: s.title,
+            description: s.description,
+            items: s.items,
+            level: s.level
+          }))
+        });
+      }
+    } catch (e) {
+      console.error("Error loading safety handbook:", e);
+    } finally {
+      setIsLoadingSafetyHandbook(false);
     }
   };
 
@@ -1317,6 +1368,10 @@ export default function App() {
                   isAcceptingWeeklyPlan={isAcceptingWeeklyPlan}
                   onGenerateWeeklyMealPlan={handleGenerateWeeklyMealPlan}
                   onAcceptWeeklyMealPlan={handleAcceptWeeklyMealPlan}
+                  nutritionSafety={nutritionSafety}
+                  safetyHandbook={safetyHandbook}
+                  isLoadingSafetyHandbook={isLoadingSafetyHandbook}
+                  onOpenSafetyHandbook={handleOpenSafetyHandbook}
                 />
               )}
                 </>

@@ -63,6 +63,36 @@ export interface WeeklyMealPlan {
   basedOnConditions: string[];
 }
 
+export interface FoodSafetyItem {
+  name: string;
+  reason: string;
+  category: string; // "under_1_year" | "choking_hazard"
+  minAgeMonths: number;
+}
+
+export interface AllergenAlert {
+  allergens: string[];
+  warningMessage: string;
+  hasAlert: boolean;
+}
+
+export interface NutritionSafety {
+  foodsToAvoid: FoodSafetyItem[];
+  allergenAlerts: AllergenAlert;
+}
+
+export interface SafetyHandbookSection {
+  title: string;
+  description: string;
+  items?: string[];
+  level: string; // "info" | "danger" | "warning" | "success"
+}
+
+export interface SafetyHandbook {
+  title: string;
+  sections: SafetyHandbookSection[];
+}
+
 export interface Measurement {
   id: string;
   babyId: string;
