@@ -45,12 +45,79 @@ export default function FeedingLogView({
     setFeedTime(getCurrentTimeStr());
   }, []);
 
+  // Tuổi bé (tháng) - dùng để quyết định có còn hiển thị chỉ số "Lượng sữa"/"Cữ bú tiếp theo"
+  // hay không. Sau ~2 tuổi, trẻ không còn ăn/bú theo lịch sữa cố định nữa nên các chỉ số này
+  // không còn ý nghĩa và bị ẩn đi thay vì hiện những con số cố định không liên quan tới bé.
+  const getAgeInMonths = (birthDateStr: string): number => {
+    const birth = new Date(birthDateStr);
+    const now = new Date();
+    return (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+  };
+
+  const ageInMonths = getAgeInMonths(activeBaby.birthDate);
+  const isInfant = ageInMonths < 24;
+
+  // Parse "H:MM AM/PM" -> số phút kể từ 00:00, và chiều ngược lại - dùng để tính cữ bú tiếp theo
+  // thật từ giờ cữ bú gần nhất, thay vì hiển thị "02:30 PM" cố định như trước.
+  const parseTimeToMinutes = (timeStr: string): number | null => {
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) return null;
+    let hours = parseInt(match[1], 10) % 12;
+    if (match[3].toUpperCase() === "PM") hours += 12;
+    return hours * 60 + parseInt(match[2], 10);
+  };
+
+  const formatMinutesToTime = (totalMinutes: number): string => {
+    const wrapped = ((totalMinutes % 1440) + 1440) % 1440;
+    const hours24 = Math.floor(wrapped / 60);
+    const mins = wrapped % 60;
+    const ampm = hours24 >= 12 ? "PM" : "AM";
+    const displayHrs = hours24 % 12 || 12;
+    return `${String(displayHrs).padStart(2, "0")}:${String(mins).padStart(2, "0")} ${ampm}`;
+  };
+
+  const FEED_INTERVAL_MINUTES = 180; // ước tính 3 giờ/cữ - khoảng cách phổ biến cho trẻ bú sữa
+
   // Compute stats
   const totalMilk = feeds
     .filter((f) => f.babyId === activeBaby.id && f.type !== "Solids" && f.date === "Today")
     .reduce((acc, f) => acc + f.amount, 0);
 
   const solidsCount = feeds.filter((f) => f.babyId === activeBaby.id && f.type === "Solids" && f.date === "Today").length;
+
+  const todaysMilkFeeds = feeds
+    .filter((f) => f.babyId === activeBaby.id && f.type !== "Solids" && f.date === "Today")
+    .map((f) => ({ ...f, minutes: parseTimeToMinutes(f.time) }))
+    .filter((f): f is typeof f & { minutes: number } => f.minutes !== null)
+    .sort((a, b) => b.minutes - a.minutes);
+
+  const lastMilkFeed = todaysMilkFeeds[0] || null;
+  const nowMinutes = (() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  })();
+
+  let nextFeedLabel = "Chưa có dữ liệu";
+  let nextFeedSubLabel = "Chưa ghi nhận cữ bú nào hôm nay";
+  let nextFeedProgress = 0;
+
+  if (lastMilkFeed) {
+    const nextFeedMinutes = lastMilkFeed.minutes + FEED_INTERVAL_MINUTES;
+    const diff = nextFeedMinutes - nowMinutes;
+    nextFeedLabel = formatMinutesToTime(nextFeedMinutes);
+    if (diff <= 0) {
+      nextFeedSubLabel = "Đã đến giờ bú tiếp theo";
+      nextFeedProgress = 100;
+    } else if (diff < 60) {
+      nextFeedSubLabel = `Trong khoảng ${diff} phút nữa`;
+      nextFeedProgress = Math.min(((FEED_INTERVAL_MINUTES - diff) / FEED_INTERVAL_MINUTES) * 100, 100);
+    } else {
+      const h = Math.floor(diff / 60);
+      const m = diff % 60;
+      nextFeedSubLabel = `Trong khoảng ${h} giờ${m > 0 ? ` ${m} phút` : ""} nữa`;
+      nextFeedProgress = Math.min(((FEED_INTERVAL_MINUTES - diff) / FEED_INTERVAL_MINUTES) * 100, 100);
+    }
+  }
 
   const handleFeedSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,35 +218,41 @@ export default function FeedingLogView({
           Tổng quan Dinh dưỡng Hàng ngày
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Milk Intake Card */}
-          <div className="bg-white/40 border border-white/20 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-500 font-bold uppercase">Lượng sữa dùng</span>
-              <Droplet className="w-4.5 h-4.5 text-sky-500" />
+        <div className={`grid grid-cols-1 gap-4 ${isInfant ? "md:grid-cols-3" : ""}`}>
+          {/* Milk Intake Card - chỉ hiện với bé dưới 2 tuổi, bé lớn hơn không còn bú sữa theo cữ */}
+          {isInfant && (
+            <div className="bg-white/40 border border-white/20 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">Lượng sữa dùng</span>
+                <Droplet className="w-4.5 h-4.5 text-sky-500" />
+              </div>
+              <div>
+                <h4 className="text-xl font-bold text-primary">{totalMilk} / 800 ml</h4>
+                <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Mục tiêu: 800ml mỗi ngày</p>
+              </div>
+              {/* Progress bar */}
+              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-sky-500 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min((totalMilk / 800) * 100, 100)}%` }}
+                />
+              </div>
             </div>
-            <div>
-              <h4 className="text-xl font-bold text-primary">{totalMilk} / 800 ml</h4>
-              <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Mục tiêu: 800ml mỗi ngày</p>
-            </div>
-            {/* Progress bar */}
-            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-              <div
-                className="bg-sky-500 h-full rounded-full transition-all duration-500"
-                style={{ width: `${Math.min((totalMilk / 800) * 100, 100)}%` }}
-              />
-            </div>
-          </div>
+          )}
 
           {/* Solids Card */}
           <div className="bg-white/40 border border-white/20 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-500 font-bold uppercase">Cữ ăn dặm</span>
+              <span className="text-[10px] text-slate-500 font-bold uppercase">
+                {isInfant ? "Cữ ăn dặm" : "Bữa ăn hôm nay"}
+              </span>
               <Apple className="w-4.5 h-4.5 text-amber-500" />
             </div>
             <div>
               <h4 className="text-xl font-bold text-primary">{solidsCount} / 3 Bữa</h4>
-              <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Mục tiêu: 3 bữa nhẹ</p>
+              <p className="text-[9px] text-slate-400 font-semibold mt-0.5">
+                {isInfant ? "Mục tiêu: 3 bữa nhẹ" : "Mục tiêu: 3 bữa chính"}
+              </p>
             </div>
             {/* Progress bar */}
             <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
@@ -190,21 +263,26 @@ export default function FeedingLogView({
             </div>
           </div>
 
-          {/* Next Feed Card */}
-          <div className="bg-white/40 border border-white/20 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-500 font-bold uppercase">Cữ bú tiếp theo</span>
-              <Clock className="w-4.5 h-4.5 text-primary animate-pulse" />
+          {/* Next Feed Card - chỉ hiện với bé dưới 2 tuổi, tính thật từ giờ cữ bú gần nhất hôm nay */}
+          {isInfant && (
+            <div className="bg-white/40 border border-white/20 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">Cữ bú tiếp theo</span>
+                <Clock className="w-4.5 h-4.5 text-primary animate-pulse" />
+              </div>
+              <div>
+                <h4 className="text-xl font-bold text-primary">{nextFeedLabel}</h4>
+                <p className="text-[9px] text-slate-400 font-semibold mt-0.5">{nextFeedSubLabel}</p>
+              </div>
+              {/* Alert/Status Progress indicator bar */}
+              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-primary h-full rounded-full transition-all duration-500"
+                  style={{ width: `${nextFeedProgress}%` }}
+                />
+              </div>
             </div>
-            <div>
-              <h4 className="text-xl font-bold text-primary">02:30 PM</h4>
-              <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Trong khoảng 45 phút nữa</p>
-            </div>
-            {/* Alert/Status Progress indicator bar */}
-            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-              <div className="bg-primary h-full rounded-full w-[70%]" />
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
