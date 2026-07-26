@@ -36,9 +36,13 @@ export default function FeedingLogView({
   const [ingName, setIngName] = useState("");
   const [ingReaction, setIngReaction] = useState<"Loved it" | "Spat out" | "Neutral" | "Allergic Reaction">("Loved it");
 
-  React.useEffect(() => {
+  const getCurrentTimeStr = () => {
     const now = new Date();
-    setFeedTime(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  };
+
+  React.useEffect(() => {
+    setFeedTime(getCurrentTimeStr());
   }, []);
 
   // Compute stats
@@ -50,6 +54,13 @@ export default function FeedingLogView({
 
   const handleFeedSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Chặn giờ tương lai - thuộc tính "max" trên input chỉ giới hạn UI picker, không chặn
+    // được việc gõ tay trực tiếp trên một số trình duyệt, nên phải validate lại ở đây.
+    if (feedTime && feedTime > getCurrentTimeStr()) {
+      alert("Không thể chọn giờ trong tương lai. Vui lòng chọn giờ hiện tại hoặc trong quá khứ.");
+      return;
+    }
 
     let details = feedDetails;
     if (feedType === "Formula" && !details) details = "Formula Milk";
@@ -391,9 +402,13 @@ export default function FeedingLogView({
                       type="time"
                       required
                       value={feedTime}
+                      max={getCurrentTimeStr()}
                       onChange={(e) => setFeedTime(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/45 focus:outline-hidden font-medium"
                     />
+                    <p className="text-[10px] text-slate-400 font-semibold normal-case">
+                      Chỉ chọn được giờ hiện tại hoặc trong quá khứ của hôm nay.
+                    </p>
                   </div>
                 </div>
 
