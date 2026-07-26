@@ -34,6 +34,7 @@ class FeedResponse(BaseModel):
     details: str
     amount: float
     time: str
+    date: str = ""
 
 class FeedCreateResponse(BaseModel):
     success: bool
