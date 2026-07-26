@@ -194,6 +194,9 @@ temp/
 *.orig
 *.swn
 
+# Claude Code project instructions (local-only, not for version control)
+CLAUDE.md
+
 # Profiling
 *.prof
 *.lprof
