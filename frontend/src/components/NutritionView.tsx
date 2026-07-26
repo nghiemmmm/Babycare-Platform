@@ -2,12 +2,9 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Check,
-  Book,
-  Heart,
   Info,
   Calendar,
   Sparkles,
-  Camera,
   BookOpen,
   RefreshCw
 } from "lucide-react";
@@ -188,31 +185,6 @@ export default function NutritionView({
               <BookOpen className="w-4.5 h-4.5 text-blue-600" />
               Xem toàn bộ Hướng dẫn An toàn
             </button>
-          </div>
-
-          {/* Quick Action Row */}
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: "Quét món ăn", icon: Camera, desc: "AI quét hình ảnh" },
-              { label: "Sách ăn dặm", icon: Book, desc: "Hướng dẫn bé 6T+" },
-              { label: "Hỏi chuyên gia", icon: Heart, desc: "Tư vấn Nhi khoa AI" }
-            ].map((btn, idx) => {
-              const Icon = btn.icon;
-              return (
-                <button
-                  key={idx}
-                  className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[24px] p-4 flex flex-col items-center text-center gap-2 cursor-pointer hover:scale-105 transition-all group"
-                >
-                  <div className="p-3 bg-primary/10 rounded-2xl text-primary group-hover:bg-primary group-hover:text-white transition-all">
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-slate-800">{btn.label}</h5>
-                    <p className="text-[9px] text-slate-400 font-semibold">{btn.desc}</p>
-                  </div>
-                </button>
-              );
-            })}
           </div>
 
         </div>
