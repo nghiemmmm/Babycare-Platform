@@ -8,6 +8,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,11 +19,15 @@ class EmailService:
     """
 
     def __init__(self):
-        self.smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.smtp_user = os.getenv("SMTP_USER") or os.getenv("MAIL_USERNAME")
-        self.smtp_password = os.getenv("SMTP_PASSWORD") or os.getenv("MAIL_PASSWORD")
-        self.from_email = os.getenv("EMAILS_FROM_EMAIL") or self.smtp_user
+        # Đọc qua app.core.config.settings (pydantic-settings, tự parse file .env) thay vì
+        # os.getenv() trực tiếp - project không gọi load_dotenv() ở đâu cả nên .env KHÔNG được
+        # nạp vào os.environ thật khi chạy local (chỉ Docker mới truyền env thật vào tiến trình
+        # con), khiến os.getenv("SMTP_USER"...) luôn trả None dù .env đã điền đủ giá trị.
+        self.smtp_host = settings.SMTP_HOST or "smtp.gmail.com"
+        self.smtp_port = settings.SMTP_PORT
+        self.smtp_user = settings.SMTP_USER
+        self.smtp_password = settings.SMTP_PASSWORD
+        self.from_email = settings.SMTP_FROM_EMAIL or self.smtp_user
         self.from_name = os.getenv("EMAILS_FROM_NAME", "BABY-CARE AI")
 
     def _send_email_smtp(self, to_email: str, subject: str, html_content: str) -> bool:
@@ -64,20 +70,22 @@ class EmailService:
         guardian_name: str,
         baby_name: str,
         role: str,
+        invite_link: str,
         inviter_name: str = "Bố/Mẹ",
-        invitation_id: str = ""
     ) -> bool:
         """
-        Gửi thư mời gia đình tham gia vòng tròn chăm sóc em bé.
+        Gửi thư mời gia đình tham gia vòng tròn chăm sóc em bé. Link trong thư CHỈ dẫn tới
+        một trang xác nhận (landing page) để người nhận chủ động bấm Chấp nhận/Từ chối - không
+        phải link GET thực thi trực tiếp hành động, vì email client/security scanner thường tự
+        động quét trước (prefetch) mọi link trong email và có thể vô tình kích hoạt nhầm.
         """
         role_label = {
-          "ADMIN": "Quản trị viên (Toàn quyền)",
-          "GUARDIAN": "Người chăm sóc (Quyền ghi chép)",
-          "VIEWER": "Người xem (Chỉ xem thông tin)"
+          "ADMIN": "Đồng quản trị (Toàn quyền quản lý)",
+          "GUARDIAN": "Người chăm sóc (Được chỉnh sửa nhật ký)",
+          "VIEWER": "Người xem (Chỉ xem dữ liệu)"
         }.get(role.upper(), "Người chăm sóc")
 
         subject = f"🍼 Thư mời tham gia chăm sóc {baby_name} trên BABY-CARE"
-        accept_link = f"http://localhost:5173/?accept_invite={invitation_id}" if invitation_id else "http://localhost:5173"
 
         html_content = f"""
         <!DOCTYPE html>
@@ -119,7 +127,7 @@ class EmailService:
                 <p>Bằng việc tham gia, bạn có thể cùng theo dõi chỉ số tăng trưởng WHO, lịch bú sữa, giấc ngủ và nhận các nhắc nhở y tế quan trọng cho bé.</p>
 
                 <div style="text-align: center;">
-                    <a href="{accept_link}" class="btn">Chấp nhận Lời mời & Mở Ứng dụng</a>
+                    <a href="{invite_link}" class="btn">Xem Lời mời & Phản hồi</a>
                 </div>
 
                 <div class="footer">
@@ -129,7 +137,5 @@ class EmailService:
         </body>
         </html>
         """
-
-        return self._send_email_smtp(to_email, subject, html_content)
 
         return self._send_email_smtp(to_email, subject, html_content)

@@ -30,7 +30,8 @@ interface ProfileViewProps {
   onAddBaby: (baby: Omit<BabyProfile, "id">) => Promise<void>;
   onDeleteBaby: (id: string) => Promise<void>;
   onUploadAvatar: (file: File) => Promise<string>;
-  onAddGuardian: (g: Omit<Guardian, "id">) => void;
+  onAddGuardian: (g: Omit<Guardian, "id">) => Promise<void>;
+  onResendGuardian: (id: string) => Promise<void>;
   onDeleteGuardian: (id: string) => void;
 }
 
@@ -43,6 +44,7 @@ export default function ProfileView({
   onDeleteBaby,
   onUploadAvatar,
   onAddGuardian,
+  onResendGuardian,
   onDeleteGuardian,
 }: ProfileViewProps) {
   const activeBaby = babies.find((b) => b.isActive) || babies[0];
@@ -107,6 +109,9 @@ export default function ProfileView({
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "GUARDIAN" | "VIEWER">("GUARDIAN");
   const [showInviteSuccess, setShowInviteSuccess] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   // Sync input fields whenever activeBaby changes, but only if not currently creating
   React.useEffect(() => {
@@ -193,22 +198,41 @@ export default function ProfileView({
     }
   };
 
-  const handleInviteGuardian = (e: React.FormEvent) => {
+  const handleInviteGuardian = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail || !inviteName) return;
 
-    onAddGuardian({
-      name: inviteName,
-      email: inviteEmail,
-      role: inviteRole,
-      status: "Invited"
-    });
+    setInviteError(null);
+    setIsInviting(true);
+    try {
+      await onAddGuardian({
+        name: inviteName,
+        email: inviteEmail,
+        role: inviteRole,
+        status: "Invited"
+      });
 
-    setInviteEmail("");
-    setInviteName("");
-    setShowInviteModal(false);
-    setShowInviteSuccess(true);
-    setTimeout(() => setShowInviteSuccess(false), 3000);
+      setInviteEmail("");
+      setInviteName("");
+      setShowInviteModal(false);
+      setShowInviteSuccess(true);
+      setTimeout(() => setShowInviteSuccess(false), 3000);
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : "Gửi lời mời thất bại, vui lòng thử lại.");
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  const handleResendInvite = async (id: string) => {
+    setResendingId(id);
+    try {
+      await onResendGuardian(id);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Gửi lại lời mời thất bại, vui lòng thử lại.");
+    } finally {
+      setResendingId(null);
+    }
   };
 
   // Helper: calculate age strings in months and days
@@ -464,8 +488,12 @@ export default function ProfileView({
 
                       <div className="flex items-center gap-1.5">
                         {g.status !== "Synced" && (
-                          <button className="text-[9px] font-bold text-primary hover:underline">
-                            Gửi lại
+                          <button
+                            onClick={() => handleResendInvite(g.id)}
+                            disabled={resendingId === g.id}
+                            className="text-[9px] font-bold text-primary hover:underline disabled:opacity-50 cursor-pointer"
+                          >
+                            {resendingId === g.id ? "Đang gửi..." : "Gửi lại"}
                           </button>
                         )}
                         {g.role !== "ADMIN" && (
@@ -484,7 +512,10 @@ export default function ProfileView({
 
                 {/* Invite Member outline button */}
                 <button
-                  onClick={() => setShowInviteModal(true)}
+                  onClick={() => {
+                    setInviteError(null);
+                    setShowInviteModal(true);
+                  }}
                   className="w-full inline-flex items-center justify-center gap-1.5 border border-dashed border-slate-300 hover:border-primary text-slate-500 hover:text-primary text-xs font-bold py-2.5 rounded-2xl transition-colors cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
@@ -824,11 +855,18 @@ export default function ProfileView({
                   </select>
                 </div>
 
+                {inviteError && (
+                  <div className="px-3 py-2 rounded-xl bg-red-50 border border-red-100 text-red-600 text-[11px] font-semibold">
+                    {inviteError}
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                  disabled={isInviting}
+                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer disabled:opacity-60"
                 >
-                  Gửi lời mời
+                  {isInviting ? "Đang gửi..." : "Gửi lời mời"}
                 </button>
               </form>
             </motion.div>

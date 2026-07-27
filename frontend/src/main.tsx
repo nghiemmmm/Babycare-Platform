@@ -7,6 +7,7 @@ import {RequireAuth} from './auth/RequireAuth.tsx';
 import LoginPage from './pages/LoginPage.tsx';
 import RegisterPage from './pages/RegisterPage.tsx';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.tsx';
+import InvitePage from './pages/InvitePage.tsx';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -17,6 +18,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/invite/:token" element={<InvitePage />} />
           <Route element={<RequireAuth />}>
             <Route path="/*" element={<App />} />
           </Route>

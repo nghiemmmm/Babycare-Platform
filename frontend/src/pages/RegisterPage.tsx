@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiClientError } from "../lib/authClient";
 import AuthLayout from "../components/AuthLayout";
@@ -10,8 +10,12 @@ const inputClass =
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Cho phép quay lại đúng trang đã điều hướng tới đây (vd. /invite/:token khi người được mời
+  // chưa có tài khoản) thay vì luôn đưa về "/" sau khi đăng ký thành công.
+  const redirectTo = searchParams.get("redirect") || "/";
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => searchParams.get("email") || "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +33,7 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       await register(email, password, name || undefined);
-      navigate("/", { replace: true });
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Không thể đăng ký, vui lòng thử lại.");
     } finally {
@@ -117,7 +121,10 @@ export default function RegisterPage() {
 
       <div className="mt-4 text-center text-xs text-slate-500">
         Đã có tài khoản?{" "}
-        <button onClick={() => navigate("/login")} className="font-bold text-primary hover:underline cursor-pointer">
+        <button
+          onClick={() => navigate(`/login${redirectTo !== "/" ? `?redirect=${encodeURIComponent(redirectTo)}` : ""}`)}
+          className="font-bold text-primary hover:underline cursor-pointer"
+        >
           Đăng nhập
         </button>
       </div>

@@ -17,6 +17,7 @@ from app.infrastructure.database import get_firestore_db
 from app.modules.auth import auth_router
 from app.modules.baby import baby_router
 from app.modules.guardian import guardian_router
+from app.modules.notification import notification_router
 from app.modules.dashboard import dashboard_router
 from app.modules.growth_tracking import growth_router
 from app.modules.growth_tracking.router import measurements_router
@@ -72,6 +73,7 @@ api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(baby_router)
 api_router.include_router(guardian_router)
+api_router.include_router(notification_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(growth_router)
 api_router.include_router(measurements_router)

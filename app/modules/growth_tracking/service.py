@@ -10,6 +10,7 @@ from app.modules.growth_tracking.schemas import GrowthLogCreate, GrowthLogRespon
 from app.modules.growth_tracking.repository import GrowthTrackingRepository
 from app.modules.growth_tracking.utils import get_closest_standard, evaluate_metric
 from app.modules.baby.service import BabyService
+from app.modules.guardian.permissions import ADMIN, GUARDIAN, require_role
 from app.shared.exceptions import EntityNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,7 @@ class GrowthTrackingService:
         """
         # 1. Xác thực quyền giám hộ và lấy thông tin bé
         baby = self.baby_service.get_baby_by_id(baby_id, user_id)
+        require_role(baby_id, user_id, ADMIN, GUARDIAN)
 
         # 2. Khởi tạo repository
         repo = GrowthTrackingRepository(baby_id)
@@ -125,6 +127,7 @@ class GrowthTrackingService:
         Xóa một bản ghi nhật ký tăng trưởng.
         """
         self.baby_service.get_baby_by_id(baby_id, user_id)
+        require_role(baby_id, user_id, ADMIN, GUARDIAN)
 
         repo = GrowthTrackingRepository(baby_id)
         log = repo.get(log_id)

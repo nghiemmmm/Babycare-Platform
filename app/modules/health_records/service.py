@@ -9,6 +9,7 @@ from typing import Optional
 from app.modules.health_records.schemas import HealthRecordCreate, HealthRecordResponse
 from app.modules.health_records.repository import HealthRecordRepository
 from app.modules.baby.service import BabyService
+from app.modules.guardian.permissions import ADMIN, GUARDIAN, require_role
 from app.shared.exceptions import EntityNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class HealthRecordService:
         """
         # Xác thực quyền giám hộ
         self.baby_service.get_baby_by_id(baby_id, user_id)
+        require_role(baby_id, user_id, ADMIN, GUARDIAN)
 
         repo = HealthRecordRepository(baby_id)
         now = datetime.now(timezone.utc).isoformat()
@@ -76,6 +78,7 @@ class HealthRecordService:
             True nếu xóa thành công.
         """
         self.baby_service.get_baby_by_id(baby_id, user_id)
+        require_role(baby_id, user_id, ADMIN, GUARDIAN)
 
         repo = HealthRecordRepository(baby_id)
         record = repo.get(record_id)

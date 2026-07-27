@@ -37,7 +37,7 @@ import {
 } from "./types";
 
 import { useAuth } from "./auth/AuthContext";
-import { apiFetch } from "./lib/authClient";
+import { apiFetch, parseErrorMessage } from "./lib/authClient";
 
 import DashboardView from "./components/DashboardView";
 import GrowthView from "./components/GrowthView";
@@ -370,44 +370,6 @@ export default function App() {
     loadInitialBabies();
   }, []);
 
-  // Check URL query parameters for invitation acceptance link
-  useEffect(() => {
-    const handleAcceptInviteFromUrl = async () => {
-      const searchParams = new URLSearchParams(window.location.search);
-      const inviteId = searchParams.get("accept_invite");
-      if (inviteId) {
-        try {
-          const res = await apiFetch(`/api/v1/guardians/accept/${inviteId}`, {
-            method: "POST"
-          });
-          if (res.ok) {
-            window.history.replaceState({}, document.title, window.location.pathname);
-            const resBabies = await apiFetch("/api/v1/babies");
-            if (resBabies.ok) {
-              const dataBabies = await resBabies.json();
-              if (Array.isArray(dataBabies) && dataBabies.length > 0) {
-                setBabies(dataBabies.map((b: any) => ({
-                  id: b.id,
-                  name: b.name,
-                  birthDate: b.birth_date,
-                  gender: mapBackendGender(b.gender),
-                  avatarUrl: b.avatar_url || "/static/img/leo.png",
-                  isActive: Boolean(b.is_active),
-                  bloodType: b.blood_type,
-                  pediatricianName: b.pediatrician_name,
-                  allergies: b.allergies || []
-                })));
-              }
-            }
-          }
-        } catch (e) {
-          console.error("Error accepting invitation from URL:", e);
-        }
-      }
-    };
-    handleAcceptInviteFromUrl();
-  }, []);
-
   // Sync active baby details
   useEffect(() => {
     if (activeBaby?.id) {
@@ -693,9 +655,13 @@ export default function App() {
     }
   };
 
+  // Ném lỗi thay vì chỉ console.error khi thất bại - cùng lý do với handleUpdateBaby: nếu nuốt
+  // lỗi âm thầm, ProfileView không có cách nào báo cho người dùng biết vì sao lời mời không
+  // được gửi (vd. email đã là thành viên, đã có lời mời đang chờ xử lý cho email đó).
   const handleAddGuardian = async (newG: Omit<Guardian, "id">) => {
+    let res: Response;
     try {
-      const res = await apiFetch(`/api/v1/guardians/invite?baby_id=${activeBaby.id}`, {
+      res = await apiFetch(`/api/v1/guardians/invite?baby_id=${activeBaby.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -704,12 +670,30 @@ export default function App() {
           role: newG.role
         })
       });
-      if (res.ok) {
-        refreshActiveBabyData(activeBaby.id);
-      }
     } catch (e) {
       console.error(e);
+      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
     }
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res));
+    }
+    await refreshActiveBabyData(activeBaby.id);
+  };
+
+  const handleResendGuardian = async (id: string) => {
+    let res: Response;
+    try {
+      res = await apiFetch(`/api/v1/guardians/${id}/resend?baby_id=${activeBaby.id}`, {
+        method: "POST"
+      });
+    } catch (e) {
+      console.error(e);
+      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
+    }
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res));
+    }
+    await refreshActiveBabyData(activeBaby.id);
   };
 
   const handleDeleteGuardian = async (id: string) => {
@@ -1269,6 +1253,7 @@ export default function App() {
                   onDeleteBaby={handleDeleteBaby}
                   onUploadAvatar={handleUploadAvatar}
                   onAddGuardian={handleAddGuardian}
+                  onResendGuardian={handleResendGuardian}
                   onDeleteGuardian={handleDeleteGuardian}
                 />
               ) : (
@@ -1341,6 +1326,7 @@ export default function App() {
                   onDeleteBaby={handleDeleteBaby}
                   onUploadAvatar={handleUploadAvatar}
                   onAddGuardian={handleAddGuardian}
+                  onResendGuardian={handleResendGuardian}
                   onDeleteGuardian={handleDeleteGuardian}
                 />
               )}

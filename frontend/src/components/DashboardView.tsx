@@ -40,6 +40,7 @@ import {
   Legend
 } from "recharts";
 import { BabyProfile, MedicationLog, FeedLog, Measurement, ChatMessage, SmartExtraction, NotificationItem } from "../types";
+import { apiFetch } from "../lib/authClient";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 
 interface DashboardViewProps {
@@ -368,15 +369,22 @@ export default function DashboardView({
   };
 
   useEffect(() => {
+    // Gộp 2 nguồn: thông báo theo bé đang chọn (nhắc lịch thuốc, ăn uống...) + thông báo gắn
+    // với chính người dùng (vd. kết quả lời mời guardian), không phụ thuộc bé nào đang xem -
+    // trước đây chỉ gọi nguồn đầu với header "Bearer mock-token" hardcode nên luôn rỗng ngoài
+    // môi trường local (backend chỉ chấp nhận mock-token khi APP_ENV=local).
     const fetchNotifications = async () => {
       try {
-        const res = await fetch(`/api/v1/dashboard/notifications?baby_id=${activeBaby.id}`, {
-          headers: { "Authorization": "Bearer mock-token" }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setNotifications(data);
-        }
+        const [babyRes, mineRes] = await Promise.all([
+          apiFetch(`/api/v1/dashboard/notifications?baby_id=${activeBaby.id}`),
+          apiFetch(`/api/v1/notifications/me`),
+        ]);
+        const babyData = babyRes.ok ? await babyRes.json() : [];
+        const mineData = mineRes.ok ? await mineRes.json() : [];
+        const merged = new Map<string, NotificationItem>();
+        [...babyData, ...mineData].forEach((n: NotificationItem) => merged.set(n.id, n));
+        const combined = Array.from(merged.values()).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+        setNotifications(combined);
       } catch (err) {
         console.warn("Could not fetch notifications from backend:", err);
       }
@@ -389,10 +397,7 @@ export default function DashboardView({
     notifications.forEach(async (n) => {
       if (!n.read) {
         try {
-          await fetch(`/api/v1/dashboard/notifications/${n.id}/read`, {
-            method: "POST",
-            headers: { "Authorization": "Bearer mock-token" }
-          });
+          await apiFetch(`/api/v1/notifications/${n.id}/read`, { method: "POST" });
         } catch (e) {
           // silent fallback
         }

@@ -11,6 +11,14 @@ from app.modules.baby.schemas import BabyCreate, BabyUpdate, BabyResponse
 from app.modules.baby.repository import BabyRepository
 from app.shared.exceptions import EntityNotFoundError, PermissionDeniedError
 
+# Import trễ (bên trong hàm, không phải ở đầu file) để tránh circular import: module
+# guardian (permissions.py) và guardian.router đều import BabyService, nên nếu import thẳng ở
+# đây, lúc app/main.py load "baby" package trước "guardian" package sẽ crash vì guardian.router
+# quay lại import BabyService trong khi module baby.service chưa load xong.
+def _require_role(baby_id: str, user_id: str, *allowed_roles: str) -> None:
+    from app.modules.guardian.permissions import require_role
+    require_role(baby_id, user_id, *allowed_roles)
+
 # app/modules/baby/service.py -> app/ (3 cấp cha) -> static/img/avatars
 AVATAR_UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "img" / "avatars"
 
@@ -131,6 +139,7 @@ class BabyService:
         """
         # Kiểm tra tồn tại và quyền trước khi cập nhật
         self.get_baby_by_id(baby_id, user_id)
+        _require_role(baby_id, user_id, "ADMIN")
 
         data = baby_update.model_dump(exclude_unset=True)
         updated_baby = self.repository.update(baby_id, data)
@@ -155,4 +164,5 @@ class BabyService:
         """
         # Kiểm tra quyền trước khi xóa
         self.get_baby_by_id(baby_id, user_id)
+        _require_role(baby_id, user_id, "ADMIN")
         return self.repository.delete(baby_id)

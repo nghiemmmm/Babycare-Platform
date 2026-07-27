@@ -10,6 +10,7 @@ from fastapi import UploadFile, HTTPException, status
 from app.modules.cry.schemas import CryLogCreate, CryLogResponse
 from app.modules.cry.repository import CryRepository
 from app.modules.baby.service import BabyService
+from app.modules.guardian.permissions import ADMIN, GUARDIAN, require_role
 from app.ai import CryClassifier
 from app.shared.exceptions import EntityNotFoundError
 
@@ -28,6 +29,7 @@ class CryService:
         import tempfile
 
         self.baby_service.get_baby_by_id(baby_id, user_id)
+        require_role(baby_id, user_id, ADMIN, GUARDIAN)
         repo = CryRepository(baby_id)
 
         # Lưu tệp ghi âm vào thư mục tạm app/static/cry
@@ -93,8 +95,9 @@ class CryService:
         Cập nhật phản hồi từ phụ huynh để đánh giá độ chính xác của AI.
         """
         self.baby_service.get_baby_by_id(baby_id, user_id)
+        require_role(baby_id, user_id, ADMIN, GUARDIAN)
         repo = CryRepository(baby_id)
-        
+
         log = repo.get(log_id)
         if not log:
             raise EntityNotFoundError("Không tìm thấy bản ghi tiếng khóc")
@@ -110,6 +113,7 @@ class CryService:
         Xóa bản ghi lịch sử tiếng khóc.
         """
         self.baby_service.get_baby_by_id(baby_id, user_id)
+        require_role(baby_id, user_id, ADMIN, GUARDIAN)
         repo = CryRepository(baby_id)
         log = repo.get(log_id)
         if not log:

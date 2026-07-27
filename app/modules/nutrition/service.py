@@ -9,6 +9,7 @@ from typing import Optional
 from app.modules.nutrition.schemas import SolidFoodLogCreate, SolidFoodLogResponse
 from app.modules.nutrition.repository import SolidFoodRepository
 from app.modules.baby.service import BabyService
+from app.modules.guardian.permissions import ADMIN, GUARDIAN, require_role
 from app.shared.exceptions import EntityNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -22,8 +23,9 @@ class SolidFoodService:
         Ghi nhận nhật ký ăn dặm mới cho bé sau khi kiểm tra quyền giám hộ.
         """
         self.baby_service.get_baby_by_id(baby_id, user_id)
+        require_role(baby_id, user_id, ADMIN, GUARDIAN)
         repo = SolidFoodRepository(baby_id)
-        
+
         log_obj = SolidFoodLogResponse(
             logged_at=log_in.logged_at,
             food_name=log_in.food_name,
@@ -48,6 +50,7 @@ class SolidFoodService:
         Xóa một bản ghi nhật ký ăn dặm.
         """
         self.baby_service.get_baby_by_id(baby_id, user_id)
+        require_role(baby_id, user_id, ADMIN, GUARDIAN)
         repo = SolidFoodRepository(baby_id)
         log = repo.get(log_id)
         if not log:

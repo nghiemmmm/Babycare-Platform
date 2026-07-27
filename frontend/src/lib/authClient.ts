@@ -85,7 +85,7 @@ export class ApiClientError extends Error {
   }
 }
 
-async function parseErrorMessage(response: Response): Promise<string> {
+export async function parseErrorMessage(response: Response): Promise<string> {
   try {
     const body = await response.json();
     if (body && typeof body.message === "string") return body.message;

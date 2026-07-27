@@ -12,6 +12,7 @@ from app.modules.guardian.service import GuardianService
 from app.modules.guardian.schemas import (
     GuardianResponse,
     GuardianInvite,
+    InvitationPublicInfo,
     InviteResponse,
     MessageResponse
 )
@@ -43,13 +44,30 @@ async def invite_guardian(
     baby_id: str = Query(..., description="ID of the active baby"),
     current_user: UserRecord = Depends(get_current_user)
 ):
-    """Mời một người chăm sóc mới tham gia vòng tròn gia đình chăm sóc bé."""
+    """Mời một người chăm sóc mới tham gia vòng tròn gia đình chăm sóc bé (chỉ ADMIN)."""
     baby_service.get_baby_by_id(baby_id, current_user.uid)
     return guardian_service.invite_guardian(
         baby_id=baby_id,
         name=invite_in.name,
         email=invite_in.email,
         role=invite_in.role,
+        invited_by_uid=current_user.uid,
+        inviter_name=current_user.name or "Phụ huynh"
+    )
+
+
+@router.post("/{guardian_id}/resend", response_model=InviteResponse)
+async def resend_guardian_invitation(
+    guardian_id: str,
+    baby_id: str = Query(..., description="ID of the active baby"),
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """Gửi lại email mời cho một lời mời đang chờ phản hồi (chỉ ADMIN)."""
+    baby_service.get_baby_by_id(baby_id, current_user.uid)
+    return guardian_service.resend_invitation(
+        baby_id=baby_id,
+        invitation_id=guardian_id,
+        requester_uid=current_user.uid,
         inviter_name=current_user.name or "Phụ huynh"
     )
 
@@ -60,19 +78,33 @@ async def delete_guardian(
     baby_id: str = Query(..., description="ID of the active baby"),
     current_user: UserRecord = Depends(get_current_user)
 ):
-    """Xóa quyền truy cập của một người chăm sóc khỏi bé."""
+    """Xóa quyền truy cập của một người chăm sóc, hoặc thu hồi một lời mời đang chờ (chỉ ADMIN)."""
     baby_service.get_baby_by_id(baby_id, current_user.uid)
-    return guardian_service.remove_guardian(baby_id=baby_id, guardian_id=guardian_id)
+    return guardian_service.remove_guardian(baby_id=baby_id, guardian_id=guardian_id, requester_uid=current_user.uid)
 
 
-@router.post("/accept/{invitation_id}", response_model=MessageResponse)
+@router.get("/invite/{token}", response_model=InvitationPublicInfo)
+async def get_invitation_public(token: str):
+    """
+    Thông tin công khai của một lời mời - phục vụ trang xác nhận /invite/:token trên frontend,
+    KHÔNG yêu cầu đăng nhập (người được mời có thể chưa có tài khoản).
+    """
+    return guardian_service.get_invitation_public(token)
+
+
+@router.post("/invite/{token}/accept", response_model=MessageResponse)
 async def accept_guardian_invitation(
-    invitation_id: str,
+    token: str,
     current_user: UserRecord = Depends(get_current_user)
 ):
-    """Xác nhận chấp nhận lời mời người giám hộ và chính thức kết nối với bé."""
-    return guardian_service.accept_invitation(
-        invitation_id=invitation_id,
-        user_id=current_user.uid,
-        user_email=current_user.email or ""
-    )
+    """
+    Chấp nhận lời mời - yêu cầu đăng nhập, vì hệ thống cần biết chấp nhận gắn với user nào.
+    Email tài khoản đăng nhập phải khớp với email được mời.
+    """
+    return guardian_service.accept_invitation(token=token, current_user=current_user)
+
+
+@router.post("/invite/{token}/decline", response_model=MessageResponse)
+async def decline_guardian_invitation(token: str):
+    """Từ chối lời mời - không yêu cầu đăng nhập, vì từ chối không cần gắn với tài khoản nào."""
+    return guardian_service.decline_invitation(token=token)

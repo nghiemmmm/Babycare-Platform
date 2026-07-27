@@ -10,6 +10,7 @@ from app.modules.auth.schemas import UserRecord
 from app.modules.nutrition.schemas import SolidFoodLogCreate, SolidFoodLogResponse
 from app.modules.nutrition.service import SolidFoodService
 from app.modules.nutrition.ai_recommender import NutritionRecommenderService, WeeklyMealPlanService
+from app.modules.guardian.permissions import ADMIN, GUARDIAN, require_role
 from app.shared.schemas import Message
 
 router = APIRouter(prefix="/babies", tags=["Solid Food Tracking"])
@@ -121,7 +122,8 @@ async def add_nutrition_feed(
     Ghi nhận lịch sử bú sữa/ăn dặm mới.
     """
     solid_food_service.baby_service.get_baby_by_id(feed_in.baby_id, current_user.uid)
-    
+    require_role(feed_in.baby_id, current_user.uid, ADMIN, GUARDIAN)
+
     db = get_firestore_db()
     feed_id = f"feed_{uuid.uuid4().hex[:8]}"
     doc_ref = db.collection("nutrition_feeds").document(feed_id)
@@ -154,7 +156,8 @@ async def delete_nutrition_feed(
     # Verify permission
     feed_data = doc.to_dict()
     solid_food_service.baby_service.get_baby_by_id(feed_data.get("baby_id"), current_user.uid)
-    
+    require_role(feed_data.get("baby_id"), current_user.uid, ADMIN, GUARDIAN)
+
     doc_ref.delete()
     return SuccessResponse(success=True, message="Feed log deleted successfully")
 
@@ -190,7 +193,8 @@ async def add_ingredient(
     Lưu log phản ứng nguyên liệu ăn dặm mới.
     """
     solid_food_service.baby_service.get_baby_by_id(ing_in.baby_id, current_user.uid)
-    
+    require_role(ing_in.baby_id, current_user.uid, ADMIN, GUARDIAN)
+
     db = get_firestore_db()
     log_id = f"ing_{uuid.uuid4().hex[:8]}"
     doc_ref = db.collection("nutrition_ingredients").document(log_id)
@@ -220,6 +224,7 @@ async def delete_ingredient(
         
     ing_data = doc.to_dict()
     solid_food_service.baby_service.get_baby_by_id(ing_data.get("baby_id"), current_user.uid)
+    require_role(ing_data.get("baby_id"), current_user.uid, ADMIN, GUARDIAN)
 
     doc_ref.delete()
     return SuccessResponse(success=True)

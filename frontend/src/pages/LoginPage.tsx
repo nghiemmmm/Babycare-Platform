@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiClientError } from "../lib/authClient";
 import AuthLayout from "../components/AuthLayout";
@@ -10,7 +10,11 @@ const inputClass =
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [searchParams] = useSearchParams();
+  // Cho phép quay lại đúng trang đã điều hướng tới đây (vd. /invite/:token khi bấm "Chấp nhận"
+  // lời mời guardian lúc chưa đăng nhập) thay vì luôn đưa về "/" sau khi đăng nhập thành công.
+  const redirectTo = searchParams.get("redirect") || "/";
+  const [email, setEmail] = useState(() => searchParams.get("email") || "");
   const [password, setPassword] = useState("");
   // apiFetch() tự đăng xuất và điều hướng về đây ngay khi gặp 401 không làm mới token được -
   // đọc cờ khi trang này MOUNT (không phải module-scope, vì LoginPage mount lại mỗi lần
@@ -31,7 +35,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
-      navigate("/", { replace: true });
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Không thể đăng nhập, vui lòng thử lại.");
     } finally {
@@ -98,7 +102,10 @@ export default function LoginPage() {
 
       <div className="mt-3 text-center text-xs text-slate-500">
         Chưa có tài khoản?{" "}
-        <button onClick={() => navigate("/register")} className="font-bold text-primary hover:underline cursor-pointer">
+        <button
+          onClick={() => navigate(`/register${redirectTo !== "/" ? `?redirect=${encodeURIComponent(redirectTo)}` : ""}`)}
+          className="font-bold text-primary hover:underline cursor-pointer"
+        >
           Đăng ký ngay
         </button>
       </div>
