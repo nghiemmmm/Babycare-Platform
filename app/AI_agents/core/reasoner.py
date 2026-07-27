@@ -3,7 +3,7 @@ import time
 import json
 from datetime import datetime, timezone
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AnyMessage
 from app.core.config import settings
 from app.AI_agents.core.constant import DEFAULT_CHAT_MODEL, DEFAULT_TEMPERATURE
 
@@ -59,7 +59,7 @@ class AIReasoner:
         return result
 
     async def areason(self, prompt: str, system_instruction: str = None) -> str:
-        """Asynchronously reason using the model."""
+        """Asynchronously reason using the model for single prompt."""
         messages = []
         if system_instruction:
             messages.append(SystemMessage(content=system_instruction))
@@ -78,3 +78,30 @@ class AIReasoner:
             
         self._log_reasoning(system_instruction, prompt, result, elapsed)
         return result
+
+    async def areason_with_history(self, messages: list[AnyMessage], system_instruction: str = None) -> str:
+        """
+        Asynchronously reason using the model with multi-turn conversation history.
+        `messages` contains previous HumanMessage and AIMessage objects.
+        """
+        formatted_messages = []
+        if system_instruction:
+            formatted_messages.append(SystemMessage(content=system_instruction))
+        
+        formatted_messages.extend(messages)
+        
+        start_time = time.perf_counter()
+        response = await self.model.ainvoke(formatted_messages)
+        elapsed = time.perf_counter() - start_time
+        
+        content = response.content
+        result = ""
+        if isinstance(content, list):
+            result = "".join([block.get("text", "") if isinstance(block, dict) else str(block) for block in content])
+        else:
+            result = str(content)
+            
+        last_prompt = messages[-1].content if messages else ""
+        self._log_reasoning(system_instruction, str(last_prompt), result, elapsed)
+        return result
+
