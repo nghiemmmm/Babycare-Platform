@@ -14,6 +14,7 @@ from app.modules.ai_agent.schemas import (
     ChatRequest,
     ChatResponse,
     ThreadResponse,
+    ThreadCreateRequest,
     ThreadCreateResponse,
     MessageCreateRequest,
     Citation,
@@ -54,64 +55,133 @@ async def chat_with_agent(
 
 @ai_agent_router.get("/threads", response_model=List[ThreadResponse])
 async def list_chat_threads(
+    baby_id: str,
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
-    Lấy danh sách lịch sử các phiên chat của người dùng.
+    Lấy danh sách lịch sử các phiên chat của người dùng, lọc đúng theo bé đang chọn -
+    nếu không lọc theo baby_id, danh sách hội thoại sẽ bị lẫn giữa các bé trong cùng gia đình
+    và không đổi theo khi người dùng chuyển bé active trên UI.
     """
+    baby_service.get_baby_by_id(baby_id, current_user.uid)  # kiểm tra quyền giám hộ bé này
+
     db = get_firestore_db()
-    docs = db.collection("chat_threads").where(filter=FieldFilter("user_id", "==", current_user.uid)).stream()
-    
+    docs = (
+        db.collection("chat_threads")
+        .where(filter=FieldFilter("user_id", "==", current_user.uid))
+        .where(filter=FieldFilter("baby_id", "==", baby_id))
+        .stream()
+    )
+
     threads = []
     for doc in docs:
         d = doc.to_dict()
         threads.append(ThreadResponse(
             id=doc.id,
             title=d.get("title", "New Chat Session"),
-            last_updated=d.get("last_updated", "")
+            last_updated=d.get("last_updated", ""),
+            baby_id=d.get("baby_id")
         ))
-        
-    # Sắp xếp cuộc trò chuyện gần nhất lên đầu và giới hạn 6 phiên
-    threads.sort(key=lambda x: x.last_updated, reverse=True)
-    threads = threads[:6]
-    
-    # Nếu chưa có thread nào, tự động tạo một thread ban đầu cho người dùng
+
+    # Nhận lại các thread tạo TRƯỚC khi hệ thống hỗ trợ nhiều bé (chưa có field baby_id) về đúng
+    # bé đầu tiên của gia đình - trước đây mọi thread của user đều ngầm định thuộc về babies[0]
+    # (do backend luôn hardcode babies[0] khi trả lời chat), nên nếu không "nhận" lại, lịch sử
+    # chat có sẵn của người dùng sẽ biến mất ngay khi vừa nâng cấp lên cơ chế phân biệt theo bé.
+    # Chỉ áp dụng khi baby_id đang xét chính là bé đầu tiên - các bé khác chưa từng có lịch sử
+    # chat thật sự (AI luôn suy luận theo babies[0] trước đây) nên không có gì để nhận lại.
     if not threads:
-        thread_id = "thread_default"
+        my_babies = baby_service.get_my_babies(current_user.uid)
+        if my_babies and my_babies[0].id == baby_id:
+            legacy_docs = (
+                db.collection("chat_threads")
+                .where(filter=FieldFilter("user_id", "==", current_user.uid))
+                .stream()
+            )
+            for doc in legacy_docs:
+                d = doc.to_dict()
+                if d.get("baby_id"):
+                    continue
+                db.collection("chat_threads").document(doc.id).update({"baby_id": baby_id})
+                threads.append(ThreadResponse(
+                    id=doc.id,
+                    title=d.get("title", "New Chat Session"),
+                    last_updated=d.get("last_updated", ""),
+                    baby_id=baby_id
+                ))
+
+    # Chỉ hiện các cuộc trò chuyện còn hoạt động trong vòng 1 tuần gần nhất - "hiện đầy đủ lịch sử
+    # chat trong vòng 1 tuần" nghĩa là bỏ giới hạn SỐ LƯỢNG cuộc trò chuyện cố định (trước đây cắt
+    # cứng còn 6), thay bằng giới hạn theo THỜI GIAN thực tế.
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    threads = [t for t in threads if t.last_updated >= cutoff_iso]
+
+    # Sắp xếp cuộc trò chuyện gần nhất lên đầu
+    threads.sort(key=lambda x: x.last_updated, reverse=True)
+
+    # Nếu chưa có thread nào (kể cả sau khi thử nhận lại thread cũ), tự động tạo một thread ban
+    # đầu cho user+bé này. ID phải gắn cả user_id lẫn baby_id - trước đây dùng ID cứng
+    # "thread_default" chung cho TẤT CẢ user, nên user/bé khác cũng chưa có thread nào sẽ ghi đè
+    # lên cùng 1 document, và vì checkpoint của LangGraph lưu theo đúng thread_id đó, lịch sử chat
+    # có thể bị lẫn giữa các gia đình khác nhau.
+    if not threads:
+        thread_id = f"thread_default_{current_user.uid}_{baby_id}"
+        now = datetime.now(timezone.utc).isoformat()
         doc_ref = db.collection("chat_threads").document(thread_id)
         doc_ref.set({
             "user_id": current_user.uid,
+            "baby_id": baby_id,
             "title": "Baby Progress Chat",
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "last_updated": now,
+            "created_at": now
         })
         threads.append(ThreadResponse(
             id=thread_id,
             title="Baby Progress Chat",
-            last_updated=datetime.now(timezone.utc).isoformat()
+            last_updated=now,
+            baby_id=baby_id
         ))
-        
-    return threads[:6]
+
+    # Lấy trước nội dung tin nhắn cuối cùng của từng cuộc trò chuyện để hiện trong danh sách lịch
+    # sử chat - trước đây chỉ có "title" (chốt cứng từ tin nhắn ĐẦU TIÊN, không đổi về sau), nên
+    # người dùng không biết cuộc trò chuyện đang nói về nội dung gì nếu chưa bấm vào xem. Dùng
+    # chung 1 orchestrator cho cả vòng lặp thay vì tạo mới từng thread để đỡ tốn chi phí compile graph.
+    orchestrator = AgentOrchestrator()
+    for t in threads:
+        try:
+            state = await orchestrator.graph.aget_state({"configurable": {"thread_id": t.id}})
+            msgs = state.values.get("messages", [])
+            if msgs:
+                content = msgs[-1].content
+                t.last_message_preview = content[:80] + "..." if len(content) > 80 else content
+        except Exception:
+            pass  # Không chặn cả danh sách thread nếu đọc checkpoint của 1 thread bị lỗi
+
+    return threads
 
 @ai_agent_router.post("/threads", response_model=ThreadCreateResponse)
 async def create_chat_thread(
+    req: ThreadCreateRequest,
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
-    Khởi tạo một phiên chat mới.
+    Khởi tạo một phiên chat mới cho đúng bé đang chọn.
     """
+    baby_service.get_baby_by_id(req.baby_id, current_user.uid)  # kiểm tra quyền giám hộ bé này
+
     db = get_firestore_db()
     thread_id = f"thread_{uuid.uuid4().hex[:8]}"
     title = "New Chat Session"
-    
+    now = datetime.now(timezone.utc).isoformat()
+
     doc_ref = db.collection("chat_threads").document(thread_id)
     doc_ref.set({
         "user_id": current_user.uid,
+        "baby_id": req.baby_id,
         "title": title,
-        "last_updated": datetime.now(timezone.utc).isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "last_updated": now,
+        "created_at": now
     })
-    
+
     return ThreadCreateResponse(thread_id=thread_id, title=title)
 
 @ai_agent_router.get("/threads/{thread_id}/messages", response_model=List[ChatMessageResponse])
@@ -122,30 +192,44 @@ async def get_thread_messages(
     """
     Lấy danh sách các tin nhắn trong phiên chat từ LangGraph Firestore Checkpointer.
     """
+    # Kiểm tra thread thuộc đúng user trước khi trả lịch sử chat - cùng lý do với
+    # delete_thread_messages: tránh lộ lịch sử chat của user/gia đình khác nếu đoán được thread_id.
+    db = get_firestore_db()
+    thread_doc = db.collection("chat_threads").document(thread_id).get()
+    if thread_doc.exists and thread_doc.to_dict().get("user_id") != current_user.uid:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     orchestrator = AgentOrchestrator()
     config = {"configurable": {"thread_id": thread_id}}
     state = await orchestrator.graph.aget_state(config)
     messages = state.values.get("messages", [])
     
+    # Hiện đầy đủ lịch sử chat trong vòng 1 tuần gần nhất (không giới hạn số lượng tin nhắn) -
+    # message cũ thiếu response_metadata.created_at (trước khi các workflow được gắn timestamp
+    # thật) sẽ fallback về thời điểm hiện tại nên vẫn hiển thị bình thường, không bị lọc mất.
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
     result = []
     for msg in messages:
         role = "user" if msg.type == "human" else "assistant"
         # Tránh lỗi nếu message không có id
         msg_id = getattr(msg, "id", None) or f"msg_{uuid.uuid4().hex[:8]}"
-        
+
         # Lấy timestamp hoặc gán hiện tại
         ts = getattr(msg, "response_metadata", {}).get("created_at")
         if not ts:
             ts = datetime.now(timezone.utc).isoformat()
-            
+
+        if ts < cutoff_iso:
+            continue
+
         result.append(ChatMessageResponse(
             id=msg_id,
             role=role,
             content=msg.content,
             timestamp=ts
         ))
-    # Chỉ trả về 6 tin nhắn mới nhất trong phiên chat
-    return result[-6:]
+    return result
 
 @ai_agent_router.post("/threads/{thread_id}/messages", response_model=MessageCreateResponse)
 async def create_thread_message(
@@ -156,13 +240,21 @@ async def create_thread_message(
     """
     Gửi tin nhắn vào phiên chat hiện tại và nhận phản hồi từ AI Agent cùng kết quả trích xuất nhật ký.
     """
-    # 1. Tìm hoặc gán mặc định active baby
+    # 1. Xác định đúng bé đang được thảo luận trong thread này - ưu tiên baby_id đã lưu sẵn trên
+    # thread (nguồn xác thực nhất vì được gán lúc tạo thread), req.baby_id chỉ là fallback cho
+    # thread cũ chưa có field này. Trước đây hardcode babies[0] nên AI luôn suy luận/ghi log theo
+    # bé đầu tiên của gia đình, bất kể người dùng đang chọn bé nào trên UI.
     db = get_firestore_db()
-    baby_id = None
-    babies = baby_service.get_my_babies(current_user.uid)
-    if babies:
-        baby_id = babies[0].id
-        
+    thread_ref = db.collection("chat_threads").document(thread_id)
+    thread_doc = thread_ref.get()
+    thread_data = thread_doc.to_dict() if thread_doc.exists else None
+
+    if thread_data and thread_data.get("user_id") != current_user.uid:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    baby_id = (thread_data or {}).get("baby_id") or req.baby_id
+    baby_service.get_baby_by_id(baby_id, current_user.uid)  # kiểm tra quyền giám hộ bé này
+
     # 2. Gọi AgentOrchestrator chạy LangGraph
     orchestrator = AgentOrchestrator()
     result = await orchestrator.run_agent(
@@ -177,11 +269,9 @@ async def create_thread_message(
     extracted_data = result.get("extracted_data")
     
     # 3. Cập nhật thời gian hoạt động của thread
-    thread_ref = db.collection("chat_threads").document(thread_id)
-    if thread_ref.get().exists:
+    if thread_data:
         # Thử sinh title động từ tin nhắn đầu tiên nếu là tiêu đề mặc định
         update_fields = {"last_updated": datetime.now(timezone.utc).isoformat()}
-        thread_data = thread_ref.get().to_dict()
         if thread_data.get("title") == "New Chat Session":
             update_fields["title"] = req.content[:30] + "..." if len(req.content) > 30 else req.content
         thread_ref.update(update_fields)

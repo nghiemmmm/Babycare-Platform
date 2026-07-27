@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import AIMessage
 
@@ -114,7 +115,7 @@ class OutOfScopeGraph:
 
 
         return {
-            "messages": [AIMessage(content=response_text)],
+            "messages": [AIMessage(content=response_text, response_metadata={"created_at": datetime.now(timezone.utc).isoformat()})],
         }
 
     def compile(self, checkpointer=None, interrupt_before=None):

@@ -16,6 +16,11 @@ class ThreadResponse(BaseModel):
     id: str
     title: str
     last_updated: str
+    baby_id: Optional[str] = None
+    last_message_preview: Optional[str] = None
+
+class ThreadCreateRequest(BaseModel):
+    baby_id: str
 
 class ThreadCreateResponse(BaseModel):
     thread_id: str
@@ -24,6 +29,7 @@ class ThreadCreateResponse(BaseModel):
 class MessageCreateRequest(BaseModel):
     content: str
     type: str = "text"
+    baby_id: str
 
 class Citation(BaseModel):
     title: str

@@ -69,7 +69,7 @@ export default function App() {
   const [weeklyMealPlan, setWeeklyMealPlan] = useState<WeeklyMealPlan | null>(null);
   const [isGeneratingWeeklyPlan, setIsGeneratingWeeklyPlan] = useState(false);
   const [isAcceptingWeeklyPlan, setIsAcceptingWeeklyPlan] = useState(false);
-  const [threads, setThreads] = useState<Array<{ id: string; title: string }>>([]);
+  const [threads, setThreads] = useState<Array<{ id: string; title: string; lastMessagePreview?: string }>>([]);
   const [activeThreadId, setActiveThreadId] = useState<string>("thread_default");
   const [nutritionSafety, setNutritionSafety] = useState<NutritionSafety | null>(null);
   const [safetyHandbook, setSafetyHandbook] = useState<SafetyHandbook | null>(null);
@@ -286,15 +286,18 @@ export default function App() {
     }
   };
 
-  // Fetch all chat threads for the user
-  const loadThreads = async () => {
+  // Fetch all chat threads for the user, scoped to the currently active baby - nếu không
+  // truyền baby_id, danh sách hội thoại sẽ bị lẫn giữa các bé và không đổi khi chuyển bé active.
+  const loadThreads = async (babyId: string) => {
+    if (!babyId) return;
     try {
-      const res = await apiFetch("/api/v1/ai/threads");
+      const res = await apiFetch(`/api/v1/ai/threads?baby_id=${babyId}`);
       if (res.ok) {
         const data = await res.json();
         setThreads(data.map((t: any) => ({
           id: t.id,
-          title: t.title
+          title: t.title,
+          lastMessagePreview: t.last_message_preview
         })));
         if (data.length > 0) {
           const threadIds = data.map((t: any) => t.id);
@@ -374,7 +377,7 @@ export default function App() {
   useEffect(() => {
     if (activeBaby?.id) {
       refreshActiveBabyData(activeBaby.id);
-      loadThreads();
+      loadThreads(activeBaby.id);
     }
   }, [activeBaby?.id]);
 
@@ -859,7 +862,8 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content: userMsg.content,
-          type: "text"
+          type: "text",
+          baby_id: activeBaby.id
         })
       });
 
@@ -868,7 +872,7 @@ export default function App() {
       }
 
       const data = await response.json();
-      loadThreads(); // Refresh thread list to fetch any updated titles
+      loadThreads(activeBaby.id); // Refresh thread list to fetch any updated titles
 
       // Convert from Backend format (MessageCreateResponse) to App.tsx format
       const aiContent = data.ai_response?.content || "Tôi đã ghi nhận thông tin đó!";
@@ -918,9 +922,12 @@ export default function App() {
   };
 
   const handleCreateThread = async () => {
+    if (!activeBaby) return;
     try {
       const res = await apiFetch("/api/v1/ai/threads", {
-        method: "POST"
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baby_id: activeBaby.id })
       });
       if (res.ok) {
         const data = await res.json();
@@ -1302,6 +1309,8 @@ export default function App() {
               {activeTab === "ai" && (
                 <AiHubView
                   activeBaby={activeBaby}
+                  babies={babies}
+                  onSelectBaby={handleSelectBaby}
                   chats={chats}
                   onSendMessage={handleSendMessage}
                   onConfirmExtraction={handleConfirmExtraction}

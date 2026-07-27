@@ -6,6 +6,7 @@ from app.modules.baby.service import BabyService
 from app.modules.growth_tracking.service import GrowthTrackingService
 from langchain_core.messages import AIMessage
 from app.AI_agents.core.constant import CHAT_SYSTEM_PROMPT_TEMPLATE
+from datetime import datetime, timezone
 
 SYSTEM_PROMPT_TEMPLATE = CHAT_SYSTEM_PROMPT_TEMPLATE
 
@@ -62,7 +63,7 @@ class ChatGraph:
         except Exception as e:
             response_content = f"Xin lỗi, tôi gặp lỗi kết nối với máy chủ AI: {str(e)}"
 
-        return {"messages": [AIMessage(content=response_content)]}
+        return {"messages": [AIMessage(content=response_content, response_metadata={"created_at": datetime.now(timezone.utc).isoformat()})]}
 
     def compile(self, checkpointer=None):
         """Compile the chat subgraph flow."""

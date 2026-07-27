@@ -39,7 +39,7 @@ class VoiceLoggingGraph:
         user_id = state.get("current_user_id")
 
         if not baby_id or not user_id:
-            return {"messages": [AIMessage(content="Error: baby_id or user_id is missing in current state.")]}
+            return {"messages": [AIMessage(content="Error: baby_id or user_id is missing in current state.", response_metadata={"created_at": datetime.now(timezone.utc).isoformat()})]}
 
         try:
             if activity_type == "feeding":
@@ -78,7 +78,7 @@ class VoiceLoggingGraph:
         except Exception as e:
             msg = f"Lỗi lưu trữ nhật ký: {str(e)}"
 
-        return {"messages": [AIMessage(content=msg)]}
+        return {"messages": [AIMessage(content=msg, response_metadata={"created_at": datetime.now(timezone.utc).isoformat()})]}
 
     def compile(self, checkpointer=None):
         """Compile the activity logging subgraph flow.

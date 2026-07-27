@@ -5,6 +5,7 @@ from app.ai.cry_classifier import CryClassifier
 from app.modules.nutrition.service import SolidFoodService
 from langchain_core.messages import AIMessage
 import json
+from datetime import datetime, timezone
 from app.AI_agents.core.constant import CRY_REASONER_PROMPT
 
 class CryAnalysisGraph:
@@ -68,7 +69,7 @@ class CryAnalysisGraph:
             advice = f"Không kết nối được dịch vụ chẩn đoán AI: {str(e)}"
 
         full_message = f"🤖 [Chẩn đoán tiếng khóc]\n- Lý do dự đoán qua âm thanh: {predicted_reason} ({confidence}%)\n- Âm thanh đề xuất dỗ bé: {soothing_sound}\n\nLời khuyên từ chuyên gia:\n{advice}"
-        return {"messages": [AIMessage(content=full_message)]}
+        return {"messages": [AIMessage(content=full_message, response_metadata={"created_at": datetime.now(timezone.utc).isoformat()})]}
 
     def compile(self, checkpointer=None):
         """Compile the cry analysis subgraph flow."""

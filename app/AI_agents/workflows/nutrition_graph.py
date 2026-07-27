@@ -7,7 +7,7 @@ from app.AI_agents.knowledge.retriever import MedicalRetriever
 from langchain_core.messages import AIMessage
 from app.AI_agents.utils.prompts import load_prompt
 from app.modules.baby.service import BabyService
-from datetime import date
+from datetime import date, datetime, timezone
 
 class NutritionGraph:
     """
@@ -93,7 +93,7 @@ class NutritionGraph:
         except Exception as e:
             response = f"Xin lỗi, tôi không thể xử lý câu hỏi dinh dưỡng lúc này: {str(e)}"
 
-        return {"messages": [AIMessage(content=response)]}
+        return {"messages": [AIMessage(content=response, response_metadata={"created_at": datetime.now(timezone.utc).isoformat()})]}
 
     def compile(self, checkpointer=None):
         """Compile the nutrition and growth tracking subgraph flow."""

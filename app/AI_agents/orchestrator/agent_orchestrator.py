@@ -1,5 +1,6 @@
 from app.AI_agents.orchestrator.state_manager import FirestoreCheckpointer
 from langchain_core.messages import HumanMessage
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 class AgentOrchestrator:
@@ -36,7 +37,10 @@ class AgentOrchestrator:
             }
         }
         inputs = {
-            "messages": [HumanMessage(content=message)],
+            # Gắn created_at thật vào response_metadata ngay lúc tạo message - đây là nguồn duy
+            # nhất để get_thread_messages() lọc lịch sử chat theo thời gian thực (vd. "trong vòng
+            # 1 tuần"), vì HumanMessage/AIMessage không tự có timestamp.
+            "messages": [HumanMessage(content=message, response_metadata={"created_at": datetime.now(timezone.utc).isoformat()})],
             "baby_id": baby_id,
             "current_user_id": user_id
         }

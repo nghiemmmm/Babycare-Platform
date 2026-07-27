@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { apiFetch } from "../lib/authClient";
 import {
   MessageSquare,
   Sparkles,
@@ -28,6 +29,8 @@ import { BabyProfile, ChatMessage, SmartExtraction } from "../types";
 
 interface AiHubViewProps {
   activeBaby: BabyProfile;
+  babies: BabyProfile[];
+  onSelectBaby: (id: string) => void;
   chats: ChatMessage[];
   onSendMessage: (text: string) => Promise<void>;
   onConfirmExtraction: (ext: SmartExtraction) => void;
@@ -35,7 +38,7 @@ interface AiHubViewProps {
   onStartNapTimer: () => void;
   isNapTimerRunning: boolean;
   napElapsedTime: number; // seconds
-  threads: Array<{ id: string; title: string }>;
+  threads: Array<{ id: string; title: string; lastMessagePreview?: string }>;
   activeThreadId: string;
   onSelectThread: (id: string) => void;
   onCreateThread: () => Promise<void>;
@@ -43,6 +46,8 @@ interface AiHubViewProps {
 
 export default function AiHubView({
   activeBaby,
+  babies,
+  onSelectBaby,
   chats,
   onSendMessage,
   onConfirmExtraction,
@@ -71,12 +76,8 @@ export default function AiHubView({
       const formData = new FormData();
       formData.append("audio_file", file);
 
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-      const token = localStorage.getItem("token") || "mock-token";
-      
-      const res = await fetch(`${baseUrl}/api/v1/babies/${activeBaby.id}/cry-prediction`, {
+      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/cry-prediction`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
 
@@ -162,6 +163,21 @@ export default function AiHubView({
     return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
+  // Tuổi hiển thị của bé đang chọn, cùng công thức với ProfileView.calculateAgeDetails
+  const calculateAgeLabel = (birthDateStr: string) => {
+    const birth = new Date(birthDateStr);
+    const now = new Date();
+    const diffDays = Math.ceil(Math.abs(now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24));
+    const years = Math.floor(diffDays / 365);
+    const months = Math.floor((diffDays % 365) / 30.4);
+    return years > 0 ? `${years} tuổi, ${months} tháng tuổi` : `${months} tháng tuổi`;
+  };
+
+  const handleSwitchBaby = (id: string) => {
+    onSelectBaby(id);
+    setShowSwitchBabyDropdown(false);
+  };
+
   return (
     <div className="flex h-[calc(100vh-100px)] overflow-hidden -m-gutter font-sans" id="ai-hub-view">
       
@@ -180,34 +196,45 @@ export default function AiHubView({
         <div className="flex-1 overflow-y-auto space-y-1">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2.5 mb-2">Cuộc trò chuyện gần đây</p>
           
-          {threads.slice(0, 6).map((thread) => (
+          {threads.map((thread) => (
             <button
               key={thread.id}
               onClick={() => onSelectThread(thread.id)}
-              className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
+              className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all flex flex-col gap-1 cursor-pointer ${
                 activeThreadId === thread.id
                   ? "bg-[#e0f2fe]/70 text-[#1c648e]"
                   : "text-slate-500 hover:bg-white/40"
               }`}
             >
-              <MessageSquare className="w-4 h-4 shrink-0 text-[#1c648e]" />
-              <span className="truncate">{thread.title}</span>
+              <span className="flex items-center gap-2.5 w-full min-w-0">
+                <MessageSquare className="w-4 h-4 shrink-0 text-[#1c648e]" />
+                <span className="truncate">{thread.title}</span>
+              </span>
+              {thread.lastMessagePreview && (
+                <span className="pl-6.5 text-[10px] font-medium text-slate-400 truncate">
+                  {thread.lastMessagePreview}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
-        {/* User Mini-Profile panel */}
+        {/* Active Baby Mini-Profile panel */}
         <div className="p-3 bg-white/50 border border-white/30 rounded-2xl flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-rose-200 overflow-hidden flex items-center justify-center border border-white">
-              <span className="text-[10px] font-black text-rose-600">Bo</span>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-rose-200 overflow-hidden shrink-0 flex items-center justify-center border border-white">
+              {activeBaby.avatarUrl ? (
+                <img src={activeBaby.avatarUrl} alt={activeBaby.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[10px] font-black text-rose-600">{activeBaby.name.slice(0, 2)}</span>
+              )}
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-800">Bé Bo</p>
-              <p className="text-[9px] text-slate-400 font-bold">6 tháng tuổi</p>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-800 truncate">{activeBaby.name}</p>
+              <p className="text-[9px] text-slate-400 font-bold">{calculateAgeLabel(activeBaby.birthDate)}</p>
             </div>
           </div>
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
         </div>
       </div>
 
@@ -238,14 +265,19 @@ export default function AiHubView({
                       initial={{ opacity: 0, y: 5 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 5 }}
-                      className="absolute left-0 mt-1.5 w-32 bg-white border border-slate-100 rounded-xl shadow-lg p-1 z-50 text-[10px] font-bold"
+                      className="absolute left-0 mt-1.5 w-40 bg-white border border-slate-100 rounded-xl shadow-lg p-1 z-50 text-[10px] font-bold"
                     >
-                      <button className="w-full text-left p-2 hover:bg-slate-50 rounded-lg text-[#1c648e]">
-                        Bé Bo (Đang chọn)
-                      </button>
-                      <button className="w-full text-left p-2 hover:bg-slate-50 rounded-lg text-slate-600">
-                        {activeBaby.name}
-                      </button>
+                      {babies.map((b) => (
+                        <button
+                          key={b.id}
+                          onClick={() => handleSwitchBaby(b.id)}
+                          className={`w-full text-left p-2 hover:bg-slate-50 rounded-lg truncate ${
+                            b.id === activeBaby.id ? "text-[#1c648e]" : "text-slate-600"
+                          }`}
+                        >
+                          {b.name}{b.id === activeBaby.id ? " (Đang chọn)" : ""}
+                        </button>
+                      ))}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -284,7 +316,7 @@ export default function AiHubView({
               </p>
             </div>
           ) : (
-            chats.slice(-6).map((msg) => (
+            chats.map((msg) => (
               <div
                 key={msg.id}
                 className={`flex items-start gap-3 max-w-[85%] ${

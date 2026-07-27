@@ -9,7 +9,7 @@ from langchain_core.messages import AIMessage
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 from app.AI_agents.core.constant import REPORT_PROMPT, COMPLEX_REASONING_MODEL
 
@@ -147,7 +147,7 @@ class ReportGraph:
         except Exception as e:
             msg = f"📝 Báo cáo phát triển của bé đã được tổng hợp:\n\n{text_summary}\n\n⚠️ Lỗi xuất bản PDF: {str(e)}"
 
-        return {"messages": [AIMessage(content=msg)]}
+        return {"messages": [AIMessage(content=msg, response_metadata={"created_at": datetime.now(timezone.utc).isoformat()})]}
 
     def compile(self, checkpointer=None):
         """Compile the report builder subgraph flow."""
