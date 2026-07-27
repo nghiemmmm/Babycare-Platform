@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { authApi, ApiClientError } from "../lib/authClient";
 import { OtpInput } from "../components/OtpInput";
 import AuthLayout from "../components/AuthLayout";
+import { Eye, EyeOff } from "lucide-react";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -28,6 +29,8 @@ export default function ForgotPasswordPage() {
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [cooldown, setCooldown] = useState(0);
@@ -192,34 +195,56 @@ export default function ForgotPasswordPage() {
             <label htmlFor="password" className="text-xs font-bold text-slate-600">
               Mật khẩu mới
             </label>
-            <input
-              id="password"
-              type="password"
-              className={inputClass}
-              required
-              minLength={6}
-              autoComplete="new-password"
-              autoFocus
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Tối thiểu 6 ký tự"
-            />
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                className={`${inputClass} pr-10`}
+                required
+                minLength={6}
+                autoComplete="new-password"
+                autoFocus
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Tối thiểu 6 ký tự"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+                tabIndex={-1}
+                aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
           <div className="space-y-1.5">
             <label htmlFor="confirm-password" className="text-xs font-bold text-slate-600">
               Xác nhận mật khẩu mới
             </label>
-            <input
-              id="confirm-password"
-              type="password"
-              className={inputClass}
-              required
-              minLength={6}
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Nhập lại mật khẩu mới"
-            />
+            <div className="relative">
+              <input
+                id="confirm-password"
+                type={showConfirmPassword ? "text" : "password"}
+                className={`${inputClass} pr-10`}
+                required
+                minLength={6}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Nhập lại mật khẩu mới"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+                tabIndex={-1}
+                aria-label={showConfirmPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+              >
+                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
           <button type="submit" disabled={submitting} className={buttonClass}>
             {submitting ? "Đang lưu…" : "Đặt lại mật khẩu"}

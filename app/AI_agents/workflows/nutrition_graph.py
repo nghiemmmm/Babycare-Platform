@@ -78,17 +78,20 @@ class NutritionGraph:
             
         rag_context = self.retriever.retrieve_context(user_message, metadata_filter=metadata_filter)
 
-        full_prompt = (
-            f"{user_message}\n\n"
+        full_system_instruction = (
+            f"{self.nutrition_prompt}\n\n"
             f"{nutrition_context}\n\n"
             f"{growth_context}\n\n"
             f"Tài liệu dinh dưỡng tham chiếu:\n{rag_context}"
         )
 
+        from app.AI_agents.memory.memory_manager import MemoryManager
+        pruned_messages = MemoryManager().prune_messages(state.get("messages", []), limit=15)
+
         try:
-            response = await self.reasoner.areason(
-                prompt=full_prompt,
-                system_instruction=self.nutrition_prompt
+            response = await self.reasoner.areason_with_history(
+                messages=pruned_messages,
+                system_instruction=full_system_instruction
             )
         except Exception as e:
             response = f"Xin lỗi, tôi không thể xử lý câu hỏi dinh dưỡng lúc này: {str(e)}"

@@ -62,12 +62,19 @@ class HealthGraph:
             
         rag_context = self.retriever.retrieve_context(user_message, metadata_filter=metadata_filter)
 
-        full_prompt = f"{user_message}\n\n{health_context}\n\nTài liệu y khoa tham chiếu:\n{rag_context}"
+        full_system_instruction = (
+            f"{HEALTH_SYSTEM_PROMPT}\n\n"
+            f"{health_context}\n\n"
+            f"Tài liệu y khoa tham chiếu:\n{rag_context}"
+        )
         
+        from app.AI_agents.memory.memory_manager import MemoryManager
+        pruned_messages = MemoryManager().prune_messages(state.get("messages", []), limit=15)
+
         try:
-            response = await self.reasoner.areason(
-                prompt=full_prompt,
-                system_instruction=HEALTH_SYSTEM_PROMPT
+            response = await self.reasoner.areason_with_history(
+                messages=pruned_messages,
+                system_instruction=full_system_instruction
             )
         except Exception as e:
             response = f"Xin lỗi, tôi không thể xử lý câu hỏi sức khỏe lúc này: {str(e)}"

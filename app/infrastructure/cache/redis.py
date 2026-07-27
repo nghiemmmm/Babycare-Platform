@@ -38,7 +38,7 @@ def _get_client() -> Optional["redis.Redis"]:
 
     try:
         candidate = redis.Redis.from_url(
-            settings.REDIS_URL, socket_timeout=1, socket_connect_timeout=1
+            settings.REDIS_URL, socket_timeout=3, socket_connect_timeout=3
         )
         candidate.ping()
         _client = candidate

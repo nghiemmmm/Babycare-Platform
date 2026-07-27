@@ -54,11 +54,13 @@ class ChatGraph:
             growth_info=growth_info
         )
 
-        user_message = state["messages"][-1].content
-        # Prune message history to stay within context window limits
+        # Prune message history to stay within context window limits (e.g. keep latest 15 messages)
         pruned_messages = self.memory_manager.prune_messages(state["messages"], limit=15)
         try:
-            response_content = await self.reasoner.areason(prompt=user_message, system_instruction=system_instruction)
+            response_content = await self.reasoner.areason_with_history(
+                messages=pruned_messages,
+                system_instruction=system_instruction
+            )
         except Exception as e:
             response_content = f"Xin lỗi, tôi gặp lỗi kết nối với máy chủ AI: {str(e)}"
 
