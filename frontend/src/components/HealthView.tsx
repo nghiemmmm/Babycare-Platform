@@ -426,6 +426,35 @@ export default function HealthView({
               </div>
             )}
           </div>
+
+          {/* Allergies & Medical Warnings Card */}
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-3">
+            <h3 className="text-xs font-black text-rose-600 uppercase tracking-wider flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4 text-rose-500" />
+              Dị Ứng & Cảnh Báo Y Khoa Cho Bé
+            </h3>
+            <div className="p-3.5 bg-rose-50/70 border border-rose-100 rounded-2xl space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {activeBaby.allergies && activeBaby.allergies.length > 0 ? (
+                  activeBaby.allergies.map((alg, idx) => (
+                    <span
+                      key={idx}
+                      className="px-3 py-1 bg-rose-100 border border-rose-200 text-rose-800 font-bold rounded-xl text-xs"
+                    >
+                      🥛 {alg}
+                    </span>
+                  ))
+                ) : (
+                  <span className="px-3 py-1 bg-rose-100 border border-rose-200 text-rose-800 font-bold rounded-xl text-xs">
+                    🥛 Nhạy cảm Đậu nành / Sữa công thức
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-rose-700 leading-relaxed font-medium pt-1">
+                Cần kiểm tra kĩ thành phần thuốc và nhãn thực phẩm trước khi cho bé <span className="font-bold">{activeBaby.name}</span> dùng.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
