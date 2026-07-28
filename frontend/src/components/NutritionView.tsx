@@ -14,12 +14,10 @@ import {
   Apple,
   Milk,
   Clock,
-  ChevronRight,
   Utensils,
   Search,
   CheckCircle2,
   XCircle,
-  HelpCircle,
   Award
 } from "lucide-react";
 import {
@@ -62,14 +60,13 @@ const MEAL_TYPE_LABELS: Record<string, { title: string; icon: string; time: stri
   phụ: { title: "Bữa Phụ", icon: "🍎", time: "15:00 - 15:30" }
 };
 
-const REACTION_CONFIG: Record<string, { label: string; bg: string; icon: string }> = {
-  "Loved it": { label: "😋 Rất thích", bg: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: "😋" },
-  Neutral: { label: "😐 Bình thường", bg: "bg-slate-50 text-slate-700 border-slate-200", icon: "😐" },
-  "Spat out": { label: "🤢 Nhè ra", bg: "bg-amber-50 text-amber-700 border-amber-200", icon: "🤢" },
+const REACTION_CONFIG: Record<string, { label: string; bg: string }> = {
+  "Loved it": { label: "😋 Rất thích", bg: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  Neutral: { label: "😐 Bình thường", bg: "bg-slate-50 text-slate-700 border-slate-200" },
+  "Spat out": { label: "🤢 Nhè ra", bg: "bg-amber-50 text-amber-700 border-amber-200" },
   "Allergic Reaction": {
     label: "⚠️ Nghi ngờ dị ứng",
-    bg: "bg-rose-100 text-rose-800 border-rose-300 font-bold animate-pulse",
-    icon: "⚠️"
+    bg: "bg-rose-100 text-rose-800 border-rose-300 font-bold animate-pulse"
   }
 };
 
@@ -202,21 +199,14 @@ export default function NutritionView({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* ========================================================================= */}
-      {/* 👑 HERO BANNER HEADER & TOP NAV SWITCHER */}
+      {/* 👑 CLEAN HEADER BANNER (NO AVATAR IMAGE, MATCHING APP PALETTE) */}
       {/* ========================================================================= */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10 border border-amber-200/50 rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-xs">
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          {/* Baby Info & Title */}
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <img
-                src={activeBaby.avatarUrl || "/static/img/leo.png"}
-                alt={activeBaby.name}
-                className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-md"
-              />
-              <span className="absolute -bottom-1 -right-1 bg-amber-500 text-white p-1 rounded-full text-xs shadow-xs">
-                <Utensils className="w-3.5 h-3.5" />
-              </span>
+      <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          {/* Title with clean icon badge */}
+          <div className="flex items-center gap-3.5">
+            <div className="p-3.5 rounded-2xl bg-primary/10 text-primary shrink-0">
+              <Utensils className="w-6 h-6" />
             </div>
 
             <div className="space-y-1">
@@ -224,12 +214,12 @@ export default function NutritionView({
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
                   Dinh Dưỡng & Thực Đơn AI
                 </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-800 border border-amber-200">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
                   Chuẩn WHO & AAP
                 </span>
               </div>
-              <p className="text-xs text-slate-600 font-medium">
-                Hồ sơ bé <span className="font-bold text-slate-900">{activeBaby.name}</span> • 
+              <p className="text-xs text-slate-500 font-medium">
+                Hồ sơ bé <span className="font-bold text-slate-800">{activeBaby.name}</span> • 
                 {activeBaby.allergies && activeBaby.allergies.length > 0 ? (
                   <span className="text-rose-600 font-bold ml-1">
                     ⚠️ Dị ứng: {activeBaby.allergies.join(", ")}
@@ -242,8 +232,8 @@ export default function NutritionView({
           </div>
 
           {/* Quick Metrics Pills */}
-          <div className="flex items-center gap-3 overflow-x-auto pb-1 lg:pb-0">
-            <div className="bg-white/80 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/80 shadow-2xs flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3 overflow-x-auto">
+            <div className="bg-slate-50 px-4 py-2.5 rounded-2xl border border-slate-100 flex items-center gap-3 shrink-0">
               <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
                 <Milk className="w-4 h-4" />
               </div>
@@ -253,7 +243,7 @@ export default function NutritionView({
               </div>
             </div>
 
-            <div className="bg-white/80 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/80 shadow-2xs flex items-center gap-3 shrink-0">
+            <div className="bg-slate-50 px-4 py-2.5 rounded-2xl border border-slate-100 flex items-center gap-3 shrink-0">
               <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
                 <Apple className="w-4 h-4" />
               </div>
@@ -265,14 +255,14 @@ export default function NutritionView({
           </div>
         </div>
 
-        {/* Tab Selector Segmented Controls */}
-        <div className="mt-6 pt-5 border-t border-amber-200/40 flex items-center justify-between gap-3 overflow-x-auto">
-          <div className="flex items-center gap-2 p-1 bg-white/70 backdrop-blur-md rounded-2xl border border-slate-200/60 shadow-2xs">
+        {/* Tab Selector Segmented Control (Matching App Theme) */}
+        <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200/50">
             <button
               onClick={() => setActiveTab("ai")}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === "ai"
-                  ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md"
+                  ? "bg-primary text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -284,7 +274,7 @@ export default function NutritionView({
               onClick={() => setActiveTab("tracking")}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === "tracking"
-                  ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md"
+                  ? "bg-primary text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -296,7 +286,7 @@ export default function NutritionView({
               onClick={() => setActiveTab("safety")}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === "safety"
-                  ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md"
+                  ? "bg-primary text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -310,9 +300,9 @@ export default function NutritionView({
               setShowSafetyHandbookModal(true);
               if (onOpenSafetyHandbook) onOpenSafetyHandbook();
             }}
-            className="hidden sm:inline-flex items-center gap-1.5 bg-white/80 hover:bg-white text-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-200 shadow-2xs transition-all cursor-pointer shrink-0"
+            className="hidden sm:inline-flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-200 shadow-2xs transition-all cursor-pointer shrink-0"
           >
-            <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+            <BookOpen className="w-3.5 h-3.5 text-primary" />
             Cẩm Nang Nhi Khoa
           </button>
         </div>
@@ -342,7 +332,7 @@ export default function NutritionView({
                 <button
                   onClick={() => onGenerateWeeklyMealPlan && onGenerateWeeklyMealPlan()}
                   disabled={isGeneratingWeeklyPlan}
-                  className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-md transition-all cursor-pointer disabled:opacity-60"
+                  className="inline-flex items-center gap-2 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xs transition-all cursor-pointer disabled:opacity-60"
                 >
                   <Calendar className={`w-4 h-4 ${isGeneratingWeeklyPlan ? "animate-spin" : ""}`} />
                   {isGeneratingWeeklyPlan ? "Đang tạo thực đơn…" : "📅 Tạo Thực Đơn 7 Ngày AI"}
@@ -356,7 +346,7 @@ export default function NutritionView({
                 {/* Status Bar */}
                 <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                   <div className="flex items-center gap-2">
-                    <Award className="w-5 h-5 text-amber-500" />
+                    <Award className="w-5 h-5 text-primary" />
                     <span className="text-xs font-bold text-slate-800">
                       {weeklyMealPlan.summary || "Thực đơn dinh dưỡng chuẩn WHO cho bé"}
                     </span>
@@ -384,7 +374,7 @@ export default function NutritionView({
                         onClick={() => setSelectedMealPlanDayIndex(idx)}
                         className={`flex flex-col items-center min-w-[72px] px-3 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer border ${
                           isSelected
-                            ? "bg-primary text-white border-primary shadow-md"
+                            ? "bg-primary text-white border-primary shadow-xs"
                             : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200/60"
                         }`}
                       >
@@ -447,7 +437,7 @@ export default function NutritionView({
                     <button
                       onClick={onAcceptWeeklyMealPlan}
                       disabled={isAcceptingWeeklyPlan}
-                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-md transition-all cursor-pointer disabled:opacity-60"
+                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xs transition-all cursor-pointer disabled:opacity-60"
                     >
                       <Check className="w-4 h-4" />
                       {isAcceptingWeeklyPlan ? "Đang xử lý…" : "✓ Chấp Nhận Áp Dụng Thực Đơn Này"}
@@ -466,7 +456,7 @@ export default function NutritionView({
               </div>
             ) : (
               <div className="bg-white border border-slate-100 rounded-3xl p-12 text-center space-y-4 shadow-xs">
-                <div className="w-16 h-16 rounded-3xl bg-amber-50 text-amber-500 flex items-center justify-center mx-auto border border-amber-100">
+                <div className="w-16 h-16 rounded-3xl bg-primary/10 text-primary flex items-center justify-center mx-auto border border-primary/20">
                   <Calendar className="w-8 h-8" />
                 </div>
                 <div className="space-y-1 max-w-md mx-auto">
@@ -478,7 +468,7 @@ export default function NutritionView({
                 <button
                   onClick={() => onGenerateWeeklyMealPlan && onGenerateWeeklyMealPlan()}
                   disabled={isGeneratingWeeklyPlan}
-                  className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-5 py-3 rounded-2xl shadow-lg transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-5 py-3 rounded-2xl shadow-xs transition-all cursor-pointer"
                 >
                   <Sparkles className="w-4 h-4" />
                   Bắt Đầu Tạo Thực Đơn 7 Ngày AI
@@ -490,16 +480,16 @@ export default function NutritionView({
           {/* RIGHT SIDEBAR COLUMN (1/3): AI RECOMMENDATIONS WIDGET */}
           <div className="space-y-6">
             {/* AI Smart Food Recommendation Widget */}
-            <div className="bg-gradient-to-br from-amber-50/80 via-white to-white border border-amber-200/60 rounded-3xl p-6 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-amber-200/60 pb-3">
+            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-amber-500" />
+                  <Sparkles className="w-5 h-5 text-primary" />
                   <h3 className="text-sm font-black text-slate-800">Gợi Ý Dinh Dưỡng AI</h3>
                 </div>
                 <button
                   onClick={onGenerateRecommendation}
                   disabled={isGeneratingRecommendation}
-                  className="p-1.5 rounded-xl bg-white border border-amber-200 hover:bg-amber-100 text-amber-700 transition-all cursor-pointer"
+                  className="p-1.5 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 transition-all cursor-pointer"
                   title="Tải lại gợi ý"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingRecommendation ? "animate-spin" : ""}`} />
@@ -508,7 +498,7 @@ export default function NutritionView({
 
               {recommendation ? (
                 <div className="space-y-4">
-                  <p className="text-xs text-slate-600 font-medium leading-relaxed bg-white/80 p-3 rounded-2xl border border-amber-100">
+                  <p className="text-xs text-slate-600 font-medium leading-relaxed bg-slate-50 p-3 rounded-2xl border border-slate-100">
                     {recommendation.summary}
                   </p>
 
@@ -520,7 +510,7 @@ export default function NutritionView({
                     </h4>
                     <div className="space-y-2">
                       {recommendation.recommendedFoods.map((item, idx) => (
-                        <div key={idx} className="bg-white p-3 rounded-2xl border border-slate-100 shadow-2xs space-y-0.5">
+                        <div key={idx} className="bg-slate-50/60 p-3 rounded-2xl border border-slate-100 shadow-2xs space-y-0.5">
                           <p className="text-xs font-bold text-slate-800">{item.foodName}</p>
                           <p className="text-[11px] text-slate-500 font-medium">{item.reason}</p>
                         </div>
@@ -553,14 +543,14 @@ export default function NutritionView({
                 </div>
               ) : (
                 <div className="text-center py-6 space-y-3">
-                  <Apple className="w-8 h-8 text-amber-400 mx-auto" />
+                  <Apple className="w-8 h-8 text-primary/60 mx-auto" />
                   <p className="text-xs text-slate-500 font-medium">
                     Chưa có khuyến nghị cá nhân hóa cho bé {activeBaby.name}.
                   </p>
                   <button
                     onClick={onGenerateRecommendation}
                     disabled={isGeneratingRecommendation}
-                    className="w-full py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                    className="w-full py-2.5 rounded-2xl bg-primary hover:bg-primary/95 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
                   >
                     {isGeneratingRecommendation ? "Đang phân tích…" : "Tạo Khuyên Nghị Dinh Dưỡng AI"}
                   </button>
@@ -727,10 +717,10 @@ export default function NutritionView({
       {activeTab === "safety" && (
         <div className="space-y-6">
           {/* Quick Food Safety Search Bar */}
-          <div className="bg-gradient-to-br from-indigo-50/80 via-white to-white border border-indigo-100 rounded-3xl p-6 space-y-4 shadow-xs">
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 space-y-4 shadow-xs">
             <div className="space-y-1">
               <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                <Search className="w-4 h-4 text-indigo-600" />
+                <Search className="w-4 h-4 text-primary" />
                 Tra Cứu Nhanh Tính An Toàn Thực Phẩm Cho Bé
               </h3>
               <p className="text-xs text-slate-500 font-medium">
@@ -744,7 +734,7 @@ export default function NutritionView({
                 value={searchFoodQuery}
                 onChange={(e) => setSearchFoodQuery(e.target.value)}
                 placeholder="Ví dụ: Mật ong, Sữa chua, Hải sản, Tôm, Bánh mì..."
-                className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
               />
             </div>
           </div>
@@ -1049,12 +1039,12 @@ export default function NutritionView({
                   {safetyHandbook.sections.map((section, idx) => (
                     <div
                       key={idx}
-                      className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 space-y-1.5 text-indigo-900"
+                      className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-1.5 text-slate-800"
                     >
                       <h4 className="text-xs font-bold">{section.title}</h4>
-                      <p className="text-[11px] leading-relaxed font-medium">{section.description}</p>
+                      <p className="text-[11px] leading-relaxed font-medium text-slate-600">{section.description}</p>
                       {section.items && section.items.length > 0 && (
-                        <ul className="list-disc list-inside text-[11px] leading-relaxed font-medium space-y-0.5">
+                        <ul className="list-disc list-inside text-[11px] leading-relaxed font-medium space-y-0.5 text-slate-600">
                           {section.items.map((item, itemIdx) => (
                             <li key={itemIdx}>{item}</li>
                           ))}
