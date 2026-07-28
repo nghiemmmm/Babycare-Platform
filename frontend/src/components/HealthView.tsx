@@ -138,23 +138,6 @@ export default function HealthView({
   const [medDosage, setMedDosage] = useState("");
   const [medDoctor, setMedDoctor] = useState("Dr. Aris");
 
-  // Countdown timer for next dose (Paracetamol)
-  const [countdownSeconds, setCountdownSeconds] = useState(3600 * 3.5);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdownSeconds((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const formatCountdown = (totalSecs: number) => {
-    const hrs = Math.floor(totalSecs / 3600);
-    const mins = Math.floor((totalSecs % 3600) / 60);
-    const secs = totalSecs % 60;
-    return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  };
-
   const toggleSymptomChip = (sym: string) => {
     setSelectedSymptomChips((prev) =>
       prev.includes(sym) ? prev.filter((s) => s !== sym) : [...prev, sym]
@@ -194,11 +177,6 @@ export default function HealthView({
 
     setIncidents((prev) => [newRecord, ...prev]);
 
-    // Automatic Paracetamol Timer trigger if high fever
-    if (incidentTemp >= 38.5) {
-      setCountdownSeconds(3600 * 6);
-    }
-
     setShowAddIncident(false);
     setIncidentTitle("");
     setIncidentTemp(37.5);
@@ -223,10 +201,6 @@ export default function HealthView({
     setShowAddMed(false);
     setMedName("");
     setMedDosage("");
-
-    if (medName.toLowerCase().includes("hapacol") || medName.toLowerCase().includes("paracetamol")) {
-      setCountdownSeconds(3600 * 6);
-    }
   };
 
   const filteredIncidents = selectedSymptomFilter
@@ -275,31 +249,6 @@ export default function HealthView({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT 2 COLUMNS: INCIDENTS & SYMPTOMS LOGS */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Paracetamol Safety Dose Countdown Card */}
-          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-2xl bg-amber-50 text-amber-600 border border-amber-100">
-                <Thermometer className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-xs font-black text-slate-800">
-                  Đồng Hồ Giãn Cách Liều Hạ Sốt (Paracetamol / Hapacol)
-                </p>
-                <p className="text-[11px] text-slate-500 font-medium">
-                  {countdownSeconds > 0
-                    ? "Giãn cách an toàn 6 tiếng giữa 2 liều hạ sốt"
-                    : "✓ Đã đủ thời gian giãn cách cho liều tiếp theo nếu bé vẫn sốt >38.5°C"}
-                </p>
-              </div>
-            </div>
-
-            <div className="text-right">
-              <span className="text-lg font-black font-mono text-primary bg-primary/10 px-3 py-1.5 rounded-xl border border-primary/20">
-                {formatCountdown(countdownSeconds)}
-              </span>
-            </div>
-          </div>
-
           {/* Incident Records Section */}
           <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
@@ -579,7 +528,7 @@ export default function HealthView({
                       } else if (hasHighFever) {
                         riskLevel = "danger";
                         title = `⚠️ CẢNH BÁO SỐT CAO (${incidentTemp}°C - Chuẩn AAP/WHO)`;
-                        advice = `Dùng Paracetamol liều 10-15mg/kg cho bé ${activeBaby.name} (khoảng 75 - 100mg hoặc gói 150mg theo chỉ định). Giãn cách 4-6 tiếng/liều. Đồng hồ đếm ngược 6 tiếng sẽ tự bật sau khi lưu.`;
+                        advice = `Dùng Paracetamol liều 10-15mg/kg cho bé ${activeBaby.name} (khoảng 75 - 100mg hoặc gói 150mg theo chỉ định). Giãn cách tối thiểu 4-6 tiếng giữa 2 liều uống.`;
                       } else if (incidentTemp >= 37.5 || selectedSymptomChips.length > 0) {
                         riskLevel = "warning";
                         title = `🟡 Sốt nhẹ / Theo dõi triệu chứng (${incidentTemp}°C)`;
@@ -784,7 +733,7 @@ export default function HealthView({
                       🩺 AI Tính Liều Hạ Sốt Theo Cân Nặng Bé {activeBaby.name}:
                     </p>
                     <p className="text-[10px] leading-relaxed font-medium text-amber-800">
-                      Liều Paracetamol an toàn là 10-15mg/kg/lần (Khuyên dùng ~75 - 110mg/lần). Giãn cách tối thiểu 4-6 tiếng giữa 2 liều. Đồng hồ đếm ngược 6 tiếng sẽ tự động kích hoạt ngay sau khi lưu.
+                      Liều Paracetamol an toàn là 10-15mg/kg/lần (Khuyên dùng ~75 - 110mg/lần). Giãn cách tối thiểu 4-6 tiếng giữa 2 liều uống.
                     </p>
                   </div>
                 ) : null}
@@ -805,7 +754,7 @@ export default function HealthView({
                   type="submit"
                   className="w-full bg-primary hover:bg-primary/95 text-white py-3 rounded-2xl font-black text-xs transition-all shadow-md cursor-pointer"
                 >
-                  Lưu Đơn Thuốc & Bật Đếm Ngược Giãn Cách
+                  Lưu Đơn Thuốc Uống
                 </button>
               </form>
             </motion.div>
