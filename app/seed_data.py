@@ -186,17 +186,34 @@ def seed_database():
             "id": "inc_1",
             "baby_id": BABY_ID,
             "user_id": USER_ID,
-            "title": "Sốt nhẹ sau tiêm chủng 5-trong-1 Mũi 3",
-            "date": "2026-07-20",
-            "status": "Recovered",
-            "symptoms": "Sốt 38.2°C, quấy khóc nhẹ, sưng vồng đỏ chỗ tiêm đùi trái",
-            "treatment": "Uống Paracetamol 150mg, chườm mát, cho bú tăng cường.",
-            "doctor_notes": "Phản ứng thông thường sau tiêm chủng. Theo dõi 48h.",
+            "title": "Sốt nhẹ sau tiêm chủng 5-trong-1",
+            "date": "Hôm nay",
+            "time": "08:15 AM",
+            "status": "Confirmed",
+            "symptoms": ["🌡️ Sốt 38.2°C", "😴 Quấy khóc nhẹ", "🔴 Sưng nhẹ vết tiêm"],
+            "treatment": "Uống Paracetamol 150mg theo chỉ định, chườm ấm trán nách, cho bú tăng cường.",
+            "prescribedBy": "Bác sĩ nhi khoa Aris",
+            "temp": 38.2,
+            "created_at": now
+        },
+        {
+            "id": "inc_2",
+            "baby_id": BABY_ID,
+            "user_id": USER_ID,
+            "title": "Viêm họng cấp tính",
+            "date": "Hôm qua",
+            "time": "04:30 PM",
+            "status": "Resolved",
+            "symptoms": ["🌬️ Ho khan", "👃 Sổ mũi nhẹ", "🥵 Đau họng"],
+            "treatment": "Dùng siro ho thảo dược Prospan, nhỏ mũi nước muối sinh lý 0.9% và giữ ấm cổ.",
+            "prescribedBy": "AI Y Khoa Gợi Ý",
+            "temp": 37.8,
             "created_at": now
         }
     ]
     for inc in incidents:
         db.collection("health_incidents").document(inc["id"]).set(inc, merge=True)
+        db.collection("babies").document(BABY_ID).collection("health_records").document(inc["id"]).set(inc, merge=True)
 
     # 7. Seed Chat Threads
     logger.info("7. Seeding Cuộc trò chuyện AI ('chat_threads')...")
