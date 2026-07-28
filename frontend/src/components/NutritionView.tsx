@@ -99,6 +99,7 @@ export default function NutritionView({
   const [ingredientName, setIngredientName] = useState<string>("");
   const [ingredientCategory, setIngredientCategory] = useState<string>("Rau củ");
   const [ingredientAmount, setIngredientAmount] = useState<number>(50);
+  const [ingredientReaction, setIngredientReaction] = useState<"Loved it" | "Neutral" | "Spat out" | "Allergic Reaction">("Loved it");
 
   // Modals for AI
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
@@ -129,6 +130,7 @@ export default function NutritionView({
         name: ingredientName,
         category: ingredientCategory,
         amountG: ingredientAmount,
+        reaction: ingredientReaction,
         loggedAt: new Date().toISOString()
       });
     }
@@ -511,17 +513,26 @@ export default function NutritionView({
             icon: <Milk className="w-4 h-4 text-indigo-600" />,
             onDelete: () => onDeleteFeed && onDeleteFeed(f.id)
           })),
-          ...todayIngredients.map((i) => ({
-            id: i.id,
-            itemType: "ingredient" as const,
-            title: i.name,
-            subtitle: `${i.amountG || 0}g • ${i.category || "Ăn dặm"}`,
-            time: i.loggedAt || i.date || "",
-            note: i.reaction,
-            badgeBg: "bg-emerald-50 text-emerald-700 border-emerald-100",
-            icon: <Apple className="w-4 h-4 text-emerald-600" />,
-            onDelete: () => onDeleteIngredient && onDeleteIngredient(i.id)
-          }))
+          ...todayIngredients.map((i) => {
+            const reactionLabels: Record<string, string> = {
+              "Loved it": "😋 Rất thích",
+              "Neutral": "😐 Bình thường",
+              "Spat out": "🤢 Nhè ra",
+              "Allergic Reaction": "⚠️ Nghi ngờ dị ứng"
+            };
+            const reactionText = i.reaction ? (reactionLabels[i.reaction] || i.reaction) : null;
+            return {
+              id: i.id,
+              itemType: "ingredient" as const,
+              title: i.name,
+              subtitle: `${i.amountG || 0}g • ${i.category || "Ăn dặm"}`,
+              time: i.loggedAt || i.date || "",
+              note: reactionText,
+              badgeBg: i.reaction === "Allergic Reaction" ? "bg-rose-100 text-rose-800 border-rose-200 font-extrabold" : "bg-emerald-50 text-emerald-700 border-emerald-100",
+              icon: <Apple className="w-4 h-4 text-emerald-600" />,
+              onDelete: () => onDeleteIngredient && onDeleteIngredient(i.id)
+            };
+          })
         ].sort((a, b) => b.time.localeCompare(a.time));
 
         return (
@@ -824,6 +835,20 @@ export default function NutritionView({
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:border-primary focus:outline-hidden font-semibold"
                     required
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block">Phản ứng của bé khi thử món</label>
+                  <select
+                    value={ingredientReaction}
+                    onChange={(e) => setIngredientReaction(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:border-primary focus:outline-hidden font-semibold text-slate-800"
+                  >
+                    <option value="Loved it">😋 Rất thích / Ăn ngoan (Loved it)</option>
+                    <option value="Neutral">😐 Bình thường / Chấp nhận (Neutral)</option>
+                    <option value="Spat out">🤢 Nhè ra / Không hợp vị (Spat out)</option>
+                    <option value="Allergic Reaction">⚠️ Nghi ngờ dị ứng / Nổi mẩn (Allergic Reaction)</option>
+                  </select>
                 </div>
 
                 <button
