@@ -10,6 +10,7 @@ from fastapi import UploadFile, HTTPException, status
 from app.modules.cry.schemas import CryLogCreate, CryLogResponse
 from app.modules.cry.repository import CryRepository
 from app.modules.baby.service import BabyService
+from app.ai import CryClassifier
 from app.shared.exceptions import EntityNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,6 @@ class CryService:
         Nhận tệp ghi âm tiếng khóc, thực hiện chẩn đoán AI bằng CryClassifier (mô hình AST),
         tự động kích hoạt âm thanh dỗ bé và lưu kết quả vào Firestore.
         """
-        from app.ai import CryClassifier
         import os
         import tempfile
 

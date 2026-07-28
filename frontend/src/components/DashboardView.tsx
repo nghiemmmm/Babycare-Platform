@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { apiFetch } from "../lib/authClient";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Shield,
@@ -8,10 +7,6 @@ import {
   Settings,
   Baby,
   Moon,
-  Sun,
-  Globe,
-  Music,
-  BellRing,
   Droplet,
   Pill,
   ChevronRight,
@@ -172,60 +167,9 @@ export default function DashboardView({
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   // Quick Settings State
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [unitSystem, setUnitSystem] = useState<"metric" | "imperial">("metric");
-  const [isNightMode, setIsNightMode] = useState(false);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [autoPlayLullaby, setAutoPlayLullaby] = useState(true);
-  const [aiLanguage, setAiLanguage] = useState("vi");
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
-  // Persistent Quick Settings via LocalStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("babycare_quick_settings");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.isSoundEnabled !== undefined) setIsSoundEnabled(parsed.isSoundEnabled);
-        if (parsed.unitSystem) setUnitSystem(parsed.unitSystem);
-        if (parsed.isNightMode !== undefined) setIsNightMode(parsed.isNightMode);
-        if (parsed.pushNotifications !== undefined) setPushNotifications(parsed.pushNotifications);
-        if (parsed.autoPlayLullaby !== undefined) setAutoPlayLullaby(parsed.autoPlayLullaby);
-        if (parsed.aiLanguage) setAiLanguage(parsed.aiLanguage);
-      } catch (e) {
-        console.warn("Error loading quick settings from localStorage:", e);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "babycare_quick_settings",
-      JSON.stringify({
-        isSoundEnabled,
-        unitSystem,
-        isNightMode,
-        pushNotifications,
-        autoPlayLullaby,
-        aiLanguage
-      })
-    );
-  }, [isSoundEnabled, unitSystem, isNightMode, pushNotifications, autoPlayLullaby, aiLanguage]);
-
-  // Unit conversion helpers
-  const formatVolume = (ml: number) => {
-    if (unitSystem === "imperial") {
-      return `${(ml / 29.5735).toFixed(1)} oz`;
-    }
-    return `${Math.round(ml)} ml`;
-  };
-
-  const formatWeightVal = (kg: number) => {
-    if (unitSystem === "imperial") {
-      return `${(kg * 2.20462).toFixed(1)} lbs`;
-    }
-    return `${kg} kg`;
-  };
 
   // Voice Extraction Loading State
   const [isExtractingVoice, setIsExtractingVoice] = useState(false);
@@ -291,8 +235,11 @@ export default function DashboardView({
         }
       }
 
-      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/cry-prediction`, {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      const token = localStorage.getItem("token") || "mock-token";
+      const res = await fetch(`${baseUrl}/api/v1/babies/${activeBaby.id}/cry-prediction`, {
         method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
 
@@ -302,13 +249,12 @@ export default function DashboardView({
         const labels: Record<string, string> = {
           hungry: "Khóc do Đói 🍼",
           tired: "Khóc do Gắt ngủ 🥱",
-          pain: "Khóc do Đau bụng 😣",
+          pain: "Khóc do Đau/Đầy hơi 😣",
           burp: "Khóc do Cần ợ hơi 💨",
+          diaper: "Khóc do Bẩn tã 💩",
           discomfort: "Khóc do Khó chịu 🌡️",
           lonely: "Khóc do Cần bế/Cô đơn 🫂",
-          cold_hot: "Khóc do Quá nóng/Lạnh 🌡️",
-          scared: "Khóc do Giật mình/Sợ hãi 😨",
-          unknown: "Chưa rõ nguyên nhân ❓"
+          scared: "Khóc do Giật mình/Sợ hãi 😨"
         };
         const soundPath = data.sound_played || "/static/sounds/lullabies/classic_lullaby.mp3";
 
@@ -338,8 +284,11 @@ export default function DashboardView({
     setCryFeedback(accurate ? "accurate" : "inaccurate");
     if (cryResult?.logId) {
       try {
-        await apiFetch(`/api/v1/babies/${activeBaby.id}/cry-prediction/${cryResult.logId}/feedback?feedback_accurate=${accurate}`, {
-          method: "PATCH"
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+        const token = localStorage.getItem("token");
+        await fetch(`${baseUrl}/api/v1/babies/${activeBaby.id}/cry-prediction/${cryResult.logId}/feedback?feedback_accurate=${accurate}`, {
+          method: "PATCH",
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
       } catch (e) {
         console.error("Error submitting cry feedback:", e);
@@ -662,7 +611,7 @@ export default function DashboardView({
   });
 
   return (
-    <div className={`space-y-6 transition-all duration-300 ${isNightMode ? "bg-slate-900/95 text-slate-100 p-6 rounded-3xl shadow-2xl border border-slate-800" : ""}`} id="dashboard-view">
+    <div className="space-y-6" id="dashboard-view">
       
       {/* Floating Toast Notification (Success & Error) */}
       <AnimatePresence>
@@ -807,16 +756,15 @@ export default function DashboardView({
                     className="fixed inset-0 z-40"
                     onClick={() => setIsSettingsOpen(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-80 bg-white/95 backdrop-blur-xl border border-white/50 rounded-2xl shadow-xl p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="absolute right-0 mt-2 w-72 bg-white/95 backdrop-blur-xl border border-white/50 rounded-2xl shadow-xl p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
                     <h4 className="text-xs font-bold text-slate-800 flex items-center gap-2">
                       <Settings className="w-4 h-4 text-[#1c648e]" />
                       Cài đặt nhanh
                     </h4>
-                    <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">BabyCare AI v1.0</span>
                   </div>
 
-                  <div className="space-y-3 text-xs max-h-[380px] overflow-y-auto pr-1">
+                  <div className="space-y-3 text-xs">
                     {/* Sound Alert Toggle */}
                     <div className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-2 text-slate-700 font-medium">
@@ -835,92 +783,6 @@ export default function DashboardView({
                           }`}
                         />
                       </button>
-                    </div>
-
-                    {/* Push Notifications Toggle */}
-                    <div className="flex items-center justify-between py-1">
-                      <div className="flex items-center gap-2 text-slate-700 font-medium">
-                        <BellRing className={`w-4 h-4 ${pushNotifications ? "text-amber-500" : "text-slate-400"}`} />
-                        <span>Thông báo đẩy tức thì</span>
-                      </div>
-                      <button
-                        onClick={() => setPushNotifications(!pushNotifications)}
-                        className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                          pushNotifications ? "bg-[#1c648e]" : "bg-slate-300"
-                        }`}
-                      >
-                        <div
-                          className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${
-                            pushNotifications ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* Auto Play Lullaby on Cry Toggle */}
-                    <div className="flex items-center justify-between py-1">
-                      <div className="flex items-center gap-2 text-slate-700 font-medium">
-                        <Music className={`w-4 h-4 ${autoPlayLullaby ? "text-purple-500" : "text-slate-400"}`} />
-                        <span>Tự dỗ bé khi khóc</span>
-                      </div>
-                      <button
-                        onClick={() => setAutoPlayLullaby(!autoPlayLullaby)}
-                        className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                          autoPlayLullaby ? "bg-[#1c648e]" : "bg-slate-300"
-                        }`}
-                      >
-                        <div
-                          className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${
-                            autoPlayLullaby ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* Night Mode Toggle */}
-                    <div className="flex items-center justify-between py-1">
-                      <div className="flex items-center gap-2 text-slate-700 font-medium">
-                        {isNightMode ? <Moon className="w-4 h-4 text-indigo-500" /> : <Sun className="w-4 h-4 text-amber-500" />}
-                        <span>Chế độ dịu mắt ban đêm</span>
-                      </div>
-                      <button
-                        onClick={() => setIsNightMode(!isNightMode)}
-                        className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                          isNightMode ? "bg-[#1c648e]" : "bg-slate-300"
-                        }`}
-                      >
-                        <div
-                          className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${
-                            isNightMode ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* AI Language Selector */}
-                    <div className="flex items-center justify-between py-1 border-t border-slate-100 pt-2">
-                      <div className="flex items-center gap-2 text-slate-700 font-medium">
-                        <Globe className="w-4 h-4 text-sky-500" />
-                        <span>Ngôn ngữ AI</span>
-                      </div>
-                      <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                        <button
-                          onClick={() => setAiLanguage("vi")}
-                          className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
-                            aiLanguage === "vi" ? "bg-white text-[#1c648e] shadow-xs" : "text-slate-500"
-                          }`}
-                        >
-                          🇻🇳 VI
-                        </button>
-                        <button
-                          onClick={() => setAiLanguage("en")}
-                          className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
-                            aiLanguage === "en" ? "bg-white text-[#1c648e] shadow-xs" : "text-slate-500"
-                          }`}
-                        >
-                          🇬🇧 EN
-                        </button>
-                      </div>
                     </div>
 
                     {/* Unit System Selector */}
@@ -1388,13 +1250,10 @@ export default function DashboardView({
                 <p className="text-[11px] text-blue-700 leading-relaxed">
                   {activeBaby.name} đã được {calculateAgeStr(activeBaby.birthDate) === "0 days" ? "mới sinh" : calculateAgeStr(activeBaby.birthDate).replace("months", "tháng").replace("days", "ngày")} hôm nay! Thời điểm hoàn hảo để bắt đầu làm quen với các món nghiền như bơ hoặc khoai lang nghiền.
                 </p>
-                <button
-                  onClick={() => onNavigateTab?.("nutrition")}
-                  className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer border-0 bg-transparent p-0"
-                >
+                <a href="#" className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors">
                   Xem hướng dẫn
                   <ArrowRight className="w-3 h-3" />
-                </button>
+                </a>
               </div>
 
               {/* Insight 2 */}
@@ -1408,17 +1267,8 @@ export default function DashboardView({
                 <p className="text-[11px] text-rose-700 leading-relaxed">
                   Khuyên dùng liều Vitamin D tiếp theo vào khoảng 4:00 chiều (trong 45 phút nữa).
                 </p>
-                <div className="flex items-center justify-between">
-                  <div className="text-[9px] font-bold text-rose-500 bg-white border border-rose-100 rounded px-2 py-0.5 inline-block">
-                    HÔM NAY 4:00 CHIỀU
-                  </div>
-                  <button
-                    onClick={() => onNavigateTab?.("health")}
-                    className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-rose-800 transition-colors cursor-pointer border-0 bg-transparent p-0"
-                  >
-                    Xem lịch thuốc
-                    <ArrowRight className="w-3 h-3" />
-                  </button>
+                <div className="text-[9px] font-bold text-rose-500 bg-white border border-rose-100 rounded px-2 py-0.5 inline-block">
+                  HÔM NAY 4:00 CHIỀU
                 </div>
               </div>
             </div>
