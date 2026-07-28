@@ -258,7 +258,7 @@ export default function HealthView({
             className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-4 py-2.5 rounded-2xl transition-all shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            + Thêm Bệnh Án Nhanh
+            Thêm Bệnh Án
           </button>
 
           <button
@@ -266,7 +266,7 @@ export default function HealthView({
             className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-2xl transition-all shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            + Thêm Thuốc
+            Thêm Thuốc
           </button>
         </div>
       </div>
