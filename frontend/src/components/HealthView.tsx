@@ -238,6 +238,16 @@ export default function HealthView({
     setMedDosage("");
   };
 
+  const toggleIncidentStatus = (id: string) => {
+    setIncidents((prev) =>
+      prev.map((inc) =>
+        inc.id === id
+          ? { ...inc, status: inc.status === "Confirmed" ? "Resolved" : "Confirmed" }
+          : inc
+      )
+    );
+  };
+
   const filteredIncidents = selectedSymptomFilter
     ? incidents.filter((inc) => inc.symptoms.some((s) => s.includes(selectedSymptomFilter)))
     : incidents;
@@ -354,15 +364,28 @@ export default function HealthView({
                         )}
                       </div>
 
-                      <span
-                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                      <button
+                        type="button"
+                        onClick={() => toggleIncidentStatus(inc.id)}
+                        className={`text-[10px] font-bold px-3 py-1 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
                           inc.status === "Confirmed"
-                            ? "bg-amber-100 text-amber-800 border border-amber-200"
-                            : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            ? "bg-amber-50 hover:bg-emerald-50 text-amber-800 hover:text-emerald-800 border-amber-200 hover:border-emerald-300"
+                            : "bg-emerald-100 text-emerald-800 border-emerald-200 shadow-2xs"
                         }`}
+                        title={inc.status === "Confirmed" ? "Bấm để đánh dấu Bé đã khỏi bệnh" : "Bé đã khỏi bệnh"}
                       >
-                        {inc.status === "Confirmed" ? "Đang theo dõi" : "Đã khỏi bệnh ✓"}
-                      </span>
+                        {inc.status === "Confirmed" ? (
+                          <>
+                            <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                            <span>Đang theo dõi • Bấm khi khỏi</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span>Đã khỏi bệnh ✓</span>
+                          </>
+                        )}
+                      </button>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5">
