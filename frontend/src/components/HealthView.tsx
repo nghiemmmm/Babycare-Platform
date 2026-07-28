@@ -72,6 +72,23 @@ const QUICK_TREATMENTS = [
   "🩺 Khám bác sĩ nhi khoa"
 ];
 
+const PRESET_MEDICATIONS = [
+  { name: "Hapacol 150mg / Paracetamol", dosage: "1 gói (150mg)", doctor: "Dr. Aris (Nhi khoa)" },
+  { name: "Vitamin D3 K2 Drops", dosage: "2 giọt", doctor: "Bác sĩ nhi khoa" },
+  { name: "Siro Ho Thảo Dược Prospan", dosage: "2.5 ml", doctor: "Dr. Aris (Nhi khoa)" },
+  { name: "Oresol Bù Điện Giải", dosage: "100 ml", doctor: "Dược sĩ tư vấn" },
+  { name: "Men Vi Sinh Probiotics", dosage: "1 gói", doctor: "Dr. Aris (Nhi khoa)" }
+];
+
+const COMMON_DOSAGES = [
+  "1 gói (150mg)",
+  "2.5 ml",
+  "5.0 ml",
+  "2 giọt",
+  "1 ống (5ml)",
+  "1/2 gói (75mg)"
+];
+
 export default function HealthView({
   activeBaby,
   medications,
@@ -515,58 +532,56 @@ export default function HealthView({
                     ))}
                   </div>
 
-                  {/* Real-time AI Risk Assessment & Medical Guidance (WHO/AAP) */}
+                  {/* Comprehensive Multi-Factor AI Risk Assessment (WHO/AAP) */}
                   <div className="pt-1">
-                    {incidentTemp < 37.5 && (
-                      <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl space-y-1 text-emerald-900">
-                        <p className="text-xs font-bold flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                          🩺 AI Đánh Giá Nguy Cơ: Thân nhiệt an toàn ({incidentTemp}°C)
-                        </p>
-                        <p className="text-[11px] leading-relaxed font-medium text-emerald-800">
-                          Thân nhiệt của bé ở mức bình thường. Khuyên phụ huynh tiếp tục cho bé bú đủ cữ, duy trì phòng thoáng mát và theo dõi sinh hoạt.
-                        </p>
-                      </div>
-                    )}
+                    {(() => {
+                      const hasHighFever = incidentTemp >= 38.5;
+                      const hasEmergencySymptom = selectedSymptomChips.some((s) => s.includes("Co giật") || s.includes("Nôn") || s.includes("Khó thở"));
+                      const hasAllergySymptom = selectedSymptomChips.some((s) => s.includes("Nổi mẩn"));
 
-                    {incidentTemp >= 37.5 && incidentTemp < 38.5 && (
-                      <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl space-y-1 text-amber-900">
-                        <p className="text-xs font-bold flex items-center gap-1.5">
-                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                          🩺 AI Đánh Giá Nguy Cơ: Sốt nhẹ ({incidentTemp}°C - Chuẩn WHO)
-                        </p>
-                        <p className="text-[11px] leading-relaxed font-medium text-amber-800">
-                          Chưa cần dùng thuốc hạ sốt. Khuyên dùng khăn ấm chườm trán, nách, bẹn; cho bé uống nhiều nước/sữa và đo lại nhiệt độ sau 30 phút.
-                        </p>
-                      </div>
-                    )}
+                      let riskLevel: "safe" | "warning" | "danger" | "emergency" = "safe";
+                      let title = `Thân nhiệt ${incidentTemp}°C - An toàn`;
+                      let advice = `Thân nhiệt bé ở mức bình thường. Khuyên phụ huynh cho bé bú đủ cữ, duy trì phòng thoáng mát và theo dõi sinh hoạt.`;
 
-                    {incidentTemp >= 38.5 && incidentTemp < 39.5 && (
-                      <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl space-y-1.5 text-rose-900">
-                        <p className="text-xs font-black flex items-center gap-1.5 text-rose-800">
-                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 animate-pulse" />
-                          🩺 AI Đánh Giá Nguy Cơ: SỐT CAO ({incidentTemp}°C - Chuẩn AAP/WHO)
-                        </p>
-                        <p className="text-[11px] leading-relaxed font-medium text-rose-800">
-                          Khuyên dùng Paracetamol liều 10 - 15mg/kg cân nặng (Cho bé {activeBaby.name}: liều khoảng 75 - 100mg hoặc 1 gói Paracetamol 150mg theo chỉ định). Giãn cách tối thiểu 4 - 6 tiếng/liều.
-                        </p>
-                        <p className="text-[10px] font-bold text-rose-700 bg-rose-100/80 px-2.5 py-1 rounded-lg">
-                          ⏱️ Hệ thống sẽ tự động bật đồng hồ đếm ngược 6 tiếng cho liều kế tiếp ngay khi lưu form này.
-                        </p>
-                      </div>
-                    )}
+                      if (hasEmergencySymptom || incidentTemp >= 39.5) {
+                        riskLevel = "emergency";
+                        title = `🚨 CẢNH BÁO NGUY HIỂM CẤP CỨU (${incidentTemp}°C + Triệu chứng cấp tính)`;
+                        advice = `Bé có dấu hiệu cần đưa đi viện cấp cứu (${selectedSymptomChips.join(", ") || "Sốt cực cao >39.5°C"}). Cần đưa bé đến Bệnh viện Nhi gần nhất ngay lập tức! Cởi bớt quần áo, chườm ấm liên tục khi di chuyển.`;
+                      } else if (hasHighFever) {
+                        riskLevel = "danger";
+                        title = `⚠️ CẢNH BÁO SỐT CAO (${incidentTemp}°C - Chuẩn AAP/WHO)`;
+                        advice = `Dùng Paracetamol liều 10-15mg/kg cho bé ${activeBaby.name} (khoảng 75 - 100mg hoặc gói 150mg theo chỉ định). Giãn cách 4-6 tiếng/liều. Đồng hồ đếm ngược 6 tiếng sẽ tự bật sau khi lưu.`;
+                      } else if (incidentTemp >= 37.5 || selectedSymptomChips.length > 0) {
+                        riskLevel = "warning";
+                        title = `🟡 Sốt nhẹ / Theo dõi triệu chứng (${incidentTemp}°C)`;
+                        advice = `Triệu chứng ghi nhận: ${selectedSymptomChips.join(", ") || "Sốt nhẹ"}. Chưa cần dùng hạ sốt. Chườm ấm trán nách bẹn, cho bé uống nhiều nước/sữa và đo lại sau 30 phút.`;
+                      }
 
-                    {incidentTemp >= 39.5 && (
-                      <div className="bg-rose-100 border border-rose-300 p-3 rounded-xl space-y-1.5 text-rose-950 animate-pulse">
-                        <p className="text-xs font-black flex items-center gap-1.5 text-rose-900">
-                          <AlertCircle className="w-4 h-4 text-rose-700 shrink-0" />
-                          🚨 CẢNH BÁO NGUY HIỂM: SỐT NGUY HẠI ({incidentTemp}°C)
-                        </p>
-                        <p className="text-[11px] leading-relaxed font-bold text-rose-900">
-                          Cần đưa bé đến cơ sở y tế / Bệnh viện Nhi gần nhất ngay lập tức! Cởi bớt quần áo, chườm ấm liên tục toàn thân trong lúc di chuyển.
-                        </p>
-                      </div>
-                    )}
+                      if (hasAllergySymptom && activeBaby.allergies && activeBaby.allergies.length > 0) {
+                        advice += ` ⚠️ Lưu ý tiền sử dị ứng của bé (${activeBaby.allergies.join(", ")}): Kiểm tra kĩ thành phần thuốc trước khi cho bé uống.`;
+                      }
+
+                      return (
+                        <div
+                          className={`p-3.5 rounded-2xl border space-y-1.5 transition-all ${
+                            riskLevel === "emergency"
+                              ? "bg-rose-100 border-rose-300 text-rose-950 animate-pulse"
+                              : riskLevel === "danger"
+                              ? "bg-rose-50 border-rose-200 text-rose-900"
+                              : riskLevel === "warning"
+                              ? "bg-amber-50 border-amber-200 text-amber-900"
+                              : "bg-emerald-50 border-emerald-200 text-emerald-900"
+                          }`}
+                        >
+                          <p className="text-xs font-black flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4 text-primary shrink-0" />
+                            🩺 AI Đánh Giá Nguy Cơ & Lời Khuyên Y Khoa (WHO/AAP):
+                          </p>
+                          <p className="text-xs font-bold">{title}</p>
+                          <p className="text-[11px] leading-relaxed font-medium opacity-90">{advice}</p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -641,62 +656,127 @@ export default function HealthView({
           </div>
         )}
 
-        {/* ADD MEDICATION MODAL */}
+        {/* SMART ADD MEDICATION MODAL */}
         {showAddMed && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
+              className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-800">Ghi nhận liều dùng thuốc</h3>
-                <button onClick={() => setShowAddMed(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <Pill className="w-5 h-5 text-primary" />
+                  <h3 className="text-sm font-black text-slate-800">
+                    Ghi Nhận Đơn Thuốc Cho Bé
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowAddMed(false)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
                   Hủy
                 </button>
               </div>
 
+              {/* ⚡ PRESET MEDICATIONS */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  ⚡ Mẫu thuốc nhi khoa thông dụng:
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESET_MEDICATIONS.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setMedName(preset.name);
+                        setMedDosage(preset.dosage);
+                        setMedDoctor(preset.doctor);
+                      }}
+                      className="text-[11px] font-bold bg-slate-100 hover:bg-primary/10 hover:text-primary text-slate-700 px-3 py-1.5 rounded-xl border border-slate-200 transition-all cursor-pointer"
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <form onSubmit={handleAddMedSubmit} className="space-y-4 text-xs font-bold text-slate-600">
+                {/* Medication Name */}
                 <div className="space-y-1">
-                  <label className="block">Tên thuốc</label>
+                  <label className="block">Tên loại thuốc</label>
                   <input
                     type="text"
                     required
                     value={medName}
                     onChange={(e) => setMedName(e.target.value)}
-                    placeholder="Ví dụ: Hapacol 150mg"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium text-slate-800"
+                    placeholder="Ví dụ: Hapacol 150mg, Vitamin D3 K2..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block">Liều lượng</label>
+                {/* Dosage Field & Quick Chips */}
+                <div className="space-y-1.5">
+                  <label className="block">Liều lượng uống</label>
                   <input
                     type="text"
                     required
                     value={medDosage}
                     onChange={(e) => setMedDosage(e.target.value)}
-                    placeholder="Ví dụ: 150mg, 2 giọt, 5ml"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium text-slate-800"
+                    placeholder="Ví dụ: 1 gói (150mg), 2.5ml, 2 giọt..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   />
+
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {COMMON_DOSAGES.map((dosageChip) => (
+                      <button
+                        key={dosageChip}
+                        type="button"
+                        onClick={() => setMedDosage(dosageChip)}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${
+                          medDosage === dosageChip
+                            ? "bg-primary text-white border-primary shadow-xs"
+                            : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        {dosageChip}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
+                {/* AI Weight-Based Dosage Hint */}
+                {medName.toLowerCase().includes("hapacol") || medName.toLowerCase().includes("paracetamol") ? (
+                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl space-y-1 text-amber-900">
+                    <p className="text-[11px] font-bold flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      🩺 AI Tính Liều Hạ Sốt Theo Cân Nặng Bé {activeBaby.name}:
+                    </p>
+                    <p className="text-[10px] leading-relaxed font-medium text-amber-800">
+                      Liều Paracetamol an toàn là 10-15mg/kg/lần (Khuyên dùng ~75 - 110mg/lần). Giãn cách tối thiểu 4-6 tiếng giữa 2 liều. Đồng hồ đếm ngược 6 tiếng sẽ tự động kích hoạt ngay sau khi lưu.
+                    </p>
+                  </div>
+                ) : null}
+
+                {/* Prescribed By */}
                 <div className="space-y-1">
-                  <label className="block">Người kê đơn</label>
+                  <label className="block">Bác sĩ kê đơn / Nguồn chỉ định</label>
                   <input
                     type="text"
                     value={medDoctor}
                     onChange={(e) => setMedDoctor(e.target.value)}
+                    placeholder="Ví dụ: Dr. Aris (Nhi khoa), Phụ huynh..."
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium text-slate-800"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                  className="w-full bg-primary hover:bg-primary/95 text-white py-3 rounded-2xl font-black text-xs transition-all shadow-md cursor-pointer"
                 >
-                  Lưu Nhật ký dùng thuốc
+                  Lưu Đơn Thuốc & Bật Đếm Ngược Giãn Cách
                 </button>
               </form>
             </motion.div>
