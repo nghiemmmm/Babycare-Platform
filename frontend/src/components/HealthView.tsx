@@ -243,10 +243,10 @@ export default function HealthView({
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Sức Khỏe & Lịch Dùng Thuốc
+              Sổ Theo Dõi Sức Khỏe & Y Tế
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Theo dõi y tế và đếm ngược liều hạ sốt an toàn cho bé{" "}
+              Nhật ký theo dõi bệnh trạng, lịch dùng thuốc và đếm ngược liều hạ sốt cho bé{" "}
               <span className="font-bold text-slate-800">{activeBaby.name}</span>
             </p>
           </div>
@@ -258,7 +258,7 @@ export default function HealthView({
             className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-4 py-2.5 rounded-2xl transition-all shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            Thêm Bệnh Án
+            Thêm Ghi Chép Sức Khỏe
           </button>
 
           <button
@@ -266,7 +266,7 @@ export default function HealthView({
             className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-2xl transition-all shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            Thêm Thuốc
+            Thêm Thuốc Uống
           </button>
         </div>
       </div>
@@ -283,7 +283,7 @@ export default function HealthView({
               </div>
               <div>
                 <p className="text-xs font-black text-slate-800">
-                  Đếm Ngược Liều Hạ Sốt Tiếp Theo (Paracetamol / Hapacol)
+                  Đồng Hồ Giãn Cách Liều Hạ Sốt (Paracetamol / Hapacol)
                 </p>
                 <p className="text-[11px] text-slate-500 font-medium">
                   {countdownSeconds > 0
@@ -305,7 +305,7 @@ export default function HealthView({
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-primary" />
-                Lịch Sử Sự Cố Sức Khỏe & Triệu Chứng
+                Nhật Ký Bệnh Trạng & Triệu Chứng
               </h3>
 
               <span className="text-xs font-bold text-slate-400">
@@ -431,7 +431,7 @@ export default function HealthView({
           <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-3">
             <h3 className="text-xs font-black text-rose-600 uppercase tracking-wider flex items-center gap-1.5">
               <AlertCircle className="w-4 h-4 text-rose-500" />
-              Dị Ứng & Cảnh Báo Y Khoa Cho Bé
+              Lưu Ý Dị Ứng & Tiền Sử Y Tế
             </h3>
             <div className="p-3.5 bg-rose-50/70 border border-rose-100 rounded-2xl space-y-2">
               <div className="flex flex-wrap gap-1.5">
@@ -459,7 +459,7 @@ export default function HealthView({
       </div>
 
       {/* ========================================================================= */}
-      {/* 🚀 ULTRA-SUPPORTIVE 1-TOUCH SMART ADD INCIDENT MODAL */}
+      {/* 🚀 ULTRA-SUPPORTIVE SMART ADD INCIDENT MODAL */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {showAddIncident && (
@@ -475,7 +475,7 @@ export default function HealthView({
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-primary" />
                   <h3 className="text-sm font-black text-slate-800">
-                    Ghi Nhận Bệnh Án / Sự Cố Thông Minh
+                    Thêm Ghi Chép Sức Khỏe Cho Bé
                   </h3>
                 </div>
                 <button
