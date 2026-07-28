@@ -4,7 +4,7 @@
 
 🔑 Thông tin Đăng nhập Mới:
 Email: nghiem@babycare.com
-Mật khẩu: Nghiem1234
+Mật khẩu:  
 Tên hiển thị: Minh Anh (Mẹ bé Leo)
 👶 Dữ liệu mẫu trên Firebase Firestore:
 Hồ sơ 2 em bé:
