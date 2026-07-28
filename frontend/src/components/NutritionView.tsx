@@ -400,34 +400,84 @@ export default function NutritionView({
             </motion.div>
           )}
 
-          {/* --- FOOD SAFETY ALERTS SECTION --- */}
-          {nutritionSafety && (
-            <div className="bg-rose-50/50 border border-rose-100 rounded-3xl p-6 space-y-4">
-              <div className="flex items-center gap-2 text-rose-800">
+          {/* --- FOOD SAFETY ALERTS & ALLERGEN CHECKER SECTION (ALWAYS VISIBLE) --- */}
+          <div className="bg-gradient-to-br from-rose-50/70 via-amber-50/40 to-white border border-rose-100 rounded-3xl p-6 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-rose-100/80 pb-3">
+              <div className="flex items-center gap-2">
                 <ShieldAlert className="w-5 h-5 text-rose-600" />
-                <h3 className="text-sm font-bold">Cảnh Báo An Toàn Thực Phẩm Chuẩn WHO & Dị Ứng</h3>
+                <h3 className="text-sm font-black text-slate-800">
+                  Cảnh Báo An Toàn Thực Phẩm Chuẩn WHO & Kiểm Tra Dị Ứng
+                </h3>
+              </div>
+              <span className="text-[10px] font-bold text-rose-700 bg-rose-100/80 px-2.5 py-1 rounded-full">
+                Tiêu chuẩn Y tế Nhi khoa WHO
+              </span>
+            </div>
+
+            {/* Allergen Check for Active Baby */}
+            <div className="bg-white rounded-2xl p-4 border border-rose-100 shadow-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  Tiền sử dị ứng ghi nhận cho bé {activeBaby.name}:
+                </p>
+                <span className="text-[10px] font-bold text-slate-400">Từ hồ sơ y tế</span>
               </div>
 
-              {nutritionSafety.allergenAlerts?.hasAlert && (
-                <div className="bg-white/80 rounded-2xl p-4 border border-rose-200 text-xs font-semibold text-rose-700 space-y-1">
-                  <p className="font-bold flex items-center gap-1.5 text-rose-800">
-                    <AlertTriangle className="w-4 h-4 text-rose-600" />
-                    Cảnh báo tiền sử dị ứng của bé {activeBaby.name}:
+              {activeBaby.allergies && activeBaby.allergies.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {activeBaby.allergies.map((allergy, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-200 text-xs font-bold px-3 py-1 rounded-xl"
+                    >
+                      ⚠️ {allergy}
+                    </span>
+                  ))}
+                  <p className="text-[11px] text-rose-600 font-medium w-full mt-1">
+                    Cảnh báo: Tuyệt đối tránh cho bé ăn các món chứa {activeBaby.allergies.join(", ")} hoặc các chế phẩm liên quan.
                   </p>
-                  <p>{nutritionSafety.allergenAlerts.warningMessage}</p>
                 </div>
+              ) : (
+                <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-100">
+                  ✓ Hồ sơ bé hiện chưa ghi nhận tiền sử dị ứng thực phẩm đặc biệt nào.
+                </p>
               )}
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {nutritionSafety.foodsToAvoid.map((item, idx) => (
-                  <div key={idx} className="bg-white rounded-2xl p-3.5 border border-rose-100 space-y-1">
-                    <p className="text-xs font-bold text-slate-800">{item.name}</p>
-                    <p className="text-[11px] text-slate-500 font-medium">{item.reason}</p>
-                  </div>
-                ))}
+            {/* WHO Food Safety Rules for Infants */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-700">
+                🚫 Thực phẩm nguy hiểm CẤM DÙNG cho trẻ dưới 1 tuổi (Chuẩn WHO):
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-white rounded-2xl p-3.5 border border-rose-100 space-y-1">
+                  <p className="text-xs font-bold text-rose-700">🍯 Mật ong nguyên chất</p>
+                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                    Nguy cơ ngộ độc bào tử vi khuẩn *Clostridium botulinum* ở ruột trẻ dưới 12 tháng.
+                  </p>
+                </div>
+                <div className="bg-white rounded-2xl p-3.5 border border-rose-100 space-y-1">
+                  <p className="text-xs font-bold text-rose-700">🧂 Muối & Đường nêm</p>
+                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                    Không nêm gia vị muối/đường vào đồ ăn dặm để tránh gây quá tải cho thận của bé.
+                  </p>
+                </div>
+                <div className="bg-white rounded-2xl p-3.5 border border-rose-100 space-y-1">
+                  <p className="text-xs font-bold text-rose-700">🥛 Sữa bò tươi nguyên kem</p>
+                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                    Đạm và khoáng chất quá cao khó tiêu hóa, không thay thế sữa mẹ/sữa công thức.
+                  </p>
+                </div>
+                <div className="bg-white rounded-2xl p-3.5 border border-rose-100 space-y-1">
+                  <p className="text-xs font-bold text-rose-700">🥜 Hạt nguyên hạt / Nhãn</p>
+                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                    Tránh thực phẩm hình tròn, cứng, dễ gây tắc đường thở và hóc dị vật nguy hiểm.
+                  </p>
+                </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
 
