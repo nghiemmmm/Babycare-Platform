@@ -725,18 +725,6 @@ export default function HealthView({
                   </div>
                 </div>
 
-                {/* Prescribed By */}
-                <div className="space-y-1">
-                  <label className="block">Bác sĩ kê đơn / Nguồn chỉ định</label>
-                  <input
-                    type="text"
-                    value={medDoctor}
-                    onChange={(e) => setMedDoctor(e.target.value)}
-                    placeholder="Ví dụ: Dr. Aris (Nhi khoa), Phụ huynh..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium text-slate-800"
-                  />
-                </div>
-
                 <button
                   type="submit"
                   className="w-full bg-primary hover:bg-primary/95 text-white py-3 rounded-2xl font-black text-xs transition-all shadow-md cursor-pointer"
