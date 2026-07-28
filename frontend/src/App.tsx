@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { useNavigate } from "react-router-dom";
 import {
   Heart,
   LayoutDashboard,
@@ -15,8 +16,8 @@ import {
   Menu,
   X,
   Shield,
-  Clock,
-  BookOpen
+  LogOut,
+  ClipboardList
 } from "lucide-react";
 
 import {
@@ -28,33 +29,33 @@ import {
   FeedLog,
   IngredientLog,
   ChatMessage,
-  SmartExtraction
+  SmartExtraction,
+  NutritionRecommendation,
+  WeeklyMealPlan,
+  NutritionSafety,
+  SafetyHandbook
 } from "./types";
 
+import { useAuth } from "./auth/AuthContext";
+import { apiFetch } from "./lib/authClient";
 
 import DashboardView from "./components/DashboardView";
 import GrowthView from "./components/GrowthView";
 import AiHubView from "./components/AiHubView";
 import ProfileView from "./components/ProfileView";
 import NutritionView from "./components/NutritionView";
-import HealthView from "./components/HealthView";
 import LogsView from "./components/LogsView";
-
-const apiFetch = async (path: string, options: RequestInit = {}) => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-  const cleanPath = path.startsWith("/") ? path : `/${path}`;
-  const url = `${baseUrl}${cleanPath}`;
-  const headers = new Headers(options.headers);
-  if (!headers.has("Authorization")) {
-    headers.set("Authorization", "Bearer mock-token");
-  }
-  return fetch(url, {
-    ...options,
-    headers,
-  });
-};
+import HealthView from "./components/HealthView";
 
 export default function App() {
+  const { email, name, logout } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate("/login", { replace: true });
+  }
+
   // Core persistent states backed by Backend APIs
   const [babies, setBabies] = useState<BabyProfile[]>([]);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
@@ -63,11 +64,19 @@ export default function App() {
   const [feeds, setFeeds] = useState<FeedLog[]>([]);
   const [ingredients, setIngredients] = useState<IngredientLog[]>([]);
   const [chats, setChats] = useState<ChatMessage[]>([]);
+  const [nutritionRecommendation, setNutritionRecommendation] = useState<NutritionRecommendation | null>(null);
+  const [isGeneratingRecommendation, setIsGeneratingRecommendation] = useState(false);
+  const [weeklyMealPlan, setWeeklyMealPlan] = useState<WeeklyMealPlan | null>(null);
+  const [isGeneratingWeeklyPlan, setIsGeneratingWeeklyPlan] = useState(false);
+  const [isAcceptingWeeklyPlan, setIsAcceptingWeeklyPlan] = useState(false);
   const [threads, setThreads] = useState<Array<{ id: string; title: string }>>([]);
   const [activeThreadId, setActiveThreadId] = useState<string>("thread_default");
+  const [nutritionSafety, setNutritionSafety] = useState<NutritionSafety | null>(null);
+  const [safetyHandbook, setSafetyHandbook] = useState<SafetyHandbook | null>(null);
+  const [isLoadingSafetyHandbook, setIsLoadingSafetyHandbook] = useState(false);
 
   // App UI state
-  const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health" | "logs">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health" | "log">("dashboard");
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -82,6 +91,13 @@ export default function App() {
 
   // Active Baby helper
   const activeBaby = babies.find((b) => b.isActive) || babies[0];
+  const hasBaby = Boolean(activeBaby);
+
+  // Onboarding: tài khoản vừa đăng ký chưa có hồ sơ bé nào - đưa thẳng vào tab "Hồ sơ bé" để
+  // nhập thông tin, vì mọi tab khác (Dashboard, Tăng trưởng, AI, Dinh dưỡng, Sức khỏe) đều đọc
+  // activeBaby.* không có kiểm tra null nên sẽ crash nếu chưa có bé nào. Chỉ tự chuyển tab một
+  // lần lúc mới bootstrap xong với 0 bé - không ảnh hưởng người dùng cũ chủ động vào tab Hồ sơ.
+  const [isOnboarding, setIsOnboarding] = useState(false);
 
   // Helper mappers
   const mapBackendGender = (g: string): Gender => {
@@ -100,6 +116,48 @@ export default function App() {
     if (rl.includes("spat") || rl.includes("dislike") || rl === "spat out") return "Spat out";
     return "Neutral";
   };
+
+  const mapNutritionRecommendation = (r: any): NutritionRecommendation => ({
+    id: r.id,
+    babyId: r.baby_id,
+    generatedAt: r.generated_at,
+    recommendedFoods: (r.recommended_foods || []).map((f: any) => ({ foodName: f.food_name, reason: f.reason })),
+    foodsToAvoid: (r.foods_to_avoid || []).map((f: any) => ({ foodName: f.food_name, reason: f.reason, linkedTo: f.linked_to })),
+    summary: r.summary,
+    basedOnAllergies: r.based_on_allergies || [],
+    basedOnConditions: r.based_on_conditions || []
+  });
+
+  const mapNutritionSafety = (s: any): NutritionSafety => ({
+    foodsToAvoid: (s.foods_to_avoid || []).map((f: any) => ({
+      name: f.name,
+      reason: f.reason,
+      category: f.category,
+      minAgeMonths: f.min_age_months
+    })),
+    allergenAlerts: {
+      allergens: s.allergen_alerts?.allergens || [],
+      warningMessage: s.allergen_alerts?.warning_message || "",
+      hasAlert: Boolean(s.allergen_alerts?.has_alert)
+    }
+  });
+
+  const mapWeeklyMealPlan = (p: any): WeeklyMealPlan => ({
+    id: p.id,
+    babyId: p.baby_id,
+    generatedAt: p.generated_at,
+    startDate: p.start_date,
+    endDate: p.end_date,
+    status: p.status,
+    acceptedAt: p.accepted_at || undefined,
+    days: (p.days || []).map((d: any) => ({
+      date: d.date,
+      meals: (d.meals || []).map((m: any) => ({ mealType: m.meal_type, foodName: m.food_name, note: m.note }))
+    })),
+    summary: p.summary,
+    basedOnAllergies: p.based_on_allergies || [],
+    basedOnConditions: p.based_on_conditions || []
+  });
 
   // Fetch active baby's data
   const refreshActiveBabyData = async (babyId: string) => {
@@ -133,7 +191,7 @@ export default function App() {
           details: f.details,
           amount: f.amount,
           time: f.time,
-          date: "Today"
+          date: f.date || ""
         })));
       }
 
@@ -178,8 +236,53 @@ export default function App() {
         })));
       }
 
+      // 7. Fetch cached AI nutrition recommendation (null nếu chưa từng tạo, không phải lỗi)
+      const recRes = await apiFetch(`/api/v1/nutrition/recommendation?baby_id=${babyId}`);
+      if (recRes.ok) {
+        const recData = await recRes.json();
+        setNutritionRecommendation(recData ? mapNutritionRecommendation(recData) : null);
+      }
+
+      // 8. Fetch cached AI weekly meal plan (null nếu chưa từng tạo, không phải lỗi)
+      const planRes = await apiFetch(`/api/v1/nutrition/meal-plan/weekly?baby_id=${babyId}`);
+      if (planRes.ok) {
+        const planData = await planRes.json();
+        setWeeklyMealPlan(planData ? mapWeeklyMealPlan(planData) : null);
+      }
+
+      // 9. Fetch hướng dẫn an toàn dinh dưỡng - tính đúng theo tuổi thật của bé (server-side)
+      const safetyRes = await apiFetch(`/api/v1/nutrition/safety-guidelines?baby_id=${babyId}`);
+      if (safetyRes.ok) {
+        const safetyData = await safetyRes.json();
+        setNutritionSafety(mapNutritionSafety(safetyData));
+      }
     } catch (e) {
       console.error("Error refreshing active baby data:", e);
+    }
+  };
+
+  // Cẩm nang an toàn dinh dưỡng - nội dung tĩnh, chỉ tải khi người dùng thực sự mở ra xem
+  const handleOpenSafetyHandbook = async () => {
+    if (safetyHandbook) return;
+    setIsLoadingSafetyHandbook(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/safety-handbook");
+      if (res.ok) {
+        const data = await res.json();
+        setSafetyHandbook({
+          title: data.title,
+          sections: (data.sections || []).map((s: any) => ({
+            title: s.title,
+            description: s.description,
+            items: s.items,
+            level: s.level
+          }))
+        });
+      }
+    } catch (e) {
+      console.error("Error loading safety handbook:", e);
+    } finally {
+      setIsLoadingSafetyHandbook(false);
     }
   };
 
@@ -211,8 +314,7 @@ export default function App() {
       const res = await apiFetch(`/api/v1/ai/threads/${threadId}/messages`);
       if (res.ok) {
         const data = await res.json();
-        const recentMessages = Array.isArray(data) ? data.slice(-6) : [];
-        setChats(recentMessages.map((c: any) => ({
+        setChats(data.map((c: any) => ({
           id: c.id,
           role: c.role,
           content: c.content,
@@ -235,14 +337,27 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
-            const mapped = data.map((b: any, index: number) => ({
+            // QUAN TRỌNG: chỉ dùng đúng is_active thật từ backend, KHÔNG được ép index===0
+            // thành active - trước đây "isActive: b.is_active || (index===0)" luôn ép phần tử
+            // đầu tiên thành active bất kể giá trị thật, nên dù backend đã lưu đúng bé nào đang
+            // chọn (vd. "gấu"), bé đứng đầu mảng (vd. "Leo") vẫn bị đánh dấu active song song ->
+            // babies.find(isActive) luôn vớ trúng bé đầu tiên thay vì bé người dùng thực sự chọn.
+            const mapped = data.map((b: any) => ({
               id: b.id,
               name: b.name,
               birthDate: b.birth_date,
               gender: mapBackendGender(b.gender),
               avatarUrl: b.avatar_url || "/static/img/leo.png",
-              isActive: b.is_active || (index === 0)
+              isActive: Boolean(b.is_active),
+              bloodType: b.blood_type,
+              pediatricianName: b.pediatrician_name,
+              allergies: b.allergies || []
             }));
+            // Fallback phòng dữ liệu cũ/hỏng chưa có bé nào active - chỉ áp dụng khi THỰC SỰ
+            // không có bé nào active, không phải mặc định luôn ép bé đầu tiên.
+            if (!mapped.some((b) => b.isActive)) {
+              mapped[0].isActive = true;
+            }
             setBabies(mapped);
           }
         }
@@ -271,13 +386,16 @@ export default function App() {
             if (resBabies.ok) {
               const dataBabies = await resBabies.json();
               if (Array.isArray(dataBabies) && dataBabies.length > 0) {
-                setBabies(dataBabies.map((b: any, index: number) => ({
+                setBabies(dataBabies.map((b: any) => ({
                   id: b.id,
                   name: b.name,
                   birthDate: b.birth_date,
                   gender: mapBackendGender(b.gender),
                   avatarUrl: b.avatar_url || "/static/img/leo.png",
-                  isActive: index === 0
+                  isActive: Boolean(b.is_active),
+                  bloodType: b.blood_type,
+                  pediatricianName: b.pediatrician_name,
+                  allergies: b.allergies || []
                 })));
               }
             }
@@ -294,12 +412,6 @@ export default function App() {
   useEffect(() => {
     if (activeBaby?.id) {
       refreshActiveBabyData(activeBaby.id);
-    }
-  }, [activeBaby?.id]);
-
-  // Sync active baby with threads list
-  useEffect(() => {
-    if (activeBaby?.id) {
       loadThreads();
     }
   }, [activeBaby?.id]);
@@ -310,6 +422,18 @@ export default function App() {
       loadThreadMessages(activeThreadId);
     }
   }, [activeThreadId]);
+
+  // Bootstrap xong mà chưa có bé nào -> mở onboarding, khoá vào tab Hồ sơ.
+  // Ngay khi bé đầu tiên được tạo -> tắt onboarding, chuyển sang Dashboard.
+  useEffect(() => {
+    if (!isBootstrapping && babies.length === 0 && !isOnboarding) {
+      setIsOnboarding(true);
+      setActiveTab("profile");
+    } else if (isOnboarding && babies.length > 0) {
+      setIsOnboarding(false);
+      setActiveTab("dashboard");
+    }
+  }, [isBootstrapping, babies.length, isOnboarding]);
 
   // Stop watch logic
   useEffect(() => {
@@ -373,17 +497,26 @@ export default function App() {
 
   // State handlers passed to child views
   const handleSelectBaby = (id: string) => {
+    // Cập nhật lạc quan ngay trên UI trước, đồng thời lưu lựa chọn xuống backend - nếu chỉ đổi
+    // state cục bộ mà không gọi API, is_active thật trong Firestore không đổi, nên lần fetch
+    // lại babies tiếp theo (refreshActiveBabyData, tạo/sửa bé khác...) sẽ khiến bé đang chọn bị
+    // trả về giá trị cũ trong DB thay vì bé người dùng vừa bấm chọn.
     setBabies((prev) =>
       prev.map((b) => ({
         ...b,
         isActive: b.id === id
       }))
     );
+    apiFetch(`/api/v1/babies/${id}/set-active`, { method: "PATCH" }).catch((e) => console.error(e));
   };
 
+  // Ném lỗi thay vì chỉ console.error khi thất bại - nếu nuốt lỗi âm thầm, UI (ProfileView)
+  // không có cách nào biết để báo cho người dùng, nhìn như "bấm Lưu xong không có gì xảy ra"
+  // (vd. token đăng nhập hết hạn sau 1 giờ, mất mạng, lỗi server).
   const handleUpdateBaby = async (updated: BabyProfile) => {
+    let res: Response;
     try {
-      const res = await apiFetch(`/api/v1/babies/${updated.id}`, {
+      res = await apiFetch(`/api/v1/babies/${updated.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -391,20 +524,26 @@ export default function App() {
           birth_date: updated.birthDate,
           gender: updated.gender,
           avatar_url: updated.avatarUrl,
-          is_active: updated.isActive
+          is_active: updated.isActive,
+          blood_type: updated.bloodType,
+          pediatrician_name: updated.pediatricianName,
+          allergies: updated.allergies
         })
       });
-      if (res.ok) {
-        setBabies((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
-      }
     } catch (e) {
       console.error(e);
+      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
     }
+    if (!res.ok) {
+      throw new Error(res.status === 401 ? "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại." : "Lưu hồ sơ thất bại, vui lòng thử lại.");
+    }
+    setBabies((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
   };
 
   const handleAddBaby = async (newBaby: Omit<BabyProfile, "id">) => {
+    let res: Response;
     try {
-      const res = await apiFetch("/api/v1/babies", {
+      res = await apiFetch("/api/v1/babies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -412,29 +551,79 @@ export default function App() {
           birth_date: newBaby.birthDate,
           gender: newBaby.gender,
           avatar_url: newBaby.avatarUrl,
-          is_active: true
+          is_active: true,
+          blood_type: newBaby.bloodType,
+          pediatrician_name: newBaby.pediatricianName,
+          allergies: newBaby.allergies
         })
       });
-      if (res.ok) {
-        const data = await res.json();
-        // Reload all babies
-        const bRes = await apiFetch("/api/v1/babies");
-        if (bRes.ok) {
-          const bData = await bRes.json();
-          const mapped = bData.map((b: any) => ({
-            id: b.id,
-            name: b.name,
-            birthDate: b.birth_date,
-            gender: mapBackendGender(b.gender),
-            avatarUrl: b.avatar_url || "/static/img/leo.png",
-            isActive: b.id === data.id
-          }));
-          setBabies(mapped);
-        }
-      }
     } catch (e) {
       console.error(e);
+      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
     }
+    if (!res.ok) {
+      throw new Error(res.status === 401 ? "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại." : "Tạo hồ sơ bé thất bại, vui lòng thử lại.");
+    }
+    const data = await res.json();
+    const bRes = await apiFetch("/api/v1/babies");
+    if (bRes.ok) {
+      const bData = await bRes.json();
+      const mapped = bData.map((b: any) => ({
+        id: b.id,
+        name: b.name,
+        birthDate: b.birth_date,
+        gender: mapBackendGender(b.gender),
+        avatarUrl: b.avatar_url || "/static/img/leo.png",
+        isActive: b.id === data.id,
+        bloodType: b.blood_type,
+        pediatricianName: b.pediatrician_name,
+        allergies: b.allergies
+      }));
+      setBabies(mapped);
+    }
+  };
+
+  const handleDeleteBaby = async (id: string) => {
+    let res: Response;
+    try {
+      res = await apiFetch(`/api/v1/babies/${id}`, { method: "DELETE" });
+    } catch (e) {
+      console.error(e);
+      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
+    }
+    if (!res.ok) {
+      throw new Error(res.status === 401 ? "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại." : "Xoá hồ sơ thất bại, vui lòng thử lại.");
+    }
+    setBabies((prev) => {
+      const remaining = prev.filter((b) => b.id !== id);
+      // Nếu bé đang active bị xoá, gán active cho bé còn lại đầu tiên (nếu có) - nếu không
+      // còn bé nào cả, remaining=[] sẽ tự kích hoạt lại luồng onboarding (xem useEffect
+      // isOnboarding phía trên).
+      if (remaining.length > 0 && !remaining.some((b) => b.isActive)) {
+        remaining[0] = { ...remaining[0], isActive: true };
+      }
+      return remaining;
+    });
+  };
+
+  // Upload ảnh đại diện độc lập với create/update baby, vì lúc tạo bé mới chưa có baby_id để
+  // gắn ảnh vào - trả về URL tĩnh để ProfileView gán vào avatarUrl trước khi submit form.
+  const handleUploadAvatar = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    let res: Response;
+    try {
+      res = await apiFetch("/api/v1/babies/upload-avatar", { method: "POST", body: formData });
+    } catch (e) {
+      console.error(e);
+      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
+    }
+    if (!res.ok) {
+      const detail = await res.json().then((d) => d.detail || d.message).catch(() => null);
+      throw new Error(detail || (res.status === 401 ? "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại." : "Tải ảnh lên thất bại, vui lòng thử lại."));
+    }
+    const data = await res.json();
+    return data.avatar_url as string;
   };
 
   const handleAddMeasurement = async (newM: Omit<Measurement, "id">) => {
@@ -602,7 +791,73 @@ export default function App() {
     }
   };
 
-  // AI assistant messaging with direct API calls to FastAPI backend
+  const handleGenerateNutritionRecommendation = async () => {
+    if (!activeBaby) return;
+    setIsGeneratingRecommendation(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/recommendation/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baby_id: activeBaby.id })
+      });
+      if (!res.ok) {
+        throw new Error("Không thể tạo gợi ý dinh dưỡng lúc này, vui lòng thử lại sau.");
+      }
+      const data = await res.json();
+      setNutritionRecommendation(mapNutritionRecommendation(data));
+    } finally {
+      setIsGeneratingRecommendation(false);
+    }
+  };
+
+  const handleGenerateWeeklyMealPlan = async (feedback?: string) => {
+    if (!activeBaby) return;
+    setIsGeneratingWeeklyPlan(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/meal-plan/weekly/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baby_id: activeBaby.id, feedback: feedback || undefined })
+      });
+      if (!res.ok) {
+        // Backend trả message tiếng Việt cụ thể (vd "còn X ngày" khi bị khoá 409) - ưu tiên đọc
+        // thẳng từ response thay vì thông báo lỗi chung chung.
+        let message = "Không thể tạo thực đơn 7 ngày lúc này, vui lòng thử lại sau.";
+        try {
+          const errBody = await res.json();
+          if (errBody?.message) message = errBody.message;
+        } catch {
+          // ignore parse error, dùng message mặc định
+        }
+        throw new Error(message);
+      }
+      const data = await res.json();
+      setWeeklyMealPlan(mapWeeklyMealPlan(data));
+    } finally {
+      setIsGeneratingWeeklyPlan(false);
+    }
+  };
+
+  const handleAcceptWeeklyMealPlan = async () => {
+    if (!activeBaby) return;
+    setIsAcceptingWeeklyPlan(true);
+    try {
+      const res = await apiFetch("/api/v1/nutrition/meal-plan/weekly/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baby_id: activeBaby.id })
+      });
+      if (!res.ok) {
+        throw new Error("Không thể chấp nhận thực đơn lúc này, vui lòng thử lại sau.");
+      }
+      const data = await res.json();
+      setWeeklyMealPlan(mapWeeklyMealPlan(data));
+    } finally {
+      setIsAcceptingWeeklyPlan(false);
+    }
+  };
+
+  // AI assistant messaging with direct API calls to FastAPI backend (thread-scoped)
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
       id: `u_${Date.now()}`,
@@ -686,7 +941,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         const newThreadId = data.thread_id;
-        
+
         // Add new thread to the list and select it
         setThreads(prev => [{ id: newThreadId, title: data.title }, ...prev]);
         setActiveThreadId(newThreadId);
@@ -807,8 +1062,12 @@ export default function App() {
               setActiveTab("dashboard");
               setIsMobileMenuOpen(false);
             }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "dashboard"
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "dashboard"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
@@ -837,8 +1096,12 @@ export default function App() {
               setActiveTab("ai");
               setIsMobileMenuOpen(false);
             }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "ai"
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "ai"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
@@ -849,32 +1112,21 @@ export default function App() {
 
           <button
             onClick={() => {
-              setActiveTab("logs");
+              setActiveTab("log");
               setIsMobileMenuOpen(false);
             }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "logs"
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "log"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
           >
-            <Clock className="w-4 h-4" />
+            <ClipboardList className="w-4 h-4" />
             Nhật ký
-          </button>
-
-          <button
-            onClick={() => {
-              setActiveTab("nutrition");
-              setIsMobileMenuOpen(false);
-            }}
-            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "nutrition"
-                ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
-                : "text-slate-500 hover:text-primary hover:bg-primary/5"
-            }`}
-          >
-            <Coffee className="w-4 h-4" />
-            Dinh dưỡng
           </button>
 
           <button
@@ -882,8 +1134,12 @@ export default function App() {
               setActiveTab("health");
               setIsMobileMenuOpen(false);
             }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "health"
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "health"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
@@ -897,8 +1153,12 @@ export default function App() {
               setActiveTab("growth");
               setIsMobileMenuOpen(false);
             }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
             className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "growth"
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "growth"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
             }`}
@@ -906,21 +1166,45 @@ export default function App() {
             <Activity className="w-4 h-4" />
             Tăng trưởng
           </button>
+
+          <button
+            onClick={() => {
+              setActiveTab("nutrition");
+              setIsMobileMenuOpen(false);
+            }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
+            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
+              !hasBaby
+                ? "text-slate-300 cursor-not-allowed"
+                : activeTab === "nutrition"
+                ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
+                : "text-slate-500 hover:text-primary hover:bg-primary/5"
+            }`}
+          >
+            <Coffee className="w-4 h-4" />
+            Dinh dưỡng
+          </button>
         </nav>
 
-        {/* Sidebar Footer Widget - Selected Baby Quick View / User profile */}
-        <div className="pt-4 border-t border-slate-200/60 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <img
-              src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face"
-              alt="Sarah Jenkins"
-              className="w-8 h-8 rounded-full object-cover border border-slate-200 shadow-xs"
-            />
-            <div>
-              <p className="text-xs font-bold text-slate-800 leading-tight">Sarah Jenkins</p>
-              <p className="text-[9px] text-indigo-600 font-semibold">Premium Member</p>
+        {/* Sidebar Footer Widget - Logged-in user + logout */}
+        <div className="pt-4 border-t border-slate-200/60 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+              {(name || email || "?").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-800 leading-tight truncate">{name || "Người giám hộ"}</p>
+              <p className="text-[9px] text-slate-400 font-semibold truncate">{email}</p>
             </div>
           </div>
+          <button
+            onClick={handleLogout}
+            title="Đăng xuất"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </aside>
 
@@ -940,19 +1224,55 @@ export default function App() {
               </span>
             )}
           </div>
+
+          <div className="flex items-center gap-4">
+            <button className="p-1.5 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition-colors relative">
+              <Bell className="w-4 h-4" />
+              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full" />
+            </button>
+            
+            <div className="h-5 w-px bg-slate-200" />
+            
+            {activeBaby && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700">{activeBaby.name}</span>
+                <img
+                  src={activeBaby.avatarUrl}
+                  alt={activeBaby.name}
+                  className="w-7 h-7 rounded-full object-cover border border-slate-200"
+                />
+              </div>
+            )}
+          </div>
         </header>
 
         {/* Content canvas container */}
         <div className="flex-1 p-4 md:p-8 overflow-y-auto">
           <AnimatePresence mode="wait">
             <motion.div
-              key={activeTab + "_" + activeBaby.id}
+              key={activeTab + "_" + (activeBaby?.id ?? "onboarding")}
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -5 }}
               transition={{ duration: 0.15 }}
               className="h-full"
             >
+              {/* Chưa có hồ sơ bé nào (mới đăng ký xong) - luôn hiện trang Hồ sơ để nhập
+                  thông tin bé đầu tiên, bất kể activeTab là gì (nav các tab khác đã bị khoá). */}
+              {!activeBaby ? (
+                <ProfileView
+                  babies={babies}
+                  guardians={guardians}
+                  onSelectBaby={handleSelectBaby}
+                  onUpdateBaby={handleUpdateBaby}
+                  onAddBaby={handleAddBaby}
+                  onDeleteBaby={handleDeleteBaby}
+                  onUploadAvatar={handleUploadAvatar}
+                  onAddGuardian={handleAddGuardian}
+                  onDeleteGuardian={handleDeleteGuardian}
+                />
+              ) : (
+                <>
               {activeTab === "dashboard" && (
                 <DashboardView
                   activeBaby={activeBaby}
@@ -1018,12 +1338,14 @@ export default function App() {
                   onSelectBaby={handleSelectBaby}
                   onUpdateBaby={handleUpdateBaby}
                   onAddBaby={handleAddBaby}
+                  onDeleteBaby={handleDeleteBaby}
+                  onUploadAvatar={handleUploadAvatar}
                   onAddGuardian={handleAddGuardian}
                   onDeleteGuardian={handleDeleteGuardian}
                 />
               )}
 
-              {activeTab === "logs" && (
+              {((activeTab as string) === "log" || (activeTab as string) === "logs") && (
                 <LogsView
                   activeBaby={activeBaby}
                   feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
@@ -1046,7 +1368,21 @@ export default function App() {
                   onDeleteFeed={handleDeleteFeed}
                   onAddIngredient={handleAddIngredient}
                   onDeleteIngredient={handleDeleteIngredient}
+                  recommendation={nutritionRecommendation}
+                  isGeneratingRecommendation={isGeneratingRecommendation}
+                  onGenerateRecommendation={handleGenerateNutritionRecommendation}
+                  weeklyMealPlan={weeklyMealPlan}
+                  isGeneratingWeeklyPlan={isGeneratingWeeklyPlan}
+                  isAcceptingWeeklyPlan={isAcceptingWeeklyPlan}
+                  onGenerateWeeklyMealPlan={handleGenerateWeeklyMealPlan}
+                  onAcceptWeeklyMealPlan={handleAcceptWeeklyMealPlan}
+                  nutritionSafety={nutritionSafety}
+                  safetyHandbook={safetyHandbook}
+                  isLoadingSafetyHandbook={isLoadingSafetyHandbook}
+                  onOpenSafetyHandbook={handleOpenSafetyHandbook}
                 />
+              )}
+                </>
               )}
             </motion.div>
           </AnimatePresence>

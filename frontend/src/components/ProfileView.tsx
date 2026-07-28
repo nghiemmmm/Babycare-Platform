@@ -28,6 +28,8 @@ interface ProfileViewProps {
   onSelectBaby: (id: string) => void;
   onUpdateBaby: (baby: BabyProfile) => void;
   onAddBaby: (baby: Omit<BabyProfile, "id">) => void;
+  onDeleteBaby?: (id: string) => void;
+  onUploadAvatar?: (file: File) => Promise<string>;
   onAddGuardian: (g: Omit<Guardian, "id">) => void;
   onDeleteGuardian: (id: string) => void;
 }

@@ -11,6 +11,86 @@ export interface BabyProfile {
   gender: Gender;
   avatarUrl?: string;
   isActive: boolean;
+  bloodType?: string;
+  pediatricianName?: string;
+  allergies?: string[];
+}
+
+export interface NutritionRecommendationItem {
+  foodName: string;
+  reason: string;
+}
+
+export interface NutritionAvoidanceItem {
+  foodName: string;
+  reason: string;
+  linkedTo: string;
+}
+
+export interface NutritionRecommendation {
+  id: string;
+  babyId: string;
+  generatedAt: string;
+  recommendedFoods: NutritionRecommendationItem[];
+  foodsToAvoid: NutritionAvoidanceItem[];
+  summary: string;
+  basedOnAllergies: string[];
+  basedOnConditions: string[];
+}
+
+export interface MealSlot {
+  mealType: string; // "sáng" | "trưa" | "tối" | "phụ"
+  foodName: string;
+  note?: string;
+}
+
+export interface DayPlan {
+  date: string; // YYYY-MM-DD
+  meals: MealSlot[];
+}
+
+export interface WeeklyMealPlan {
+  id: string;
+  babyId: string;
+  generatedAt: string;
+  startDate: string;
+  endDate: string;
+  status: "pending" | "accepted";
+  acceptedAt?: string;
+  days: DayPlan[];
+  summary: string;
+  basedOnAllergies: string[];
+  basedOnConditions: string[];
+}
+
+export interface FoodSafetyItem {
+  name: string;
+  reason: string;
+  category: string; // "under_1_year" | "choking_hazard"
+  minAgeMonths: number;
+}
+
+export interface AllergenAlert {
+  allergens: string[];
+  warningMessage: string;
+  hasAlert: boolean;
+}
+
+export interface NutritionSafety {
+  foodsToAvoid: FoodSafetyItem[];
+  allergenAlerts: AllergenAlert;
+}
+
+export interface SafetyHandbookSection {
+  title: string;
+  description: string;
+  items?: string[];
+  level: string; // "info" | "danger" | "warning" | "success"
+}
+
+export interface SafetyHandbook {
+  title: string;
+  sections: SafetyHandbookSection[];
 }
 
 export interface Measurement {
@@ -46,19 +126,25 @@ export interface Guardian {
 export interface FeedLog {
   id: string;
   babyId: string;
-  type: "Formula" | "Breast" | "Solids";
-  details: string; // e.g. "Sweet Potato Purée"
-  amount: number; // ml for formula/breast, or meals count for solids
-  time: string;
-  date: string;
+  type: "Formula" | "Breast" | "Solids" | "formula" | "breast" | "solids";
+  details?: string;
+  amount?: number;
+  amountMl?: number;
+  time?: string;
+  date?: string;
+  loggedAt?: string;
+  note?: string;
 }
 
 export interface IngredientLog {
   id: string;
   babyId: string;
   name: string;
-  reaction: "Loved it" | "Spat out" | "Neutral" | "Allergic Reaction";
-  date: string;
+  category?: string;
+  amountG?: number;
+  reaction?: "Loved it" | "Spat out" | "Neutral" | "Allergic Reaction";
+  date?: string;
+  loggedAt?: string;
 }
 
 export interface SmartExtraction {

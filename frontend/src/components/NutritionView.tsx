@@ -1,532 +1,579 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  FileDown,
-  Plus,
-  Compass,
-  AlertTriangle,
-  Check,
-  X,
-  Clock,
-  Apple,
-  Search,
-  Book,
-  Heart,
-  Droplet,
-  Info,
-  Calendar,
   Sparkles,
-  ArrowRight,
-  Filter,
-  Camera,
-  ChevronDown,
-  BookOpen
+  Calendar,
+  ShieldAlert,
+  BookOpen,
+  Plus,
+  Trash2,
+  Coffee,
+  Check,
+  RefreshCw,
+  AlertTriangle,
+  Info,
+  Apple,
+  Milk,
+  Clock
 } from "lucide-react";
-import { BabyProfile, FeedLog, IngredientLog } from "../types";
+import {
+  BabyProfile,
+  FeedLog,
+  IngredientLog,
+  NutritionRecommendation,
+  WeeklyMealPlan,
+  NutritionSafety,
+  SafetyHandbook
+} from "../types";
 
-interface NutritionViewProps {
+export interface NutritionViewProps {
   activeBaby: BabyProfile;
-  feeds: FeedLog[];
-  ingredients: IngredientLog[];
-  onAddFeed: (f: Omit<FeedLog, "id">) => void;
-  onDeleteFeed: (id: string) => void;
-  onAddIngredient: (ing: Omit<IngredientLog, "id">) => void;
-  onDeleteIngredient: (id: string) => void;
+  feeds?: FeedLog[];
+  ingredients?: IngredientLog[];
+  onAddFeed?: (feed: Omit<FeedLog, "id">) => void;
+  onDeleteFeed?: (id: string) => void;
+  onAddIngredient?: (ingredient: Omit<IngredientLog, "id">) => void;
+  onDeleteIngredient?: (id: string) => void;
+  recommendation?: NutritionRecommendation | null;
+  isGeneratingRecommendation?: boolean;
+  onGenerateRecommendation?: () => void;
+  weeklyMealPlan?: WeeklyMealPlan | null;
+  isGeneratingWeeklyPlan?: boolean;
+  isAcceptingWeeklyPlan?: boolean;
+  onGenerateWeeklyMealPlan?: (feedback?: string) => void;
+  onAcceptWeeklyMealPlan?: () => void;
+  nutritionSafety?: NutritionSafety | null;
+  safetyHandbook?: SafetyHandbook | null;
+  isLoadingSafetyHandbook?: boolean;
+  onOpenSafetyHandbook?: () => void;
 }
 
-interface FoodSafetyItem {
-  name: string;
-  reason: string;
-  showInfo: boolean;
-}
+const MEAL_TYPES = ["sáng", "trưa", "tối", "phụ"] as const;
+const MEAL_TYPE_LABELS: Record<string, string> = {
+  sáng: "Sáng 🌅",
+  trưa: "Trưa ☀️",
+  tối: "Tối 🌙",
+  phụ: "Bữa phụ 🍎"
+};
+
+const HANDBOOK_LEVEL_STYLES: Record<string, string> = {
+  info: "bg-indigo-50/70 border-indigo-100 text-indigo-900",
+  danger: "bg-rose-50/70 border-rose-100 text-rose-900",
+  warning: "bg-amber-50/70 border-amber-100 text-amber-900",
+  success: "bg-emerald-50/70 border-emerald-100 text-emerald-900"
+};
 
 export default function NutritionView({
   activeBaby,
-  feeds,
-  ingredients,
+  feeds = [],
+  ingredients = [],
   onAddFeed,
   onDeleteFeed,
   onAddIngredient,
-  onDeleteIngredient
+  onDeleteIngredient,
+  recommendation,
+  isGeneratingRecommendation = false,
+  onGenerateRecommendation,
+  weeklyMealPlan,
+  isGeneratingWeeklyPlan = false,
+  isAcceptingWeeklyPlan = false,
+  onGenerateWeeklyMealPlan,
+  onAcceptWeeklyMealPlan,
+  nutritionSafety,
+  safetyHandbook,
+  isLoadingSafetyHandbook = false,
+  onOpenSafetyHandbook
 }: NutritionViewProps) {
-  // Modal visibility states
+  const [activeTab, setActiveTab] = useState<"ai" | "tracking">("ai");
+
+  // Modals for tracking
   const [showAddFeedModal, setShowAddFeedModal] = useState(false);
   const [showAddIngredientModal, setShowAddIngredientModal] = useState(false);
-  const [showSafetyModal, setShowSafetyModal] = useState(false);
-  const [activeInfoAlert, setActiveInfoAlert] = useState<string | null>(null);
 
-  // Form states for Feed
-  const [feedType, setFeedType] = useState<"Formula" | "Breast" | "Solids">("Formula");
-  const [feedAmount, setFeedAmount] = useState(180);
-  const [feedDetails, setFeedDetails] = useState("Formula Milk");
-  const [feedTime, setFeedTime] = useState("");
+  // Feed Form
+  const [feedType, setFeedType] = useState<"formula" | "breast">("formula");
+  const [feedAmount, setFeedAmount] = useState<number>(150);
+  const [feedNote, setFeedNote] = useState<string>("");
 
-  // Form states for Ingredient
-  const [ingName, setIngName] = useState("");
-  const [ingReaction, setIngReaction] = useState<"Loved it" | "Spat out" | "Neutral" | "Allergic Reaction">("Loved it");
+  // Ingredient Form
+  const [ingredientName, setIngredientName] = useState<string>("");
+  const [ingredientCategory, setIngredientCategory] = useState<string>("Rau củ");
+  const [ingredientAmount, setIngredientAmount] = useState<number>(50);
 
-  // Foods to avoid list with local explanation toggle states
-  const [foodsToAvoid, setFoodsToAvoid] = useState<FoodSafetyItem[]>([
-    { name: "Mật ong", reason: "Nguy cơ ngộ độc clostridium botulinum ở trẻ dưới 12 tháng, một bệnh nhiễm độc đường tiêu hóa hiếm gặp nhưng rất nghiêm trọng.", showInfo: false },
-    { name: "Muối gia vị", reason: "Thận của trẻ dưới 1 tuổi chưa đủ phát triển để lọc muối bổ sung.", showInfo: false },
-    { name: "Đường gia vị", reason: "Có thể gây sâu răng, hình thành thói quen ăn ngọt có hại cho sức khỏe và thiếu giá trị dinh dưỡng.", showInfo: false }
-  ]);
+  // Modals for AI
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [regenerateFeedback, setRegenerateFeedback] = useState("");
+  const [showSafetyHandbookModal, setShowSafetyHandbookModal] = useState(false);
 
-  const [allergenAlerts, setAllergenAlerts] = useState<{
-    allergens: string[];
-    warning_message: string;
-    has_alert: boolean;
-  }>({
-    allergens: ["🥛 Nhạy cảm sữa bò", "🥜 Đề phòng Đậu phộng"],
-    warning_message: `${activeBaby.name} chưa ghi nhận dị ứng nghiêm trọng. Cần cẩn trọng khi cho bé thử nhóm thực phẩm mới.`,
-    has_alert: false
-  });
-
-  React.useEffect(() => {
-    const fetchSafetyGuidelines = async () => {
-      try {
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-        const token = localStorage.getItem("token") || "mock-token";
-        const res = await fetch(`${baseUrl}/api/v1/nutrition/safety-guidelines?baby_id=${activeBaby.id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.foods_to_avoid) && data.foods_to_avoid.length > 0) {
-            setFoodsToAvoid(data.foods_to_avoid.map((f: any) => ({
-              name: f.name,
-              reason: f.reason,
-              showInfo: false
-            })));
-          }
-          if (data.allergen_alerts) {
-            setAllergenAlerts(data.allergen_alerts);
-          }
-        }
-      } catch (err) {
-        console.error("Error fetching safety guidelines:", err);
-      }
-    };
-    fetchSafetyGuidelines();
-  }, [activeBaby.id, ingredients]);
-
-  React.useEffect(() => {
-    const now = new Date();
-    setFeedTime(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
-  }, []);
-
-  // Compute stats
-  const totalMilk = feeds
-    .filter((f) => f.babyId === activeBaby.id && f.type !== "Solids" && f.date === "Today")
-    .reduce((acc, f) => acc + f.amount, 0);
-
-  const solidsCount = feeds.filter((f) => f.babyId === activeBaby.id && f.type === "Solids" && f.date === "Today").length;
-
-  const handleFeedSubmit = (e: React.FormEvent) => {
+  const handleAddFeedSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    let details = feedDetails;
-    if (feedType === "Formula" && !details) details = "Formula Milk";
-    if (feedType === "Breast" && !details) details = "Breast Milk";
-
-    let finalTime = "12:00 PM";
-    if (feedTime) {
-      const [hrs, mins] = feedTime.split(":");
-      const hours = parseInt(hrs);
-      const ampm = hours >= 12 ? "PM" : "AM";
-      const displayHrs = hours % 12 || 12;
-      finalTime = `${displayHrs}:${mins} ${ampm}`;
+    if (onAddFeed) {
+      onAddFeed({
+        babyId: activeBaby.id,
+        type: feedType,
+        amountMl: feedAmount,
+        loggedAt: new Date().toISOString(),
+        note: feedNote || undefined
+      });
     }
-
-    onAddFeed({
-      babyId: activeBaby.id,
-      type: feedType,
-      details,
-      amount: feedType === "Solids" ? 1 : Number(feedAmount),
-      time: finalTime,
-      date: "Today"
-    });
-
     setShowAddFeedModal(false);
-    setFeedDetails("");
+    setFeedNote("");
   };
 
-  const handleIngredientSubmit = (e: React.FormEvent) => {
+  const handleAddIngredientSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ingName) return;
-
-    onAddIngredient({
-      babyId: activeBaby.id,
-      name: ingName,
-      reaction: ingReaction,
-      date: new Date().toISOString().split("T")[0]
-    });
-
+    if (!ingredientName.trim()) return;
+    if (onAddIngredient) {
+      onAddIngredient({
+        babyId: activeBaby.id,
+        name: ingredientName,
+        category: ingredientCategory,
+        amountG: ingredientAmount,
+        loggedAt: new Date().toISOString()
+      });
+    }
     setShowAddIngredientModal(false);
-    setIngName("");
+    setIngredientName("");
   };
 
-  const toggleAvoidInfo = (index: number) => {
-    setFoodsToAvoid(prev =>
-      prev.map((item, idx) => (idx === index ? { ...item, showInfo: !item.showInfo } : item))
-    );
+  const handleRegenerateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (onGenerateWeeklyMealPlan) {
+      onGenerateWeeklyMealPlan(regenerateFeedback.trim() || undefined);
+    }
+    setShowRegenerateModal(false);
+    setRegenerateFeedback("");
+  };
+
+  const handleHandbookClick = () => {
+    setShowSafetyHandbookModal(true);
+    if (onOpenSafetyHandbook) {
+      onOpenSafetyHandbook();
+    }
+  };
+
+  const daysUntil = (endDateStr: string) => {
+    const end = new Date(endDateStr).getTime();
+    const now = new Date().getTime();
+    return Math.ceil((end - now) / (1000 * 3600 * 24));
   };
 
   return (
-    <div className="space-y-6 relative min-h-screen pb-20" id="nutrition-view">
-      
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-primary font-bold text-2xl tracking-tight">Dinh dưỡng & Ăn dặm</h1>
-          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-[9px] font-bold">
-            Đồng bộ Gia đình Hoạt động
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              const csvContent = "data:text/csv;charset=utf-8," 
-                + "Time,Type,Details,Amount/Meals\n"
-                + feeds.map(f => `${f.time},${f.type},${f.details},${f.amount}`).join("\n");
-              const encodedUri = encodeURI(csvContent);
-              const link = document.createElement("a");
-              link.setAttribute("href", encodedUri);
-              link.setAttribute("download", `${activeBaby.name}_nutrition_report.csv`);
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            }}
-            className="inline-flex items-center gap-1.5 bg-white/60 border border-white/30 text-slate-700 hover:bg-white/80 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
-          >
-            <FileDown className="w-3.5 h-3.5" />
-            Xuất Nhật ký
-          </button>
-          
-          <button
-            onClick={() => setShowAddFeedModal(true)}
-            className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/95 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Ghi chép mới
-          </button>
-        </div>
-      </div>
-
-      {/* Main Grid Layout (65% / 35%) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* Cột Trái (65%): Theo dõi Dinh dưỡng & Nguyên liệu (7-8 cols) */}
-        <div className="lg:col-span-8 space-y-6">
-          
-          {/* Feeding Log Summary Cards & Progress Bars */}
-          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-6">
-            <h3 className="text-primary font-bold text-xs uppercase tracking-wider text-slate-500">
-              Tổng quan Dinh dưỡng Hàng ngày
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Milk Intake Card */}
-              <div className="bg-white/40 border border-white/20 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase">Lượng sữa dùng</span>
-                  <Droplet className="w-4.5 h-4.5 text-sky-500" />
-                </div>
-                <div>
-                  <h4 className="text-xl font-bold text-primary">{totalMilk} / 800 ml</h4>
-                  <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Mục tiêu: 800ml mỗi ngày</p>
-                </div>
-                {/* Progress bar */}
-                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                  <div
-                    className="bg-sky-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min((totalMilk / 800) * 100, 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Solids Card */}
-              <div className="bg-white/40 border border-white/20 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase">Cữ ăn dặm</span>
-                  <Apple className="w-4.5 h-4.5 text-amber-500" />
-                </div>
-                <div>
-                  <h4 className="text-xl font-bold text-primary">{solidsCount} / 3 Bữa</h4>
-                  <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Mục tiêu: 3 bữa nhẹ</p>
-                </div>
-                {/* Progress bar */}
-                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                  <div
-                    className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min((solidsCount / 3) * 100, 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Next Feed Card */}
-              <div className="bg-white/40 border border-white/20 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase">Cữ bú tiếp theo</span>
-                  <Clock className="w-4.5 h-4.5 text-primary animate-pulse" />
-                </div>
-                <div>
-                  <h4 className="text-xl font-bold text-primary">02:30 PM</h4>
-                  <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Trong khoảng 45 phút nữa</p>
-                </div>
-                {/* Alert/Status Progress indicator bar */}
-                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-primary h-full rounded-full w-[70%]" />
-                </div>
-              </div>
+    <div className="space-y-6 max-w-6xl mx-auto pb-12">
+      {/* --- HEADER TITLE & TAB SWITCHER --- */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white/70 backdrop-blur-md p-6 rounded-3xl border border-slate-100 shadow-xs">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="p-2.5 rounded-2xl bg-amber-500/10 text-amber-600">
+              <Apple className="w-6 h-6" />
             </div>
-          </div>
-
-          {/* Today's Feeding Timeline */}
-          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
-            <h3 className="text-primary font-bold text-xs uppercase tracking-wider text-slate-500">
-              Dòng thời gian Dinh dưỡng Hôm nay
-            </h3>
-
-            <div className="relative pl-6 border-l border-slate-100 space-y-5">
-              {feeds
-                .filter((f) => f.babyId === activeBaby.id && f.date === "Today")
-                .map((feed) => (
-                  <div key={feed.id} className="relative group flex items-start justify-between gap-4">
-                    <span className="absolute -left-[30.5px] top-1 w-2.5 h-2.5 rounded-full ring-4 bg-primary ring-primary/10" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400 font-bold">{feed.time}</span>
-                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                          feed.type === "Solids" ? "bg-amber-50 text-amber-600 border border-amber-100" : "bg-sky-50 text-sky-600 border border-sky-100"
-                        }`}>
-                          {feed.type === "Solids" ? "Ăn dặm" : feed.type === "Formula" ? "Sữa công thức" : "Sữa mẹ"}
-                        </span>
-                      </div>
-                      <h4 className="text-xs font-bold text-slate-700 mt-1">
-                        {feed.type === "Solids" ? feed.details : `${feed.amount}ml ${feed.type === "Formula" ? "Sữa công thức" : "Sữa mẹ"}`}
-                      </h4>
-                    </div>
-
-                    <button
-                      onClick={() => onDeleteFeed(feed.id)}
-                      className="text-[10px] font-bold text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                    >
-                      Xóa
-                    </button>
-                  </div>
-                ))}
-
-              {feeds.filter((f) => f.babyId === activeBaby.id && f.date === "Today").length === 0 && (
-                <div className="text-center py-6 text-slate-400 text-xs font-semibold">
-                  Không có nhật ký bú/ăn dặm nào hôm nay.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* New Ingredients Tracker */}
-          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-white/20 pb-2">
-              <h3 className="text-primary font-bold text-xs uppercase tracking-wider text-slate-500">
-                Nguyên liệu mới & Phản ứng của bé
-              </h3>
-              <button
-                onClick={() => setShowAddIngredientModal(true)}
-                className="text-[10px] font-bold text-primary hover:underline cursor-pointer"
-              >
-                + Theo dõi phản ứng mới
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {ingredients
-                .filter((i) => i.babyId === activeBaby.id)
-                .map((ing) => {
-                  let statusStyle = "bg-emerald-50 text-emerald-700 border-emerald-100";
-                  if (ing.reaction === "Spat out") statusStyle = "bg-orange-50 text-orange-700 border-orange-100";
-                  if (ing.reaction === "Allergic Reaction") statusStyle = "bg-rose-50 text-rose-700 border-rose-100 animate-pulse font-extrabold";
-
-                  const reactionLabels: Record<string, string> = {
-                    "Loved it": "Thích",
-                    "Neutral": "Bình thường",
-                    "Spat out": "Nhổ ra",
-                    "Allergic Reaction": "Dị ứng"
-                  };
-
-                  return (
-                    <div
-                      key={ing.id}
-                      className="p-3 bg-white/40 border border-white/20 rounded-2xl flex items-center justify-between gap-3 shadow-xs hover:bg-white/80 transition-all"
-                    >
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-700">{ing.name}</h4>
-                        <span className="text-[9px] text-slate-400 font-semibold">{ing.date}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold ${statusStyle}`}>
-                          {reactionLabels[ing.reaction] || ing.reaction}
-                        </span>
-                        <button
-                          onClick={() => onDeleteIngredient(ing.id)}
-                          className="text-slate-300 hover:text-rose-500 transition-colors cursor-pointer"
-                          title="Xóa bản ghi phản ứng"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-
-              {ingredients.filter((i) => i.babyId === activeBaby.id).length === 0 && (
-                <div className="col-span-2 text-center py-6 text-slate-400 text-xs">
-                  Chưa có báo cáo phản ứng dị ứng nào.
-                </div>
-              )}
-            </div>
-          </div>
-
-
-
-        </div>
-
-        {/* Cột Phải (35%): AI Insights & Cảnh báo (Allergen Safety) (4-5 cols) */}
-        <div className="lg:col-span-4 space-y-6">
-          
-          {/* Allergen Safety Panel & Warnings */}
-          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
-            <h3 className="text-primary font-bold text-xs uppercase tracking-wide text-slate-500">
-              Kiểm tra dị ứng & an toàn
-            </h3>
-
-            {/* High Alert Box */}
-            <div className={`p-4 rounded-r-2xl space-y-2 border-l-4 ${
-              allergenAlerts.has_alert
-                ? "bg-red-50 border-red-500 animate-pulse"
-                : "bg-amber-50 border-amber-400"
-            }`}>
-              <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1">
-                ⚠️ Dị ứng & Cảnh báo Y khoa
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {allergenAlerts.allergens.map((alg, aIdx) => (
-                  <span
-                    key={aIdx}
-                    className={`px-2.5 py-0.5 border font-bold rounded-full text-[9px] ${
-                      allergenAlerts.has_alert
-                        ? "bg-red-100 border-red-200 text-red-700"
-                        : "bg-amber-100 border-amber-200 text-amber-800"
-                    }`}
-                  >
-                    ⚠️ {alg}
-                  </span>
-                ))}
-              </div>
-              <p className={`text-[11px] leading-relaxed font-semibold ${
-                allergenAlerts.has_alert ? "text-red-700" : "text-amber-800"
-              }`}>
-                {allergenAlerts.warning_message}
+            <div>
+              <h1 className="text-xl font-black text-slate-800 tracking-tight">
+                Dinh Dưỡng & Ăn Dặm
+              </h1>
+              <p className="text-xs font-semibold text-slate-500">
+                Thực đơn AI chuẩn WHO & Nhật ký ăn uống cho bé {activeBaby.name}
               </p>
             </div>
+          </div>
+        </div>
 
-            {/* Foods to Avoid (Until 1 year) */}
-            <div className="space-y-2">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Thực phẩm cần tránh (Dưới 1 tuổi)
-              </span>
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/50 self-start sm:self-auto">
+          <button
+            onClick={() => setActiveTab("ai")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "ai"
+                ? "bg-white text-primary shadow-xs"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            AI Tư Vấn & Thực Đơn 7 Ngày
+          </button>
+          <button
+            onClick={() => setActiveTab("tracking")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "tracking"
+                ? "bg-white text-primary shadow-xs"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <Coffee className="w-3.5 h-3.5" />
+            Nhật Ký Cữ Bú & Nguyên Liệu ({feeds.length + ingredients.length})
+          </button>
+        </div>
+      </div>
 
-              <div className="space-y-2">
-                {foodsToAvoid.map((food, idx) => (
-                  <div key={idx} className="bg-white/40 border border-white/20 rounded-xl p-2.5 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700">{food.name}</span>
-                      <button
-                        onClick={() => toggleAvoidInfo(idx)}
-                        className="text-slate-400 hover:text-slate-600 cursor-pointer"
-                        title="Xem lý do"
-                      >
-                        <Info className="w-4 h-4 text-primary" />
-                      </button>
+      {/* ========================================================================= */}
+      {/* TAB 1: AI TƯ VẤN & THỰC ĐƠN 7 NGÀY */}
+      {/* ========================================================================= */}
+      {activeTab === "ai" && (
+        <div className="space-y-6">
+          {/* Quick Action Bar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={onGenerateRecommendation}
+              disabled={isGeneratingRecommendation}
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-md transition-all cursor-pointer disabled:opacity-60"
+            >
+              <Sparkles className={`w-4 h-4 ${isGeneratingRecommendation ? "animate-spin" : ""}`} />
+              {isGeneratingRecommendation ? "Đang tạo gợi ý AI…" : "✨ Tạo gợi ý dinh dưỡng AI"}
+            </button>
+
+            <button
+              onClick={() => onGenerateWeeklyMealPlan && onGenerateWeeklyMealPlan()}
+              disabled={isGeneratingWeeklyPlan}
+              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-md transition-all cursor-pointer disabled:opacity-60"
+            >
+              <Calendar className={`w-4 h-4 ${isGeneratingWeeklyPlan ? "animate-spin" : ""}`} />
+              {isGeneratingWeeklyPlan ? "Đang tạo thực đơn 7 ngày…" : "📅 Tạo thực đơn 7 ngày AI"}
+            </button>
+
+            <button
+              onClick={handleHandbookClick}
+              className="inline-flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xs transition-all cursor-pointer"
+            >
+              <BookOpen className="w-4 h-4 text-indigo-500" />
+              📖 Cẩm nang an toàn dinh dưỡng
+            </button>
+          </div>
+
+          {/* --- AI RECOMMENDATION CARD --- */}
+          {recommendation && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-gradient-to-br from-amber-50/80 via-orange-50/40 to-white border border-amber-100/80 rounded-3xl p-6 shadow-xs space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-amber-100/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-500" />
+                  <h2 className="text-sm font-black text-slate-800">
+                    Khuyến Nghị Dinh Dưỡng AI Cho Bé {activeBaby.name}
+                  </h2>
+                </div>
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-100/80 px-2.5 py-1 rounded-full">
+                  Cập nhật: {recommendation.generatedAt.substring(0, 10)}
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                {recommendation.summary}
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                {/* Món khuyến nghị */}
+                <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 space-y-2">
+                  <h3 className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                    <Apple className="w-4 h-4 text-emerald-600" />
+                    Món ăn khuyến nghị nên bổ sung
+                  </h3>
+                  <div className="space-y-2">
+                    {recommendation.recommendedFoods.map((food, idx) => (
+                      <div key={idx} className="bg-white/80 rounded-xl p-2.5 border border-emerald-100/60">
+                        <p className="text-xs font-bold text-slate-800">{food.foodName}</p>
+                        <p className="text-[11px] text-slate-500 font-medium">{food.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Món cần tránh */}
+                <div className="bg-rose-50/60 border border-rose-100 rounded-2xl p-4 space-y-2">
+                  <h3 className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    Thực phẩm cần hạn chế / Tránh
+                  </h3>
+                  <div className="space-y-2">
+                    {recommendation.foodsToAvoid.map((food, idx) => (
+                      <div key={idx} className="bg-white/80 rounded-xl p-2.5 border border-rose-100/60">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold text-slate-800">{food.foodName}</p>
+                          {food.linkedTo && (
+                            <span className="text-[9px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md">
+                              {food.linkedTo}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 font-medium">{food.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* --- 7-DAY WEEKLY MEAL PLAN MATRIX --- */}
+          {weeklyMealPlan && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  <h2 className="text-sm font-black text-slate-800">
+                    Thực Đơn Ăn Dặm 7 Ngày ({weeklyMealPlan.startDate} ~ {weeklyMealPlan.endDate})
+                  </h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                      weeklyMealPlan.status === "accepted"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    {weeklyMealPlan.status === "accepted" ? "Đã áp dụng ✓" : "Đang chờ duyệt"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Matrix Table */}
+              <div className="overflow-x-auto">
+                <div className="min-w-[640px] grid grid-cols-8 gap-2">
+                  <div className="font-bold text-[10px] text-slate-400 uppercase self-center">
+                    Bữa ăn
+                  </div>
+                  {weeklyMealPlan.days.map((day) => (
+                    <div key={day.date} className="text-center font-bold text-[11px] text-slate-700 bg-slate-50 py-1.5 rounded-xl border border-slate-100">
+                      {day.date.substring(5)}
                     </div>
+                  ))}
 
-                    <AnimatePresence>
-                      {food.showInfo && (
-                        <motion.p
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="text-[10px] text-slate-500 leading-relaxed font-semibold"
-                        >
-                          {food.reason}
-                        </motion.p>
-                      )}
-                    </AnimatePresence>
+                  {MEAL_TYPES.map((mealType) => (
+                    <React.Fragment key={mealType}>
+                      <div className="flex items-center text-[10px] font-bold text-slate-400 uppercase">
+                        {MEAL_TYPE_LABELS[mealType]}
+                      </div>
+                      {weeklyMealPlan.days.map((day) => {
+                        const meal = day.meals.find((m) => m.mealType.toLowerCase() === mealType);
+                        return (
+                          <div
+                            key={`${day.date}-${mealType}`}
+                            className="bg-slate-50/60 border border-slate-100 rounded-xl p-2 space-y-0.5 min-h-[56px]"
+                          >
+                            {meal ? (
+                              <>
+                                <p className="text-[10px] font-bold text-slate-700 leading-tight">
+                                  {meal.foodName}
+                                </p>
+                                {meal.note && (
+                                  <p className="text-[9px] text-slate-400 leading-tight">{meal.note}</p>
+                                )}
+                              </>
+                            ) : (
+                              <p className="text-[9px] text-slate-300">—</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action buttons for meal plan */}
+              {weeklyMealPlan.status === "pending" && (
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    onClick={onAcceptWeeklyMealPlan}
+                    disabled={isAcceptingWeeklyPlan}
+                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer disabled:opacity-60"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    {isAcceptingWeeklyPlan ? "Đang xử lý…" : "Chấp nhận thực đơn này"}
+                  </button>
+                  <button
+                    onClick={() => setShowRegenerateModal(true)}
+                    disabled={isGeneratingWeeklyPlan}
+                    className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer disabled:opacity-60"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingWeeklyPlan ? "animate-spin" : ""}`} />
+                    {isGeneratingWeeklyPlan ? "Đang tạo lại…" : "Tạo lại với phản hồi"}
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* --- FOOD SAFETY ALERTS SECTION --- */}
+          {nutritionSafety && (
+            <div className="bg-rose-50/50 border border-rose-100 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center gap-2 text-rose-800">
+                <ShieldAlert className="w-5 h-5 text-rose-600" />
+                <h3 className="text-sm font-bold">Cảnh Báo An Toàn Thực Phẩm Chuẩn WHO & Dị Ứng</h3>
+              </div>
+
+              {nutritionSafety.allergenAlerts?.hasAlert && (
+                <div className="bg-white/80 rounded-2xl p-4 border border-rose-200 text-xs font-semibold text-rose-700 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5 text-rose-800">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    Cảnh báo tiền sử dị ứng của bé {activeBaby.name}:
+                  </p>
+                  <p>{nutritionSafety.allergenAlerts.warningMessage}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {nutritionSafety.foodsToAvoid.map((item, idx) => (
+                  <div key={idx} className="bg-white rounded-2xl p-3.5 border border-rose-100 space-y-1">
+                    <p className="text-xs font-bold text-slate-800">{item.name}</p>
+                    <p className="text-[11px] text-slate-500 font-medium">{item.reason}</p>
                   </div>
                 ))}
               </div>
             </div>
-
-            {/* View Full Safety Guide Button */}
-            <button
-              onClick={() => setShowSafetyModal(true)}
-              className="w-full inline-flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-100 text-blue-700 text-[10px] font-bold py-2 rounded-xl transition-all cursor-pointer"
-            >
-              <BookOpen className="w-4.5 h-4.5 text-blue-600" />
-              Xem toàn bộ Hướng dẫn An toàn
-            </button>
-          </div>
-
-          {/* AI Meal Plan Widget */}
-          <div className="bg-[#ecfdf5]/80 backdrop-blur-xl border border-emerald-100/60 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-emerald-500/10">
-              <h3 className="text-emerald-950 font-bold text-xs uppercase tracking-wide flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-emerald-600" />
-                Thực đơn ăn dặm từ AI
-              </h3>
-              <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-700 font-bold text-[8px] rounded uppercase">
-                Đang ăn dặm
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {[
-                { name: "Súp bơ nghiền (Bơ)", desc: "Giàu chất béo không bão hòa tốt cho não bộ. Có thể trộn với sữa công thức để điều chỉnh độ đặc.", reaction: "Khuyên dùng cao" },
-                { name: "Súp cải bó xôi (Cải bó xôi)", desc: "Nguồn cung cấp sắt và vitamin tuyệt vời. Hấp chín và xay mịn.", reaction: "Dùng vào tuần tới" }
-              ].map((rec, rIdx) => (
-                <div key={rIdx} className="bg-white/80 rounded-2xl p-3 space-y-1.5 border border-emerald-100/40">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800">{rec.name}</span>
-                    <span className="text-[9px] bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.2 rounded-md">
-                      {rec.reaction}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
-                    {rec.desc}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <button className="w-full inline-flex items-center justify-center gap-1 text-[10px] font-bold text-emerald-700 hover:text-emerald-900 transition-colors mt-2 cursor-pointer">
-              Xem thực đơn hàng tuần
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
+          )}
         </div>
+      )}
 
-      </div>
+      {/* ========================================================================= */}
+      {/* TAB 2: NHẬT KÝ CỮ BÚ & NGUYÊN LIỆU ÁN DẶM */}
+      {/* ========================================================================= */}
+      {activeTab === "tracking" && (
+        <div className="space-y-6">
+          {/* Action Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-100">
+            <p className="text-xs font-bold text-slate-700">
+              Nhật ký ăn bú cho bé {activeBaby.name}
+            </p>
 
-      {/* Floating Action Button (FAB) at Bottom Right */}
-      <button
-        onClick={() => setShowAddFeedModal(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-primary hover:bg-primary/90 text-white rounded-full flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 transition-all cursor-pointer z-40"
-        title="Add feed entry"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAddFeedModal(true)}
+                className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                + Thêm cữ bú (Sữa)
+              </button>
+
+              <button
+                onClick={() => setShowAddIngredientModal(true)}
+                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                + Thêm nguyên liệu ăn dặm
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Cữ bú sữa */}
+            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Milk className="w-5 h-5 text-indigo-500" />
+                  <h3 className="text-sm font-bold text-slate-800">Cữ bú sữa (Sữa mẹ / Công thức)</h3>
+                </div>
+                <span className="text-xs font-bold text-slate-400">{feeds.length} lượt</span>
+              </div>
+
+              {feeds.length === 0 ? (
+                <p className="text-xs text-slate-400 font-semibold text-center py-8">
+                  Chưa có lịch sử bú sữa nào được ghi nhận.
+                </p>
+              ) : (
+                <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
+                  {feeds.map((feed) => (
+                    <div
+                      key={feed.id}
+                      className="flex items-center justify-between bg-slate-50/80 hover:bg-slate-100/80 p-3 rounded-2xl border border-slate-100 transition-colors"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-800">
+                            {feed.type === "formula" ? "Sữa công thức 🍼" : "Sữa mẹ 🤱"}
+                          </span>
+                          <span className="text-xs font-extrabold text-primary">
+                            {feed.amountMl} ml
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {feed.loggedAt.substring(0, 16).replace("T", " ")}
+                        </p>
+                        {feed.note && (
+                          <p className="text-[11px] text-slate-500 italic">{feed.note}</p>
+                        )}
+                      </div>
+
+                      {onDeleteFeed && (
+                        <button
+                          onClick={() => onDeleteFeed(feed.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="Xóa cữ này"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Nguyên liệu ăn dặm */}
+            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Apple className="w-5 h-5 text-emerald-500" />
+                  <h3 className="text-sm font-bold text-slate-800">Nguyên liệu ăn dặm thực tế</h3>
+                </div>
+                <span className="text-xs font-bold text-slate-400">{ingredients.length} món</span>
+              </div>
+
+              {ingredients.length === 0 ? (
+                <p className="text-xs text-slate-400 font-semibold text-center py-8">
+                  Chưa có nguyên liệu ăn dặm nào được ghi nhận.
+                </p>
+              ) : (
+                <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
+                  {ingredients.map((ing) => (
+                    <div
+                      key={ing.id}
+                      className="flex items-center justify-between bg-slate-50/80 hover:bg-slate-100/80 p-3 rounded-2xl border border-slate-100 transition-colors"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-800">{ing.name}</span>
+                          <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">
+                            {ing.category}
+                          </span>
+                        </div>
+                        <p className="text-xs font-extrabold text-emerald-600">
+                          {ing.amountG}g
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {ing.loggedAt.substring(0, 16).replace("T", " ")}
+                        </p>
+                      </div>
+
+                      {onDeleteIngredient && (
+                        <button
+                          onClick={() => onDeleteIngredient(ing.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="Xóa món này"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODALS SECTION */}
+      {/* ========================================================================= */}
 
       {/* --- ADD FEED MODAL --- */}
       <AnimatePresence>
@@ -539,7 +586,7 @@ export default function NutritionView({
               className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-800">Thêm cữ ăn mới</h3>
+                <h3 className="text-sm font-black text-slate-800">Thêm cữ bú mới</h3>
                 <button
                   onClick={() => setShowAddFeedModal(false)}
                   className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -548,84 +595,57 @@ export default function NutritionView({
                 </button>
               </div>
 
-              <form onSubmit={handleFeedSubmit} className="space-y-4 text-xs font-bold text-slate-600">
+              <form onSubmit={handleAddFeedSubmit} className="space-y-4 text-xs font-bold text-slate-600">
                 <div className="space-y-1">
-                  <label className="block">Loại thức ăn</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {["Formula", "Breast", "Solids"].map((type) => {
-                      const labels: Record<string, string> = {
-                        Formula: "Sữa CT",
-                        Breast: "Sữa mẹ",
-                        Solids: "Ăn dặm"
-                      };
-                      return (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => setFeedType(type as any)}
-                          className={`py-2 rounded-xl border text-center transition-all cursor-pointer ${
-                            feedType === type
-                              ? "bg-primary border-primary text-white"
-                              : "bg-slate-50 border-slate-200 hover:bg-slate-100"
-                          }`}
-                        >
-                          {labels[type]}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <label className="block">Loại sữa</label>
+                  <select
+                    value={feedType}
+                    onChange={(e) => setFeedType(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:border-primary focus:outline-hidden font-semibold"
+                  >
+                    <option value="formula">Sữa công thức 🍼</option>
+                    <option value="breast">Sữa mẹ 🤱</option>
+                  </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  {feedType !== "Solids" ? (
-                    <div className="space-y-1">
-                      <label className="block">Thể tích (ml)</label>
-                      <input
-                        type="number"
-                        required
-                        value={feedAmount}
-                        onChange={(e) => setFeedAmount(Number(e.target.value))}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/45 focus:outline-hidden font-medium"
-                      />
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <label className="block">Thực đơn ăn dặm</label>
-                      <input
-                        type="text"
-                        required
-                        value={feedDetails}
-                        onChange={(e) => setFeedDetails(e.target.value)}
-                        placeholder="Ví dụ: Súp bơ nghiền"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/45 focus:outline-hidden font-medium"
-                      />
-                    </div>
-                  )}
+                <div className="space-y-1">
+                  <label className="block">Lượng sữa (ml)</label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={500}
+                    value={feedAmount}
+                    onChange={(e) => setFeedAmount(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:border-primary focus:outline-hidden font-semibold"
+                    required
+                  />
+                </div>
 
-                  <div className="space-y-1">
-                    <label className="block">Thời gian dùng</label>
-                    <input
-                      type="time"
-                      required
-                      value={feedTime}
-                      onChange={(e) => setFeedTime(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/45 focus:outline-hidden font-medium"
-                    />
-                  </div>
+                <div className="space-y-1">
+                  <label className="block">Ghi chú (tùy chọn)</label>
+                  <input
+                    type="text"
+                    value={feedNote}
+                    onChange={(e) => setFeedNote(e.target.value)}
+                    placeholder="Ví dụ: bú ngoan, ợ hơi tốt..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:border-primary focus:outline-hidden font-medium"
+                  />
                 </div>
 
                 <button
                   type="submit"
                   className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
                 >
-                  Lưu Nhật ký cữ bú/ăn dặm
+                  Lưu cữ bú
                 </button>
               </form>
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
 
-        {/* --- ADD INGREDIENT MODAL --- */}
+      {/* --- ADD INGREDIENT MODAL --- */}
+      <AnimatePresence>
         {showAddIngredientModal && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
             <motion.div
@@ -635,7 +655,7 @@ export default function NutritionView({
               className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-800">Thêm phản ứng ăn dặm</h3>
+                <h3 className="text-sm font-black text-slate-800">Thêm nguyên liệu ăn dặm</h3>
                 <button
                   onClick={() => setShowAddIngredientModal(false)}
                   className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -644,103 +664,155 @@ export default function NutritionView({
                 </button>
               </div>
 
-              <form onSubmit={handleIngredientSubmit} className="space-y-4 text-xs font-bold text-slate-600">
+              <form onSubmit={handleAddIngredientSubmit} className="space-y-4 text-xs font-bold text-slate-600">
                 <div className="space-y-1">
-                  <label className="block">Tên nguyên liệu</label>
+                  <label className="block">Tên nguyên liệu / Món ăn</label>
                   <input
                     type="text"
+                    value={ingredientName}
+                    onChange={(e) => setIngredientName(e.target.value)}
+                    placeholder="Ví dụ: Bí đỏ, Cháo thịt lợn, Cá hồi..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:border-primary focus:outline-hidden font-medium"
                     required
-                    value={ingName}
-                    onChange={(e) => setIngName(e.target.value)}
-                    placeholder="Ví dụ: Bơ, Đậu phộng nghiền"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 focus:border-primary/45 focus:outline-hidden font-medium"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block">Trạng thái phản ứng</label>
+                  <label className="block">Nhóm thực phẩm</label>
                   <select
-                    value={ingReaction}
-                    onChange={(e) => setIngReaction(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/45 focus:outline-hidden font-medium"
+                    value={ingredientCategory}
+                    onChange={(e) => setIngredientCategory(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:border-primary focus:outline-hidden font-semibold"
                   >
-                    <option value="Loved it">😋 Thích</option>
-                    <option value="Neutral">😐 Bình thường</option>
-                    <option value="Spat out">🤢 Nhổ ra</option>
-                    <option value="Allergic Reaction">🚨 Phản ứng dị ứng (Phát ban/Nôn mửa)</option>
+                    <option value="Rau củ">Rau củ / Trái cây 🥦</option>
+                    <option value="Đạm / Thịt cá">Đạm / Thịt cá 🥩</option>
+                    <option value="Tinh bột / Cháo">Tinh bột / Cháo 🥣</option>
+                    <option value="Sữa / Phô mai">Sữa / Phô mai 🧀</option>
                   </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block">Khối lượng (gam)</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={500}
+                    value={ingredientAmount}
+                    onChange={(e) => setIngredientAmount(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:border-primary focus:outline-hidden font-semibold"
+                    required
+                  />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
                 >
-                  Lưu Nhật ký phản ứng
+                  Lưu nguyên liệu
                 </button>
               </form>
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
 
-        {/* --- FULL SAFETY GUIDE MODAL --- */}
-        {showSafetyModal && (
+      {/* --- REGENERATE WEEKLY MEAL PLAN MODAL --- */}
+      <AnimatePresence>
+        {showRegenerateModal && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-xl space-y-4 max-h-[85vh] overflow-y-auto"
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-blue-600" />
-                  <h3 className="text-sm font-black text-slate-800">Cẩm nang An toàn Dinh dưỡng (WHO/AAP)</h3>
-                </div>
+                <h3 className="text-sm font-black text-slate-800">Tạo lại thực đơn 7 ngày</h3>
                 <button
-                  onClick={() => setShowSafetyModal(false)}
+                  onClick={() => setShowRegenerateModal(false)}
                   className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
-                  <X className="w-4 h-4" />
+                  Hủy
                 </button>
               </div>
 
-              <div className="space-y-3 text-xs text-slate-600 leading-relaxed font-medium">
-                <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-2xl space-y-1">
-                  <h4 className="font-bold text-blue-900 flex items-center gap-1">📌 Quy tắc 3 ngày thử món mới (Rule of 3)</h4>
-                  <p>Khi cho bé thử nguyên liệu ăn dặm mới (ví dụ: bơ, trứng, cá), cho bé ăn liên tục 3 ngày để dễ dàng xác định chính xác thực phẩm gây dị ứng nếu có phản ứng.</p>
+              <form onSubmit={handleRegenerateSubmit} className="space-y-4 text-xs font-bold text-slate-600">
+                <div className="space-y-1">
+                  <label className="block">Phản hồi cho AI (không bắt buộc)</label>
+                  <textarea
+                    value={regenerateFeedback}
+                    onChange={(e) => setRegenerateFeedback(e.target.value)}
+                    placeholder="Ví dụ: bé không thích cá, tránh món cay, muốn nhiều rau củ hơn..."
+                    rows={3}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 focus:border-primary/45 focus:outline-hidden font-medium resize-none"
+                  />
                 </div>
 
-                <div className="p-3 bg-red-50/70 border border-red-100 rounded-2xl space-y-1">
-                  <h4 className="font-bold text-red-900 flex items-center gap-1">🚨 Dấu hiệu dị ứng cần đi cấp cứu ngay</h4>
-                  <ul className="list-disc pl-4 space-y-0.5 text-red-800">
-                    <li>Khó thở, thở khò khè hoặc sưng môi, lưỡi, mắt.</li>
-                    <li>Nổi mẩn đỏ toàn thân, ngứa ngáy nhiều.</li>
-                    <li>Nôn mửa nhiều lần hoặc tiêu chảy cấp.</li>
-                  </ul>
-                </div>
-
-                <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-2xl space-y-1">
-                  <h4 className="font-bold text-amber-900 flex items-center gap-1">⚠️ Phòng ngừa hóc dị vật (Choking Hazards)</h4>
-                  <p>Cắt đôi hoặc bổ 4 các loại quả tròn nhỏ (nho, cà chua bi, cherry). Tránh cho trẻ dưới 3 tuổi ăn hạt nguyên hạt, kẹo cứng, popcorn.</p>
-                </div>
-
-                <div className="p-3 bg-emerald-50/70 border border-emerald-100 rounded-2xl space-y-1">
-                  <h4 className="font-bold text-emerald-900 flex items-center gap-1">🥛 An toàn hâm sữa & Bảo quản</h4>
-                  <p>Sữa mẹ/Sữa công thức đã pha chỉ dùng trong 2 giờ ở nhiệt độ phòng. Hâm sữa bằng nước ấm dưới 40°C, không hâm bằng lò vi sóng.</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowSafetyModal(false)}
-                className="w-full bg-[#1c648e] hover:bg-[#154c6d] text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer text-xs"
-              >
-                Đã hiểu hướng dẫn
-              </button>
+                <button
+                  type="submit"
+                  disabled={isGeneratingWeeklyPlan}
+                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer disabled:opacity-60"
+                >
+                  {isGeneratingWeeklyPlan ? "Đang tạo lại…" : "Tạo thực đơn mới"}
+                </button>
+              </form>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
+      {/* --- SAFETY HANDBOOK MODAL --- */}
+      <AnimatePresence>
+        {showSafetyHandbookModal && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-xl space-y-4 max-h-[80vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-800">
+                  {safetyHandbook?.title || "Cẩm nang An toàn Dinh dưỡng"}
+                </h3>
+                <button
+                  onClick={() => setShowSafetyHandbookModal(false)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
+
+              {isLoadingSafetyHandbook && !safetyHandbook && (
+                <p className="text-[11px] text-slate-400 font-semibold text-center py-6">Đang tải cẩm nang…</p>
+              )}
+
+              {safetyHandbook && (
+                <div className="space-y-3">
+                  {safetyHandbook.sections.map((section, idx) => (
+                    <div
+                      key={idx}
+                      className={`border rounded-2xl p-3.5 space-y-1.5 ${
+                        HANDBOOK_LEVEL_STYLES[section.level] || HANDBOOK_LEVEL_STYLES.info
+                      }`}
+                    >
+                      <h4 className="text-xs font-bold">{section.title}</h4>
+                      <p className="text-[11px] leading-relaxed font-medium">{section.description}</p>
+                      {section.items && section.items.length > 0 && (
+                        <ul className="list-disc list-inside text-[11px] leading-relaxed font-medium space-y-0.5">
+                          {section.items.map((item, itemIdx) => (
+                            <li key={itemIdx}>{item}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
