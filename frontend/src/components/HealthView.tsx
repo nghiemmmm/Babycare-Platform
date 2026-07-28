@@ -262,6 +262,36 @@ export default function HealthView({
               </span>
             </div>
 
+            {/* Quick Symptom Filter Chips */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 pb-1">
+              <span className="text-[11px] font-bold text-slate-400 mr-1">Lọc triệu chứng:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedSymptomFilter(null)}
+                className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${
+                  selectedSymptomFilter === null
+                    ? "bg-primary text-white border-primary shadow-xs"
+                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                Tất cả
+              </button>
+              {["Sốt", "Ho", "Sổ mũi", "Nôn", "Tiêu chảy", "Mọc răng", "Nổi mẩn"].map((sym) => (
+                <button
+                  key={sym}
+                  type="button"
+                  onClick={() => setSelectedSymptomFilter(selectedSymptomFilter === sym ? null : sym)}
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${
+                    selectedSymptomFilter === sym
+                      ? "bg-primary text-white border-primary shadow-xs"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  {sym}
+                </button>
+              ))}
+            </div>
+
             {filteredIncidents.length === 0 ? (
               <p className="text-xs text-slate-400 font-medium text-center py-8">
                 Chưa có sự cố sức khỏe nào được ghi nhận.
@@ -587,47 +617,11 @@ export default function HealthView({
                   </div>
                 </div>
 
-                {/* 💊 QUICK TREATMENT CHIPS */}
-                <div className="space-y-1.5">
-                  <label className="block">Bấm chọn phác đồ xử lý & thuốc dùng:</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {QUICK_TREATMENTS.map((treat) => {
-                      const isSelected = selectedTreatmentChips.includes(treat);
-                      return (
-                        <button
-                          key={treat}
-                          type="button"
-                          onClick={() => toggleTreatmentChip(treat)}
-                          className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                              : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                          }`}
-                        >
-                          {treat} {isSelected ? "✓" : ""}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Doctor field */}
-                <div className="space-y-1">
-                  <label className="block">Bác sĩ kê đơn / Nguồn thông tin</label>
-                  <input
-                    type="text"
-                    value={incidentDoctor}
-                    onChange={(e) => setIncidentDoctor(e.target.value)}
-                    placeholder="Ví dụ: Bác sĩ nhi khoa, Bệnh viện Nhi Đồng..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium text-slate-800"
-                  />
-                </div>
-
                 <button
                   type="submit"
                   className="w-full bg-primary hover:bg-primary/95 text-white py-3 rounded-2xl font-black text-xs transition-all shadow-md cursor-pointer"
                 >
-                  Lưu Bệnh Án & Theo Dõi Sức Khỏe
+                  Lưu Ghi Chép Sức Khỏe
                 </button>
               </form>
             </motion.div>
