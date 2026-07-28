@@ -539,58 +539,6 @@ export default function HealthView({
                       </button>
                     ))}
                   </div>
-
-                  {/* Comprehensive Multi-Factor AI Risk Assessment (WHO/AAP) */}
-                  <div className="pt-1">
-                    {(() => {
-                      const hasHighFever = incidentTemp >= 38.5;
-                      const hasEmergencySymptom = selectedSymptomChips.some((s) => s.includes("Co giật") || s.includes("Nôn") || s.includes("Khó thở"));
-                      const hasAllergySymptom = selectedSymptomChips.some((s) => s.includes("Nổi mẩn"));
-
-                      let riskLevel: "safe" | "warning" | "danger" | "emergency" = "safe";
-                      let title = `Thân nhiệt ${incidentTemp}°C - An toàn`;
-                      let advice = `Thân nhiệt bé ở mức bình thường. Khuyên phụ huynh cho bé bú đủ cữ, duy trì phòng thoáng mát và theo dõi sinh hoạt.`;
-
-                      if (hasEmergencySymptom || incidentTemp >= 39.5) {
-                        riskLevel = "emergency";
-                        title = `🚨 CẢNH BÁO NGUY HIỂM CẤP CỨU (${incidentTemp}°C + Triệu chứng cấp tính)`;
-                        advice = `Bé có dấu hiệu cần đưa đi viện cấp cứu (${selectedSymptomChips.join(", ") || "Sốt cực cao >39.5°C"}). Cần đưa bé đến Bệnh viện Nhi gần nhất ngay lập tức! Cởi bớt quần áo, chườm ấm liên tục khi di chuyển.`;
-                      } else if (hasHighFever) {
-                        riskLevel = "danger";
-                        title = `⚠️ CẢNH BÁO SỐT CAO (${incidentTemp}°C - Chuẩn AAP/WHO)`;
-                        advice = `Dùng Paracetamol liều 10-15mg/kg cho bé ${activeBaby.name} (khoảng 75 - 100mg hoặc gói 150mg theo chỉ định). Giãn cách tối thiểu 4-6 tiếng giữa 2 liều uống.`;
-                      } else if (incidentTemp >= 37.5 || selectedSymptomChips.length > 0) {
-                        riskLevel = "warning";
-                        title = `🟡 Sốt nhẹ / Theo dõi triệu chứng (${incidentTemp}°C)`;
-                        advice = `Triệu chứng ghi nhận: ${selectedSymptomChips.join(", ") || "Sốt nhẹ"}. Chưa cần dùng hạ sốt. Chườm ấm trán nách bẹn, cho bé uống nhiều nước/sữa và đo lại sau 30 phút.`;
-                      }
-
-                      if (hasAllergySymptom && activeBaby.allergies && activeBaby.allergies.length > 0) {
-                        advice += ` ⚠️ Lưu ý tiền sử dị ứng của bé (${activeBaby.allergies.join(", ")}): Kiểm tra kĩ thành phần thuốc trước khi cho bé uống.`;
-                      }
-
-                      return (
-                        <div
-                          className={`p-3.5 rounded-2xl border space-y-1.5 transition-all ${
-                            riskLevel === "emergency"
-                              ? "bg-rose-100 border-rose-300 text-rose-950 animate-pulse"
-                              : riskLevel === "danger"
-                              ? "bg-rose-50 border-rose-200 text-rose-900"
-                              : riskLevel === "warning"
-                              ? "bg-amber-50 border-amber-200 text-amber-900"
-                              : "bg-emerald-50 border-emerald-200 text-emerald-900"
-                          }`}
-                        >
-                          <p className="text-xs font-black flex items-center gap-1.5">
-                            <Sparkles className="w-4 h-4 text-primary shrink-0" />
-                            🩺 AI Đánh Giá Nguy Cơ & Lời Khuyên Y Khoa (WHO/AAP):
-                          </p>
-                          <p className="text-xs font-bold">{title}</p>
-                          <p className="text-[11px] leading-relaxed font-medium opacity-90">{advice}</p>
-                        </div>
-                      );
-                    })()}
-                  </div>
                 </div>
 
                 {/* 🏷️ QUICK SYMPTOM CHIPS */}
@@ -718,19 +666,6 @@ export default function HealthView({
                     ))}
                   </div>
                 </div>
-
-                {/* AI Weight-Based Dosage Hint */}
-                {medName.toLowerCase().includes("hapacol") || medName.toLowerCase().includes("paracetamol") ? (
-                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl space-y-1 text-amber-900">
-                    <p className="text-[11px] font-bold flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                      🩺 AI Tính Liều Hạ Sốt Theo Cân Nặng Bé {activeBaby.name}:
-                    </p>
-                    <p className="text-[10px] leading-relaxed font-medium text-amber-800">
-                      Liều Paracetamol an toàn là 10-15mg/kg/lần (Khuyên dùng ~75 - 110mg/lần). Giãn cách tối thiểu 4-6 tiếng giữa 2 liều uống.
-                    </p>
-                  </div>
-                ) : null}
 
                 {/* Prescribed By */}
                 <div className="space-y-1">
