@@ -11,10 +11,16 @@ import {
   Check,
   RefreshCw,
   AlertTriangle,
-  Info,
   Apple,
   Milk,
-  Clock
+  Clock,
+  ChevronRight,
+  Utensils,
+  Search,
+  CheckCircle2,
+  XCircle,
+  HelpCircle,
+  Award
 } from "lucide-react";
 import {
   BabyProfile,
@@ -49,18 +55,22 @@ export interface NutritionViewProps {
 }
 
 const MEAL_TYPES = ["sáng", "trưa", "tối", "phụ"] as const;
-const MEAL_TYPE_LABELS: Record<string, string> = {
-  sáng: "Sáng 🌅",
-  trưa: "Trưa ☀️",
-  tối: "Tối 🌙",
-  phụ: "Bữa phụ 🍎"
+const MEAL_TYPE_LABELS: Record<string, { title: string; icon: string; time: string }> = {
+  sáng: { title: "Bữa Sáng", icon: "🌅", time: "07:30 - 08:30" },
+  trưa: { title: "Bữa Trưa", icon: "☀️", time: "11:30 - 12:30" },
+  tối: { title: "Bữa Tối", icon: "🌙", time: "17:30 - 18:30" },
+  phụ: { title: "Bữa Phụ", icon: "🍎", time: "15:00 - 15:30" }
 };
 
-const HANDBOOK_LEVEL_STYLES: Record<string, string> = {
-  info: "bg-indigo-50/70 border-indigo-100 text-indigo-900",
-  danger: "bg-rose-50/70 border-rose-100 text-rose-900",
-  warning: "bg-amber-50/70 border-amber-100 text-amber-900",
-  success: "bg-emerald-50/70 border-emerald-100 text-emerald-900"
+const REACTION_CONFIG: Record<string, { label: string; bg: string; icon: string }> = {
+  "Loved it": { label: "😋 Rất thích", bg: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: "😋" },
+  Neutral: { label: "😐 Bình thường", bg: "bg-slate-50 text-slate-700 border-slate-200", icon: "😐" },
+  "Spat out": { label: "🤢 Nhè ra", bg: "bg-amber-50 text-amber-700 border-amber-200", icon: "🤢" },
+  "Allergic Reaction": {
+    label: "⚠️ Nghi ngờ dị ứng",
+    bg: "bg-rose-100 text-rose-800 border-rose-300 font-bold animate-pulse",
+    icon: "⚠️"
+  }
 };
 
 export default function NutritionView({
@@ -79,33 +89,37 @@ export default function NutritionView({
   isAcceptingWeeklyPlan = false,
   onGenerateWeeklyMealPlan,
   onAcceptWeeklyMealPlan,
-  nutritionSafety,
   safetyHandbook,
   isLoadingSafetyHandbook = false,
   onOpenSafetyHandbook
 }: NutritionViewProps) {
-  const [activeTab, setActiveTab] = useState<"ai" | "tracking">("ai");
+  const [activeTab, setActiveTab] = useState<"ai" | "tracking" | "safety">("ai");
+  const [selectedMealPlanDayIndex, setSelectedMealPlanDayIndex] = useState<number>(0);
+
+  // Quick Food Safety Search
+  const [searchFoodQuery, setSearchFoodQuery] = useState("");
 
   // Modals for tracking
   const [showAddFeedModal, setShowAddFeedModal] = useState(false);
   const [showAddIngredientModal, setShowAddIngredientModal] = useState(false);
 
-  // Feed Form
+  // Feed Form State
   const [feedType, setFeedType] = useState<"formula" | "breast">("formula");
   const [feedAmount, setFeedAmount] = useState<number>(150);
   const [feedNote, setFeedNote] = useState<string>("");
 
-  // Ingredient Form
+  // Ingredient Form State
   const [ingredientName, setIngredientName] = useState<string>("");
   const [ingredientCategory, setIngredientCategory] = useState<string>("Rau củ");
   const [ingredientAmount, setIngredientAmount] = useState<number>(50);
   const [ingredientReaction, setIngredientReaction] = useState<"Loved it" | "Neutral" | "Spat out" | "Allergic Reaction">("Loved it");
 
-  // Modals for AI
+  // AI Modals
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [regenerateFeedback, setRegenerateFeedback] = useState("");
   const [showSafetyHandbookModal, setShowSafetyHandbookModal] = useState(false);
 
+  // Submits
   const handleAddFeedSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (onAddFeed) {
@@ -147,336 +161,660 @@ export default function NutritionView({
     setRegenerateFeedback("");
   };
 
-  const handleHandbookClick = () => {
-    setShowSafetyHandbookModal(true);
-    if (onOpenSafetyHandbook) {
-      onOpenSafetyHandbook();
-    }
-  };
+  // Calculations for Today's Stats
+  const todayStr = new Date().toISOString().substring(0, 10);
+  const todayFeeds = feeds.filter((f) => (f.loggedAt || f.date || "").includes(todayStr));
+  const todayIngredients = ingredients.filter((i) => (i.loggedAt || i.date || "").includes(todayStr));
 
-  const daysUntil = (endDateStr: string) => {
-    const end = new Date(endDateStr).getTime();
-    const now = new Date().getTime();
-    return Math.ceil((end - now) / (1000 * 3600 * 24));
-  };
+  const totalMilkMl = todayFeeds.reduce((sum, f) => sum + (f.amountMl || f.amount || 0), 0);
+  const totalSolidsG = todayIngredients.reduce((sum, i) => sum + (i.amountG || 0), 0);
+  const foodCategories = Array.from(new Set(todayIngredients.map((i) => i.category).filter(Boolean)));
+
+  // Combine feeds + ingredients into timeline sorted descending
+  const timelineItems = [
+    ...todayFeeds.map((f) => ({
+      id: f.id,
+      itemType: "feed" as const,
+      title: f.type === "formula" || f.type === "Formula" ? "Sữa công thức 🍼" : "Sữa mẹ 🤱",
+      subtitle: `${f.amountMl || f.amount || 0} ml`,
+      time: f.loggedAt || f.time || f.date || "",
+      note: f.note || f.details,
+      reactionBadge: null,
+      icon: <Milk className="w-4 h-4 text-indigo-500" />,
+      onDelete: () => onDeleteFeed && onDeleteFeed(f.id)
+    })),
+    ...todayIngredients.map((i) => {
+      const reactionObj = i.reaction ? REACTION_CONFIG[i.reaction] : null;
+      return {
+        id: i.id,
+        itemType: "ingredient" as const,
+        title: i.name,
+        subtitle: `${i.amountG || 0}g • ${i.category || "Ăn dặm"}`,
+        time: i.loggedAt || i.date || "",
+        note: null,
+        reactionBadge: reactionObj,
+        icon: <Apple className="w-4 h-4 text-emerald-500" />,
+        onDelete: () => onDeleteIngredient && onDeleteIngredient(i.id)
+      };
+    })
+  ].sort((a, b) => b.time.localeCompare(a.time));
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-12">
-      {/* --- HEADER TITLE & TAB SWITCHER --- */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white/70 backdrop-blur-md p-6 rounded-3xl border border-slate-100 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2.5 rounded-2xl bg-amber-500/10 text-amber-600">
-              <Apple className="w-6 h-6" />
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* ========================================================================= */}
+      {/* 👑 HERO BANNER HEADER & TOP NAV SWITCHER */}
+      {/* ========================================================================= */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10 border border-amber-200/50 rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-xs">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          {/* Baby Info & Title */}
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <img
+                src={activeBaby.avatarUrl || "/static/img/leo.png"}
+                alt={activeBaby.name}
+                className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-md"
+              />
+              <span className="absolute -bottom-1 -right-1 bg-amber-500 text-white p-1 rounded-full text-xs shadow-xs">
+                <Utensils className="w-3.5 h-3.5" />
+              </span>
             </div>
-            <div>
-              <h1 className="text-xl font-black text-slate-800 tracking-tight">
-                Dinh Dưỡng & Ăn Dặm
-              </h1>
-              <p className="text-xs font-semibold text-slate-500">
-                Thực đơn AI chuẩn WHO & Nhật ký ăn uống cho bé {activeBaby.name}
+
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                  Dinh Dưỡng & Thực Đơn AI
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-800 border border-amber-200">
+                  Chuẩn WHO & AAP
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 font-medium">
+                Hồ sơ bé <span className="font-bold text-slate-900">{activeBaby.name}</span> • 
+                {activeBaby.allergies && activeBaby.allergies.length > 0 ? (
+                  <span className="text-rose-600 font-bold ml-1">
+                    ⚠️ Dị ứng: {activeBaby.allergies.join(", ")}
+                  </span>
+                ) : (
+                  <span className="text-emerald-600 font-bold ml-1">✓ Chưa ghi nhận dị ứng</span>
+                )}
               </p>
+            </div>
+          </div>
+
+          {/* Quick Metrics Pills */}
+          <div className="flex items-center gap-3 overflow-x-auto pb-1 lg:pb-0">
+            <div className="bg-white/80 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/80 shadow-2xs flex items-center gap-3 shrink-0">
+              <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+                <Milk className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Sữa hôm nay</p>
+                <p className="text-sm font-black text-slate-800">{totalMilkMl} ml</p>
+              </div>
+            </div>
+
+            <div className="bg-white/80 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/80 shadow-2xs flex items-center gap-3 shrink-0">
+              <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+                <Apple className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Ăn dặm</p>
+                <p className="text-sm font-black text-slate-800">{totalSolidsG} g</p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/50 self-start sm:self-auto">
+        {/* Tab Selector Segmented Controls */}
+        <div className="mt-6 pt-5 border-t border-amber-200/40 flex items-center justify-between gap-3 overflow-x-auto">
+          <div className="flex items-center gap-2 p-1 bg-white/70 backdrop-blur-md rounded-2xl border border-slate-200/60 shadow-2xs">
+            <button
+              onClick={() => setActiveTab("ai")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "ai"
+                  ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Thực Đơn 7 Ngày & Trợ Lý AI
+            </button>
+
+            <button
+              onClick={() => setActiveTab("tracking")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "tracking"
+                  ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Coffee className="w-3.5 h-3.5" />
+              Nhật Ký Dinh Dưỡng Hôm Nay ({timelineItems.length})
+            </button>
+
+            <button
+              onClick={() => setActiveTab("safety")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "safety"
+                  ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              An Toàn & Dị Ứng WHO
+            </button>
+          </div>
+
           <button
-            onClick={() => setActiveTab("ai")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === "ai"
-                ? "bg-white text-primary shadow-xs"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
+            onClick={() => {
+              setShowSafetyHandbookModal(true);
+              if (onOpenSafetyHandbook) onOpenSafetyHandbook();
+            }}
+            className="hidden sm:inline-flex items-center gap-1.5 bg-white/80 hover:bg-white text-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-200 shadow-2xs transition-all cursor-pointer shrink-0"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            AI Tư Vấn & Thực Đơn 7 Ngày
-          </button>
-          <button
-            onClick={() => setActiveTab("tracking")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === "tracking"
-                ? "bg-white text-primary shadow-xs"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            <Coffee className="w-3.5 h-3.5" />
-            Nhật Ký Cữ Bú & Nguyên Liệu ({feeds.length + ingredients.length})
+            <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+            Cẩm Nang Nhi Khoa
           </button>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* TAB 1: AI TƯ VẤN & THỰC ĐƠN 7 NGÀY */}
+      {/* 🌟 TAB 1: THỰC ĐƠN 7 NGÀY & TRỢ LÝ AI (2-COLUMN DASHBOARD) */}
       {/* ========================================================================= */}
       {activeTab === "ai" && (
-        <div className="space-y-6">
-          {/* Quick Action Bar */}
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={onGenerateRecommendation}
-              disabled={isGeneratingRecommendation}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-md transition-all cursor-pointer disabled:opacity-60"
-            >
-              <Sparkles className={`w-4 h-4 ${isGeneratingRecommendation ? "animate-spin" : ""}`} />
-              {isGeneratingRecommendation ? "Đang tạo gợi ý AI…" : "✨ Tạo gợi ý dinh dưỡng AI"}
-            </button>
-
-            <button
-              onClick={() => onGenerateWeeklyMealPlan && onGenerateWeeklyMealPlan()}
-              disabled={isGeneratingWeeklyPlan}
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-md transition-all cursor-pointer disabled:opacity-60"
-            >
-              <Calendar className={`w-4 h-4 ${isGeneratingWeeklyPlan ? "animate-spin" : ""}`} />
-              {isGeneratingWeeklyPlan ? "Đang tạo thực đơn 7 ngày…" : "📅 Tạo thực đơn 7 ngày AI"}
-            </button>
-
-            <button
-              onClick={handleHandbookClick}
-              className="inline-flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xs transition-all cursor-pointer"
-            >
-              <BookOpen className="w-4 h-4 text-indigo-500" />
-              📖 Cẩm nang an toàn dinh dưỡng
-            </button>
-          </div>
-
-          {/* --- AI RECOMMENDATION CARD --- */}
-          {recommendation && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-br from-amber-50/80 via-orange-50/40 to-white border border-amber-100/80 rounded-3xl p-6 shadow-xs space-y-4"
-            >
-              <div className="flex items-center justify-between border-b border-amber-100/60 pb-3">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-amber-500" />
-                  <h2 className="text-sm font-black text-slate-800">
-                    Khuyến Nghị Dinh Dưỡng AI Cho Bé {activeBaby.name}
-                  </h2>
-                </div>
-                <span className="text-[10px] font-bold text-amber-700 bg-amber-100/80 px-2.5 py-1 rounded-full">
-                  Cập nhật: {recommendation.generatedAt.substring(0, 10)}
-                </span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* MAIN LEFT COLUMN (2/3): 7-DAY MEAL PLAN */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Header Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-5 rounded-3xl border border-slate-100 shadow-xs">
+              <div>
+                <h2 className="text-sm font-black text-slate-900">
+                  Thực Đơn Ăn Dặm 7 Ngày Dành Cho Bé {activeBaby.name}
+                </h2>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  {weeklyMealPlan
+                    ? `Áp dụng từ ${weeklyMealPlan.startDate} đến ${weeklyMealPlan.endDate}`
+                    : "Chưa có thực đơn tuần. Hãy bấm nút tạo dưới đây."}
+                </p>
               </div>
 
-              <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                {recommendation.summary}
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                {/* Món khuyến nghị */}
-                <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 space-y-2">
-                  <h3 className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
-                    <Apple className="w-4 h-4 text-emerald-600" />
-                    Món ăn khuyến nghị nên bổ sung
-                  </h3>
-                  <div className="space-y-2">
-                    {recommendation.recommendedFoods.map((food, idx) => (
-                      <div key={idx} className="bg-white/80 rounded-xl p-2.5 border border-emerald-100/60">
-                        <p className="text-xs font-bold text-slate-800">{food.foodName}</p>
-                        <p className="text-[11px] text-slate-500 font-medium">{food.reason}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Món cần tránh */}
-                <div className="bg-rose-50/60 border border-rose-100 rounded-2xl p-4 space-y-2">
-                  <h3 className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4 text-rose-600" />
-                    Thực phẩm cần hạn chế / Tránh
-                  </h3>
-                  <div className="space-y-2">
-                    {recommendation.foodsToAvoid.map((food, idx) => (
-                      <div key={idx} className="bg-white/80 rounded-xl p-2.5 border border-rose-100/60">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-bold text-slate-800">{food.foodName}</p>
-                          {food.linkedTo && (
-                            <span className="text-[9px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md">
-                              {food.linkedTo}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-500 font-medium">{food.reason}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onGenerateWeeklyMealPlan && onGenerateWeeklyMealPlan()}
+                  disabled={isGeneratingWeeklyPlan}
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-md transition-all cursor-pointer disabled:opacity-60"
+                >
+                  <Calendar className={`w-4 h-4 ${isGeneratingWeeklyPlan ? "animate-spin" : ""}`} />
+                  {isGeneratingWeeklyPlan ? "Đang tạo thực đơn…" : "📅 Tạo Thực Đơn 7 Ngày AI"}
+                </button>
               </div>
-            </motion.div>
-          )}
+            </div>
 
-          {/* --- 7-DAY WEEKLY MEAL PLAN MATRIX --- */}
-          {weeklyMealPlan && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary" />
-                  <h2 className="text-sm font-black text-slate-800">
-                    Thực Đơn Ăn Dặm 7 Ngày ({weeklyMealPlan.startDate} ~ {weeklyMealPlan.endDate})
-                  </h2>
-                </div>
-                <div className="flex items-center gap-2">
+            {/* Interactive 7-Day Meal Plan Grid Card */}
+            {weeklyMealPlan ? (
+              <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-6">
+                {/* Status Bar */}
+                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-5 h-5 text-amber-500" />
+                    <span className="text-xs font-bold text-slate-800">
+                      {weeklyMealPlan.summary || "Thực đơn dinh dưỡng chuẩn WHO cho bé"}
+                    </span>
+                  </div>
                   <span
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                    className={`text-[10px] font-bold px-3 py-1 rounded-full ${
                       weeklyMealPlan.status === "accepted"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-amber-100 text-amber-700"
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                        : "bg-amber-100 text-amber-800 border border-amber-200"
                     }`}
                   >
-                    {weeklyMealPlan.status === "accepted" ? "Đã áp dụng ✓" : "Đang chờ duyệt"}
+                    {weeklyMealPlan.status === "accepted" ? "✓ Đã Chấp Nhận Áp Dụng" : "Chờ Duyệt"}
                   </span>
                 </div>
-              </div>
 
-              {/* Matrix Table */}
-              <div className="overflow-x-auto">
-                <div className="min-w-[640px] grid grid-cols-8 gap-2">
-                  <div className="font-bold text-[10px] text-slate-400 uppercase self-center">
-                    Bữa ăn
-                  </div>
-                  {weeklyMealPlan.days.map((day) => (
-                    <div key={day.date} className="text-center font-bold text-[11px] text-slate-700 bg-slate-50 py-1.5 rounded-xl border border-slate-100">
-                      {day.date.substring(5)}
-                    </div>
-                  ))}
-
-                  {MEAL_TYPES.map((mealType) => (
-                    <React.Fragment key={mealType}>
-                      <div className="flex items-center text-[10px] font-bold text-slate-400 uppercase">
-                        {MEAL_TYPE_LABELS[mealType]}
-                      </div>
-                      {weeklyMealPlan.days.map((day) => {
-                        const meal = day.meals.find((m) => m.mealType.toLowerCase() === mealType);
-                        return (
-                          <div
-                            key={`${day.date}-${mealType}`}
-                            className="bg-slate-50/60 border border-slate-100 rounded-xl p-2 space-y-0.5 min-h-[56px]"
-                          >
-                            {meal ? (
-                              <>
-                                <p className="text-[10px] font-bold text-slate-700 leading-tight">
-                                  {meal.foodName}
-                                </p>
-                                {meal.note && (
-                                  <p className="text-[9px] text-slate-400 leading-tight">{meal.note}</p>
-                                )}
-                              </>
-                            ) : (
-                              <p className="text-[9px] text-slate-300">—</p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </React.Fragment>
-                  ))}
+                {/* Day Tabs Switcher */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                  {weeklyMealPlan.days.map((day, idx) => {
+                    const isSelected = selectedMealPlanDayIndex === idx;
+                    const dateParts = day.date.split("-");
+                    const dateDisplay = `${dateParts[2]}/${dateParts[1]}`;
+                    return (
+                      <button
+                        key={day.date}
+                        onClick={() => setSelectedMealPlanDayIndex(idx)}
+                        className={`flex flex-col items-center min-w-[72px] px-3 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer border ${
+                          isSelected
+                            ? "bg-primary text-white border-primary shadow-md"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200/60"
+                        }`}
+                      >
+                        <span className="text-[10px] opacity-80 font-medium">Thứ {idx + 2 > 7 ? "CN" : idx + 2}</span>
+                        <span className="text-xs font-black">{dateDisplay}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-              </div>
 
-              {/* Action buttons for meal plan */}
-              {weeklyMealPlan.status === "pending" && (
-                <div className="flex items-center gap-2 pt-2">
-                  <button
-                    onClick={onAcceptWeeklyMealPlan}
-                    disabled={isAcceptingWeeklyPlan}
-                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer disabled:opacity-60"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    {isAcceptingWeeklyPlan ? "Đang xử lý…" : "Chấp nhận thực đơn này"}
-                  </button>
+                {/* Selected Day Meals List */}
+                {weeklyMealPlan.days[selectedMealPlanDayIndex] && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    {MEAL_TYPES.map((mealType) => {
+                      const config = MEAL_TYPE_LABELS[mealType];
+                      const meal = weeklyMealPlan.days[selectedMealPlanDayIndex].meals.find(
+                        (m) => m.mealType.toLowerCase() === mealType
+                      );
+
+                      return (
+                        <div
+                          key={mealType}
+                          className="bg-slate-50/70 hover:bg-slate-50 border border-slate-200/60 rounded-2xl p-4 space-y-2 transition-all"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                              <span>{config.icon}</span>
+                              {config.title}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                              {config.time}
+                            </span>
+                          </div>
+
+                          {meal ? (
+                            <div className="space-y-1">
+                              <p className="text-xs font-bold text-primary leading-snug">
+                                {meal.foodName}
+                              </p>
+                              {meal.note && (
+                                <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                                  {meal.note}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 font-medium italic py-1">
+                              Chưa xếp món ăn cho bữa này.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Plan Action Buttons */}
+                <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
+                  {weeklyMealPlan.status === "pending" && (
+                    <button
+                      onClick={onAcceptWeeklyMealPlan}
+                      disabled={isAcceptingWeeklyPlan}
+                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-md transition-all cursor-pointer disabled:opacity-60"
+                    >
+                      <Check className="w-4 h-4" />
+                      {isAcceptingWeeklyPlan ? "Đang xử lý…" : "✓ Chấp Nhận Áp Dụng Thực Đơn Này"}
+                    </button>
+                  )}
+
                   <button
                     onClick={() => setShowRegenerateModal(true)}
                     disabled={isGeneratingWeeklyPlan}
-                    className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer disabled:opacity-60"
+                    className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-2xl transition-all cursor-pointer disabled:opacity-60"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingWeeklyPlan ? "animate-spin" : ""}`} />
-                    {isGeneratingWeeklyPlan ? "Đang tạo lại…" : "Tạo lại với phản hồi"}
+                    Tạo Lại Thực Đơn Khác
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white border border-slate-100 rounded-3xl p-12 text-center space-y-4 shadow-xs">
+                <div className="w-16 h-16 rounded-3xl bg-amber-50 text-amber-500 flex items-center justify-center mx-auto border border-amber-100">
+                  <Calendar className="w-8 h-8" />
+                </div>
+                <div className="space-y-1 max-w-md mx-auto">
+                  <h3 className="text-base font-black text-slate-800">Chưa Có Thực Đơn 7 Ngày AI</h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Hãy bấm nút bên dưới để AI tự động lên thực đơn ăn dặm 7 ngày cân đối 4 nhóm chất chuẩn WHO cho bé {activeBaby.name}.
+                  </p>
+                </div>
+                <button
+                  onClick={() => onGenerateWeeklyMealPlan && onGenerateWeeklyMealPlan()}
+                  disabled={isGeneratingWeeklyPlan}
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-5 py-3 rounded-2xl shadow-lg transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Bắt Đầu Tạo Thực Đơn 7 Ngày AI
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT SIDEBAR COLUMN (1/3): AI RECOMMENDATIONS WIDGET */}
+          <div className="space-y-6">
+            {/* AI Smart Food Recommendation Widget */}
+            <div className="bg-gradient-to-br from-amber-50/80 via-white to-white border border-amber-200/60 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-amber-200/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-500" />
+                  <h3 className="text-sm font-black text-slate-800">Gợi Ý Dinh Dưỡng AI</h3>
+                </div>
+                <button
+                  onClick={onGenerateRecommendation}
+                  disabled={isGeneratingRecommendation}
+                  className="p-1.5 rounded-xl bg-white border border-amber-200 hover:bg-amber-100 text-amber-700 transition-all cursor-pointer"
+                  title="Tải lại gợi ý"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingRecommendation ? "animate-spin" : ""}`} />
+                </button>
+              </div>
+
+              {recommendation ? (
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-600 font-medium leading-relaxed bg-white/80 p-3 rounded-2xl border border-amber-100">
+                    {recommendation.summary}
+                  </p>
+
+                  {/* Recommended Foods List */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      Món ăn khuyến nghị nên bổ sung:
+                    </h4>
+                    <div className="space-y-2">
+                      {recommendation.recommendedFoods.map((item, idx) => (
+                        <div key={idx} className="bg-white p-3 rounded-2xl border border-slate-100 shadow-2xs space-y-0.5">
+                          <p className="text-xs font-bold text-slate-800">{item.foodName}</p>
+                          <p className="text-[11px] text-slate-500 font-medium">{item.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Foods to Avoid List */}
+                  <div className="space-y-2 pt-2">
+                    <h4 className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
+                      <XCircle className="w-4 h-4 text-rose-600" />
+                      Món cần hạn chế / Tránh:
+                    </h4>
+                    <div className="space-y-2">
+                      {recommendation.foodsToAvoid.map((item, idx) => (
+                        <div key={idx} className="bg-rose-50/60 p-3 rounded-2xl border border-rose-100 space-y-0.5">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-bold text-rose-900">{item.foodName}</p>
+                            {item.linkedTo && (
+                              <span className="text-[9px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md">
+                                {item.linkedTo}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-rose-700/80 font-medium">{item.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-6 space-y-3">
+                  <Apple className="w-8 h-8 text-amber-400 mx-auto" />
+                  <p className="text-xs text-slate-500 font-medium">
+                    Chưa có khuyến nghị cá nhân hóa cho bé {activeBaby.name}.
+                  </p>
+                  <button
+                    onClick={onGenerateRecommendation}
+                    disabled={isGeneratingRecommendation}
+                    className="w-full py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                  >
+                    {isGeneratingRecommendation ? "Đang phân tích…" : "Tạo Khuyên Nghị Dinh Dưỡng AI"}
                   </button>
                 </div>
               )}
-            </motion.div>
-          )}
+            </div>
+          </div>
+        </div>
+      )}
 
-          {/* --- FOOD SAFETY ALERTS & ALLERGEN CHECKER SECTION (ALWAYS VISIBLE) --- */}
-          <div className="bg-gradient-to-br from-rose-50/70 via-amber-50/40 to-white border border-rose-100 rounded-3xl p-6 space-y-4 shadow-xs">
-            <div className="flex items-center justify-between border-b border-rose-100/80 pb-3">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-rose-600" />
-                <h3 className="text-sm font-black text-slate-800">
-                  Cảnh Báo An Toàn Thực Phẩm Chuẩn WHO & Kiểm Tra Dị Ứng
-                </h3>
-              </div>
-              <span className="text-[10px] font-bold text-rose-700 bg-rose-100/80 px-2.5 py-1 rounded-full">
-                Tiêu chuẩn Y tế Nhi khoa WHO
-              </span>
+      {/* ========================================================================= */}
+      {/* 🥣 TAB 2: NHẬT KÝ SINH HOẠT DINH DƯỠNG HÔM NAY (TIMELINE & TRACKING) */}
+      {/* ========================================================================= */}
+      {activeTab === "tracking" && (
+        <div className="space-y-6">
+          {/* Header Action Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-5 rounded-3xl border border-slate-100 shadow-xs">
+            <div>
+              <h2 className="text-sm font-black text-slate-800">
+                Nhật Ký & Dòng Thời Gian Dinh Dưỡng Hôm Nay
+              </h2>
+              <p className="text-[11px] font-semibold text-slate-400">
+                Bé {activeBaby.name} • Ngày {todayStr} ({timelineItems.length} hoạt động)
+              </p>
             </div>
 
-            {/* Allergen Check for Active Baby */}
-            <div className="bg-white rounded-2xl p-4 border border-rose-100 shadow-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                  Tiền sử dị ứng ghi nhận cho bé {activeBaby.name}:
-                </p>
-                <span className="text-[10px] font-bold text-slate-400">Từ hồ sơ y tế</span>
-              </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAddFeedModal(true)}
+                className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-4 py-2.5 rounded-2xl transition-all shadow-xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                + Thêm cữ bú (Sữa)
+              </button>
 
-              {activeBaby.allergies && activeBaby.allergies.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                onClick={() => setShowAddIngredientModal(true)}
+                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-2xl transition-all shadow-xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                + Thêm nguyên liệu ăn dặm
+              </button>
+            </div>
+          </div>
+
+          {/* 📊 Summary Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-xs space-y-1">
+              <div className="flex items-center justify-between text-indigo-600">
+                <span className="text-xs font-bold">Tổng Lượng Sữa</span>
+                <Milk className="w-4 h-4" />
+              </div>
+              <p className="text-xl font-black text-slate-800">{totalMilkMl} <span className="text-xs font-bold text-slate-400">ml</span></p>
+              <p className="text-[10px] font-semibold text-indigo-600/80">{todayFeeds.length} cữ bú trong ngày</p>
+            </div>
+
+            <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-xs space-y-1">
+              <div className="flex items-center justify-between text-emerald-600">
+                <span className="text-xs font-bold">Tổng Ăn Dặm</span>
+                <Apple className="w-4 h-4" />
+              </div>
+              <p className="text-xl font-black text-slate-800">{totalSolidsG} <span className="text-xs font-bold text-slate-400">gam</span></p>
+              <p className="text-[10px] font-semibold text-emerald-600/80">{todayIngredients.length} món ăn dặm</p>
+            </div>
+
+            <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-xs space-y-1">
+              <div className="flex items-center justify-between text-amber-600">
+                <span className="text-xs font-bold">Đa Dạng Nhóm Chất</span>
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <p className="text-xl font-black text-slate-800">{foodCategories.length} <span className="text-xs font-bold text-slate-400">nhóm</span></p>
+              <p className="text-[10px] font-semibold text-amber-700/80 truncate">
+                {foodCategories.length > 0 ? foodCategories.join(", ") : "Chưa thử món mới"}
+              </p>
+            </div>
+
+            <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-xs space-y-1">
+              <div className="flex items-center justify-between text-slate-600">
+                <span className="text-xs font-bold">Cữ Ăn Gần Nhất</span>
+                <Clock className="w-4 h-4 text-slate-400" />
+              </div>
+              <p className="text-xs font-black text-slate-800 truncate">
+                {timelineItems[0] ? timelineItems[0].title : "Chưa có cữ ăn"}
+              </p>
+              <p className="text-[10px] font-semibold text-slate-400">
+                {timelineItems[0] ? (timelineItems[0].time.substring(11, 16) || timelineItems[0].time.substring(0, 10)) : "Hôm nay"}
+              </p>
+            </div>
+          </div>
+
+          {/* 🕒 Timeline Section */}
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-primary" />
+                Dòng Thời Gian Ăn Uống (Từ Sáng Đến Tối)
+              </h3>
+            </div>
+
+            {timelineItems.length === 0 ? (
+              <div className="text-center py-12 space-y-2">
+                <Coffee className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-xs font-bold text-slate-600">Hôm nay chưa có lịch sử ăn bú nào</p>
+                <p className="text-[11px] text-slate-400">
+                  Bấm nút "+ Thêm cữ bú" hoặc "+ Thêm nguyên liệu" để bắt đầu theo dõi.
+                </p>
+              </div>
+            ) : (
+              <div className="relative border-l-2 border-slate-100 ml-4 pl-6 space-y-4 py-2">
+                {timelineItems.map((item) => (
+                  <div key={item.id} className="relative group">
+                    <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full bg-white border-2 border-primary shadow-xs flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    </div>
+
+                    <div className="flex items-center justify-between bg-slate-50/80 hover:bg-slate-100 p-4 rounded-2xl border border-slate-100 transition-all">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-white border border-slate-200/60 shadow-2xs">
+                          {item.icon}
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-slate-800">{item.title}</p>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700">
+                              {item.subtitle}
+                            </span>
+                            {item.reactionBadge && (
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${item.reactionBadge.bg}`}>
+                                {item.reactionBadge.label}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {item.time.substring(11, 16) || item.time.substring(0, 10)}
+                          </p>
+                          {item.note && (
+                            <p className="text-[11px] text-slate-500 font-medium italic">
+                              Ghi chú: {item.note}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={item.onDelete}
+                        className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Xóa bản ghi này"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🛡️ TAB 3: AN TOÀN THỰC PHẨM & KIỂM TRA DỊ ỨNG WHO */}
+      {/* ========================================================================= */}
+      {activeTab === "safety" && (
+        <div className="space-y-6">
+          {/* Quick Food Safety Search Bar */}
+          <div className="bg-gradient-to-br from-indigo-50/80 via-white to-white border border-indigo-100 rounded-3xl p-6 space-y-4 shadow-xs">
+            <div className="space-y-1">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <Search className="w-4 h-4 text-indigo-600" />
+                Tra Cứu Nhanh Tính An Toàn Thực Phẩm Cho Bé
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">
+                Nhập tên món ăn/nguyên liệu bất kỳ để kiểm tra ngay quy tắc an toàn y tế WHO.
+              </p>
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                value={searchFoodQuery}
+                onChange={(e) => setSearchFoodQuery(e.target.value)}
+                placeholder="Ví dụ: Mật ong, Sữa chua, Hải sản, Tôm, Bánh mì..."
+                className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Allergen Card */}
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                Tiền Sử Dị Ứng Của Bé {activeBaby.name}
+              </h3>
+            </div>
+
+            {activeBaby.allergies && activeBaby.allergies.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {activeBaby.allergies.map((allergy, idx) => (
                     <span
                       key={idx}
-                      className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-200 text-xs font-bold px-3 py-1 rounded-xl"
+                      className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-200 text-xs font-bold px-3 py-1.5 rounded-xl"
                     >
                       ⚠️ {allergy}
                     </span>
                   ))}
-                  <p className="text-[11px] text-rose-600 font-medium w-full mt-1">
-                    Cảnh báo: Tuyệt đối tránh cho bé ăn các món chứa {activeBaby.allergies.join(", ")} hoặc các chế phẩm liên quan.
-                  </p>
                 </div>
-              ) : (
-                <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-100">
-                  ✓ Hồ sơ bé hiện chưa ghi nhận tiền sử dị ứng thực phẩm đặc biệt nào.
+                <p className="text-xs text-rose-600 font-medium">
+                  Cảnh báo: AI sẽ tự động lọc bỏ các món chứa {activeBaby.allergies.join(", ")} khỏi thực đơn ăn dặm gợi ý.
                 </p>
-              )}
-            </div>
+              </div>
+            ) : (
+              <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-3 rounded-2xl border border-emerald-100">
+                ✓ Hồ sơ bé hiện chưa ghi nhận tiền sử dị ứng thực phẩm đặc biệt nào.
+              </p>
+            )}
+          </div>
 
-            {/* WHO Food Safety Rules for Infants */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold text-slate-700">
-                🚫 Thực phẩm nguy hiểm CẤM DÙNG cho trẻ dưới 1 tuổi (Chuẩn WHO):
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-white rounded-2xl p-3.5 border border-rose-100 space-y-1">
-                  <p className="text-xs font-bold text-rose-700">🍯 Mật ong nguyên chất</p>
-                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                    Nguy cơ ngộ độc bào tử vi khuẩn *Clostridium botulinum* ở ruột trẻ dưới 12 tháng.
-                  </p>
-                </div>
-                <div className="bg-white rounded-2xl p-3.5 border border-rose-100 space-y-1">
-                  <p className="text-xs font-bold text-rose-700">🧂 Muối & Đường nêm</p>
-                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                    Không nêm gia vị muối/đường vào đồ ăn dặm để tránh gây quá tải cho thận của bé.
-                  </p>
-                </div>
-                <div className="bg-white rounded-2xl p-3.5 border border-rose-100 space-y-1">
-                  <p className="text-xs font-bold text-rose-700">🥛 Sữa bò tươi nguyên kem</p>
-                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                    Đạm và khoáng chất quá cao khó tiêu hóa, không thay thế sữa mẹ/sữa công thức.
-                  </p>
-                </div>
-                <div className="bg-white rounded-2xl p-3.5 border border-rose-100 space-y-1">
-                  <p className="text-xs font-bold text-rose-700">🥜 Hạt nguyên hạt / Nhãn</p>
-                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                    Tránh thực phẩm hình tròn, cứng, dễ gây tắc đường thở và hóc dị vật nguy hiểm.
-                  </p>
-                </div>
+          {/* WHO Dangerous Foods */}
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
+              <ShieldAlert className="w-5 h-5 text-rose-600" />
+              Thực Phẩm Nguy Hiểm CẤM DÙNG Cho Trẻ Dưới 1 Tuổi (Chuẩn WHO)
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-rose-50/50 border border-rose-100 p-4 rounded-2xl space-y-1">
+                <p className="text-xs font-bold text-rose-800">🍯 Mật ong nguyên chất</p>
+                <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                  Bào tử vi khuẩn *Clostridium botulinum* trong mật ong có thể sinh độc tố ruột nguy hiểm cho trẻ dưới 12 tháng.
+                </p>
+              </div>
+
+              <div className="bg-rose-50/50 border border-rose-100 p-4 rounded-2xl space-y-1">
+                <p className="text-xs font-bold text-rose-800">🧂 Muối & Đường gia vị</p>
+                <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                  Tuyệt đối không nêm muối/đường vào đồ ăn dặm để bảo vệ chức năng thận còn non nớt của trẻ.
+                </p>
+              </div>
+
+              <div className="bg-rose-50/50 border border-rose-100 p-4 rounded-2xl space-y-1">
+                <p className="text-xs font-bold text-rose-800">🥛 Sữa bò tươi nguyên kem</p>
+                <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                  Hàm lượng đạm và khoáng chất cao khó hấp thu, không dùng thay thế sữa mẹ hoặc sữa công thức trước 1 tuổi.
+                </p>
+              </div>
+
+              <div className="bg-rose-50/50 border border-rose-100 p-4 rounded-2xl space-y-1">
+                <p className="text-xs font-bold text-rose-800">🥜 Hạt cứng nguyên hạt & Nhãn</p>
+                <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                  Thực phẩm tròn, cứng có nguy cơ cao hóc đường thở dị vật cấp cứu.
+                </p>
               </div>
             </div>
           </div>
@@ -484,232 +822,10 @@ export default function NutritionView({
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: NHẬT KÝ CỮ BÚ & NGUYÊN LIỆU ÁN DẶM */}
-      {/* ========================================================================= */}
-      {/* ========================================================================= */}
-      {/* TAB 2: NHẬT KÝ CỮ BÚ & NGUYÊN LIỆU ÁN DẶM (SUMMARY & TIMELINE) */}
-      {/* ========================================================================= */}
-      {activeTab === "tracking" && (() => {
-        const todayStr = new Date().toISOString().substring(0, 10);
-        const todayFeeds = feeds.filter((f) => (f.loggedAt || f.date || "").includes(todayStr));
-        const todayIngredients = ingredients.filter((i) => (i.loggedAt || i.date || "").includes(todayStr));
-
-        const totalMilkMl = todayFeeds.reduce((sum, f) => sum + (f.amountMl || f.amount || 0), 0);
-        const totalFeedSessions = todayFeeds.length;
-        const totalSolidsG = todayIngredients.reduce((sum, i) => sum + (i.amountG || 0), 0);
-        
-        const categoriesList = Array.from(new Set(todayIngredients.map((i) => i.category).filter(Boolean)));
-
-        // Combine into unified timeline sorted by time descending
-        const timelineItems = [
-          ...todayFeeds.map((f) => ({
-            id: f.id,
-            itemType: "feed" as const,
-            title: f.type === "formula" || f.type === "Formula" ? "Sữa công thức 🍼" : "Sữa mẹ 🤱",
-            subtitle: `${f.amountMl || f.amount || 0} ml`,
-            time: f.loggedAt || f.time || f.date || "",
-            note: f.note || f.details,
-            badgeBg: "bg-indigo-50 text-indigo-700 border-indigo-100",
-            icon: <Milk className="w-4 h-4 text-indigo-600" />,
-            onDelete: () => onDeleteFeed && onDeleteFeed(f.id)
-          })),
-          ...todayIngredients.map((i) => {
-            const reactionLabels: Record<string, string> = {
-              "Loved it": "😋 Rất thích",
-              "Neutral": "😐 Bình thường",
-              "Spat out": "🤢 Nhè ra",
-              "Allergic Reaction": "⚠️ Nghi ngờ dị ứng"
-            };
-            const reactionText = i.reaction ? (reactionLabels[i.reaction] || i.reaction) : null;
-            return {
-              id: i.id,
-              itemType: "ingredient" as const,
-              title: i.name,
-              subtitle: `${i.amountG || 0}g • ${i.category || "Ăn dặm"}`,
-              time: i.loggedAt || i.date || "",
-              note: reactionText,
-              badgeBg: i.reaction === "Allergic Reaction" ? "bg-rose-100 text-rose-800 border-rose-200 font-extrabold" : "bg-emerald-50 text-emerald-700 border-emerald-100",
-              icon: <Apple className="w-4 h-4 text-emerald-600" />,
-              onDelete: () => onDeleteIngredient && onDeleteIngredient(i.id)
-            };
-          })
-        ].sort((a, b) => b.time.localeCompare(a.time));
-
-        return (
-          <div className="space-y-6">
-            {/* Header Action Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
-              <div>
-                <h2 className="text-sm font-black text-slate-800">
-                  Nhật Ký Dinh Dưỡng Hôm Nay cho bé {activeBaby.name}
-                </h2>
-                <p className="text-[11px] font-semibold text-slate-400">
-                  Ngày {todayStr} • {timelineItems.length} hoạt động đã ghi nhận
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowAddFeedModal(true)}
-                  className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  + Thêm cữ bú (Sữa)
-                </button>
-
-                <button
-                  onClick={() => setShowAddIngredientModal(true)}
-                  className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  + Thêm nguyên liệu ăn dặm
-                </button>
-              </div>
-            </div>
-
-            {/* --- 📊 1. TỔNG QUAN DINH DƯỠNG HÀNG NGÀY (DAILY SUMMARY STATS) --- */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              {/* Stat Card 1: Milk Volume */}
-              <div className="bg-gradient-to-br from-indigo-50/80 via-white to-white border border-indigo-100/80 p-4 rounded-2xl shadow-xs space-y-1">
-                <div className="flex items-center justify-between text-indigo-600">
-                  <span className="text-xs font-bold">Tổng Lượng Sữa</span>
-                  <Milk className="w-4 h-4" />
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-black text-slate-800">{totalMilkMl}</span>
-                  <span className="text-xs font-bold text-slate-500">ml</span>
-                </div>
-                <p className="text-[10px] font-semibold text-indigo-600/80">
-                  {totalFeedSessions} cữ bú trong ngày
-                </p>
-              </div>
-
-              {/* Stat Card 2: Solids Amount */}
-              <div className="bg-gradient-to-br from-emerald-50/80 via-white to-white border border-emerald-100/80 p-4 rounded-2xl shadow-xs space-y-1">
-                <div className="flex items-center justify-between text-emerald-600">
-                  <span className="text-xs font-bold">Tổng Ăn Dặm</span>
-                  <Apple className="w-4 h-4" />
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-black text-slate-800">{totalSolidsG}</span>
-                  <span className="text-xs font-bold text-slate-500">gam</span>
-                </div>
-                <p className="text-[10px] font-semibold text-emerald-600/80">
-                  {todayIngredients.length} nguyên liệu ăn dặm
-                </p>
-              </div>
-
-              {/* Stat Card 3: Food Diversity */}
-              <div className="bg-gradient-to-br from-amber-50/80 via-white to-white border border-amber-100/80 p-4 rounded-2xl shadow-xs space-y-1">
-                <div className="flex items-center justify-between text-amber-600">
-                  <span className="text-xs font-bold">Đa Dạng Nhóm Chất</span>
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-black text-slate-800">{categoriesList.length}</span>
-                  <span className="text-xs font-bold text-slate-500">nhóm chất</span>
-                </div>
-                <p className="text-[10px] font-semibold text-amber-700/80 truncate">
-                  {categoriesList.length > 0 ? categoriesList.join(", ") : "Chưa nạp món mới"}
-                </p>
-              </div>
-
-              {/* Stat Card 4: Latest Activity */}
-              <div className="bg-gradient-to-br from-slate-50 via-white to-white border border-slate-200/80 p-4 rounded-2xl shadow-xs space-y-1">
-                <div className="flex items-center justify-between text-slate-600">
-                  <span className="text-xs font-bold">Hoạt Động Gần Nhất</span>
-                  <Clock className="w-4 h-4 text-slate-400" />
-                </div>
-                <p className="text-xs font-extrabold text-slate-800 truncate">
-                  {timelineItems[0] ? timelineItems[0].title : "Chưa có cữ ăn"}
-                </p>
-                <p className="text-[10px] font-semibold text-slate-400">
-                  {timelineItems[0]
-                    ? timelineItems[0].time.substring(11, 16) || timelineItems[0].time.substring(0, 10)
-                    : "Hôm nay"}
-                </p>
-              </div>
-            </div>
-
-            {/* --- 🕒 2. DÒNG THỜI GIAN DINH DƯỠNG HÔM NAY (TODAY'S TIMELINE) --- */}
-            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-primary" />
-                  <h3 className="text-sm font-black text-slate-800">
-                    Dòng Thời Gian Dinh Dưỡng Hôm Nay
-                  </h3>
-                </div>
-                <span className="text-xs font-bold text-slate-400">
-                  Sắp xếp theo thứ tự thời gian
-                </span>
-              </div>
-
-              {timelineItems.length === 0 ? (
-                <div className="text-center py-12 space-y-2">
-                  <Coffee className="w-8 h-8 text-slate-300 mx-auto" />
-                  <p className="text-xs font-bold text-slate-600">Hôm nay chưa có cữ ăn nào được ghi nhận</p>
-                  <p className="text-[11px] text-slate-400">
-                    Hãy bấm nút "+ Thêm cữ bú" hoặc "+ Thêm nguyên liệu ăn dặm" ở trên để lưu sinh hoạt cho bé.
-                  </p>
-                </div>
-              ) : (
-                <div className="relative border-l-2 border-slate-100 ml-4 pl-6 space-y-4 py-2">
-                  {timelineItems.map((item) => (
-                    <div key={item.id} className="relative group">
-                      {/* Timeline Dot */}
-                      <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full bg-white border-2 border-primary shadow-xs flex items-center justify-center">
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                      </div>
-
-                      {/* Card item */}
-                      <div className="flex items-center justify-between bg-slate-50/80 hover:bg-slate-100/80 p-3.5 rounded-2xl border border-slate-100 transition-all">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-xl bg-white border border-slate-200/60 shadow-2xs">
-                            {item.icon}
-                          </div>
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-bold text-slate-800">{item.title}</p>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${item.badgeBg}`}>
-                                {item.subtitle}
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {item.time.substring(11, 16) || item.time.substring(0, 10)}
-                            </p>
-                            {item.note && (
-                              <p className="text-[11px] text-slate-500 font-medium italic">
-                                Ghi chú: {item.note}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={item.onDelete}
-                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Xóa bản ghi này"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ========================================================================= */}
       {/* MODALS SECTION */}
       {/* ========================================================================= */}
-
-      {/* --- ADD FEED MODAL --- */}
       <AnimatePresence>
+        {/* ADD FEED MODAL */}
         {showAddFeedModal && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
             <motion.div
@@ -775,10 +891,8 @@ export default function NutritionView({
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
 
-      {/* --- ADD INGREDIENT MODAL --- */}
-      <AnimatePresence>
+        {/* ADD INGREDIENT MODAL */}
         {showAddIngredientModal && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
             <motion.div
@@ -861,10 +975,8 @@ export default function NutritionView({
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
 
-      {/* --- REGENERATE WEEKLY MEAL PLAN MODAL --- */}
-      <AnimatePresence>
+        {/* REGENERATE MEAL PLAN MODAL */}
         {showRegenerateModal && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
             <motion.div
@@ -906,10 +1018,8 @@ export default function NutritionView({
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
 
-      {/* --- SAFETY HANDBOOK MODAL --- */}
-      <AnimatePresence>
+        {/* SAFETY HANDBOOK MODAL */}
         {showSafetyHandbookModal && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
             <motion.div
@@ -920,7 +1030,7 @@ export default function NutritionView({
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 className="text-sm font-black text-slate-800">
-                  {safetyHandbook?.title || "Cẩm nang An toàn Dinh dưỡng"}
+                  {safetyHandbook?.title || "Cẩm nang An toàn Dinh dưỡng (WHO/AAP)"}
                 </h3>
                 <button
                   onClick={() => setShowSafetyHandbookModal(false)}
@@ -939,9 +1049,7 @@ export default function NutritionView({
                   {safetyHandbook.sections.map((section, idx) => (
                     <div
                       key={idx}
-                      className={`border rounded-2xl p-3.5 space-y-1.5 ${
-                        HANDBOOK_LEVEL_STYLES[section.level] || HANDBOOK_LEVEL_STYLES.info
-                      }`}
+                      className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 space-y-1.5 text-indigo-900"
                     >
                       <h4 className="text-xs font-bold">{section.title}</h4>
                       <p className="text-[11px] leading-relaxed font-medium">{section.description}</p>
