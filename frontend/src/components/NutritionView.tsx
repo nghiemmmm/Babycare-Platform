@@ -484,142 +484,214 @@ export default function NutritionView({
       {/* ========================================================================= */}
       {/* TAB 2: NHẬT KÝ CỮ BÚ & NGUYÊN LIỆU ÁN DẶM */}
       {/* ========================================================================= */}
-      {activeTab === "tracking" && (
-        <div className="space-y-6">
-          {/* Action Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-100">
-            <p className="text-xs font-bold text-slate-700">
-              Nhật ký ăn bú cho bé {activeBaby.name}
-            </p>
+      {/* ========================================================================= */}
+      {/* TAB 2: NHẬT KÝ CỮ BÚ & NGUYÊN LIỆU ÁN DẶM (SUMMARY & TIMELINE) */}
+      {/* ========================================================================= */}
+      {activeTab === "tracking" && (() => {
+        const todayStr = new Date().toISOString().substring(0, 10);
+        const todayFeeds = feeds.filter((f) => (f.loggedAt || f.date || "").includes(todayStr));
+        const todayIngredients = ingredients.filter((i) => (i.loggedAt || i.date || "").includes(todayStr));
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowAddFeedModal(true)}
-                className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                + Thêm cữ bú (Sữa)
-              </button>
+        const totalMilkMl = todayFeeds.reduce((sum, f) => sum + (f.amountMl || f.amount || 0), 0);
+        const totalFeedSessions = todayFeeds.length;
+        const totalSolidsG = todayIngredients.reduce((sum, i) => sum + (i.amountG || 0), 0);
+        
+        const categoriesList = Array.from(new Set(todayIngredients.map((i) => i.category).filter(Boolean)));
 
-              <button
-                onClick={() => setShowAddIngredientModal(true)}
-                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                + Thêm nguyên liệu ăn dặm
-              </button>
+        // Combine into unified timeline sorted by time descending
+        const timelineItems = [
+          ...todayFeeds.map((f) => ({
+            id: f.id,
+            itemType: "feed" as const,
+            title: f.type === "formula" || f.type === "Formula" ? "Sữa công thức 🍼" : "Sữa mẹ 🤱",
+            subtitle: `${f.amountMl || f.amount || 0} ml`,
+            time: f.loggedAt || f.time || f.date || "",
+            note: f.note || f.details,
+            badgeBg: "bg-indigo-50 text-indigo-700 border-indigo-100",
+            icon: <Milk className="w-4 h-4 text-indigo-600" />,
+            onDelete: () => onDeleteFeed && onDeleteFeed(f.id)
+          })),
+          ...todayIngredients.map((i) => ({
+            id: i.id,
+            itemType: "ingredient" as const,
+            title: i.name,
+            subtitle: `${i.amountG || 0}g • ${i.category || "Ăn dặm"}`,
+            time: i.loggedAt || i.date || "",
+            note: i.reaction,
+            badgeBg: "bg-emerald-50 text-emerald-700 border-emerald-100",
+            icon: <Apple className="w-4 h-4 text-emerald-600" />,
+            onDelete: () => onDeleteIngredient && onDeleteIngredient(i.id)
+          }))
+        ].sort((a, b) => b.time.localeCompare(a.time));
+
+        return (
+          <div className="space-y-6">
+            {/* Header Action Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+              <div>
+                <h2 className="text-sm font-black text-slate-800">
+                  Nhật Ký Dinh Dưỡng Hôm Nay cho bé {activeBaby.name}
+                </h2>
+                <p className="text-[11px] font-semibold text-slate-400">
+                  Ngày {todayStr} • {timelineItems.length} hoạt động đã ghi nhận
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAddFeedModal(true)}
+                  className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  + Thêm cữ bú (Sữa)
+                </button>
+
+                <button
+                  onClick={() => setShowAddIngredientModal(true)}
+                  className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  + Thêm nguyên liệu ăn dặm
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Cữ bú sữa */}
+            {/* --- 📊 1. TỔNG QUAN DINH DƯỠNG HÀNG NGÀY (DAILY SUMMARY STATS) --- */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Stat Card 1: Milk Volume */}
+              <div className="bg-gradient-to-br from-indigo-50/80 via-white to-white border border-indigo-100/80 p-4 rounded-2xl shadow-xs space-y-1">
+                <div className="flex items-center justify-between text-indigo-600">
+                  <span className="text-xs font-bold">Tổng Lượng Sữa</span>
+                  <Milk className="w-4 h-4" />
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-black text-slate-800">{totalMilkMl}</span>
+                  <span className="text-xs font-bold text-slate-500">ml</span>
+                </div>
+                <p className="text-[10px] font-semibold text-indigo-600/80">
+                  {totalFeedSessions} cữ bú trong ngày
+                </p>
+              </div>
+
+              {/* Stat Card 2: Solids Amount */}
+              <div className="bg-gradient-to-br from-emerald-50/80 via-white to-white border border-emerald-100/80 p-4 rounded-2xl shadow-xs space-y-1">
+                <div className="flex items-center justify-between text-emerald-600">
+                  <span className="text-xs font-bold">Tổng Ăn Dặm</span>
+                  <Apple className="w-4 h-4" />
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-black text-slate-800">{totalSolidsG}</span>
+                  <span className="text-xs font-bold text-slate-500">gam</span>
+                </div>
+                <p className="text-[10px] font-semibold text-emerald-600/80">
+                  {todayIngredients.length} nguyên liệu ăn dặm
+                </p>
+              </div>
+
+              {/* Stat Card 3: Food Diversity */}
+              <div className="bg-gradient-to-br from-amber-50/80 via-white to-white border border-amber-100/80 p-4 rounded-2xl shadow-xs space-y-1">
+                <div className="flex items-center justify-between text-amber-600">
+                  <span className="text-xs font-bold">Đa Dạng Nhóm Chất</span>
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-black text-slate-800">{categoriesList.length}</span>
+                  <span className="text-xs font-bold text-slate-500">nhóm chất</span>
+                </div>
+                <p className="text-[10px] font-semibold text-amber-700/80 truncate">
+                  {categoriesList.length > 0 ? categoriesList.join(", ") : "Chưa nạp món mới"}
+                </p>
+              </div>
+
+              {/* Stat Card 4: Latest Activity */}
+              <div className="bg-gradient-to-br from-slate-50 via-white to-white border border-slate-200/80 p-4 rounded-2xl shadow-xs space-y-1">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span className="text-xs font-bold">Hoạt Động Gần Nhất</span>
+                  <Clock className="w-4 h-4 text-slate-400" />
+                </div>
+                <p className="text-xs font-extrabold text-slate-800 truncate">
+                  {timelineItems[0] ? timelineItems[0].title : "Chưa có cữ ăn"}
+                </p>
+                <p className="text-[10px] font-semibold text-slate-400">
+                  {timelineItems[0]
+                    ? timelineItems[0].time.substring(11, 16) || timelineItems[0].time.substring(0, 10)
+                    : "Hôm nay"}
+                </p>
+              </div>
+            </div>
+
+            {/* --- 🕒 2. DÒNG THỜI GIAN DINH DƯỠNG HÔM NAY (TODAY'S TIMELINE) --- */}
             <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
-                  <Milk className="w-5 h-5 text-indigo-500" />
-                  <h3 className="text-sm font-bold text-slate-800">Cữ bú sữa (Sữa mẹ / Công thức)</h3>
+                  <Clock className="w-5 h-5 text-primary" />
+                  <h3 className="text-sm font-black text-slate-800">
+                    Dòng Thời Gian Dinh Dưỡng Hôm Nay
+                  </h3>
                 </div>
-                <span className="text-xs font-bold text-slate-400">{feeds.length} lượt</span>
+                <span className="text-xs font-bold text-slate-400">
+                  Sắp xếp theo thứ tự thời gian
+                </span>
               </div>
 
-              {feeds.length === 0 ? (
-                <p className="text-xs text-slate-400 font-semibold text-center py-8">
-                  Chưa có lịch sử bú sữa nào được ghi nhận.
-                </p>
+              {timelineItems.length === 0 ? (
+                <div className="text-center py-12 space-y-2">
+                  <Coffee className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="text-xs font-bold text-slate-600">Hôm nay chưa có cữ ăn nào được ghi nhận</p>
+                  <p className="text-[11px] text-slate-400">
+                    Hãy bấm nút "+ Thêm cữ bú" hoặc "+ Thêm nguyên liệu ăn dặm" ở trên để lưu sinh hoạt cho bé.
+                  </p>
+                </div>
               ) : (
-                <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
-                  {feeds.map((feed) => (
-                    <div
-                      key={feed.id}
-                      className="flex items-center justify-between bg-slate-50/80 hover:bg-slate-100/80 p-3 rounded-2xl border border-slate-100 transition-colors"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-800">
-                            {feed.type === "formula" ? "Sữa công thức 🍼" : "Sữa mẹ 🤱"}
-                          </span>
-                          <span className="text-xs font-extrabold text-primary">
-                            {feed.amountMl} ml
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {feed.loggedAt.substring(0, 16).replace("T", " ")}
-                        </p>
-                        {feed.note && (
-                          <p className="text-[11px] text-slate-500 italic">{feed.note}</p>
-                        )}
+                <div className="relative border-l-2 border-slate-100 ml-4 pl-6 space-y-4 py-2">
+                  {timelineItems.map((item) => (
+                    <div key={item.id} className="relative group">
+                      {/* Timeline Dot */}
+                      <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full bg-white border-2 border-primary shadow-xs flex items-center justify-center">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                       </div>
 
-                      {onDeleteFeed && (
+                      {/* Card item */}
+                      <div className="flex items-center justify-between bg-slate-50/80 hover:bg-slate-100/80 p-3.5 rounded-2xl border border-slate-100 transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-xl bg-white border border-slate-200/60 shadow-2xs">
+                            {item.icon}
+                          </div>
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-slate-800">{item.title}</p>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${item.badgeBg}`}>
+                                {item.subtitle}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {item.time.substring(11, 16) || item.time.substring(0, 10)}
+                            </p>
+                            {item.note && (
+                              <p className="text-[11px] text-slate-500 font-medium italic">
+                                Ghi chú: {item.note}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
                         <button
-                          onClick={() => onDeleteFeed(feed.id)}
+                          onClick={item.onDelete}
                           className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Xóa cữ này"
+                          title="Xóa bản ghi này"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
-                      )}
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-
-            {/* Nguyên liệu ăn dặm */}
-            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <Apple className="w-5 h-5 text-emerald-500" />
-                  <h3 className="text-sm font-bold text-slate-800">Nguyên liệu ăn dặm thực tế</h3>
-                </div>
-                <span className="text-xs font-bold text-slate-400">{ingredients.length} món</span>
-              </div>
-
-              {ingredients.length === 0 ? (
-                <p className="text-xs text-slate-400 font-semibold text-center py-8">
-                  Chưa có nguyên liệu ăn dặm nào được ghi nhận.
-                </p>
-              ) : (
-                <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
-                  {ingredients.map((ing) => (
-                    <div
-                      key={ing.id}
-                      className="flex items-center justify-between bg-slate-50/80 hover:bg-slate-100/80 p-3 rounded-2xl border border-slate-100 transition-colors"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-800">{ing.name}</span>
-                          <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">
-                            {ing.category}
-                          </span>
-                        </div>
-                        <p className="text-xs font-extrabold text-emerald-600">
-                          {ing.amountG}g
-                        </p>
-                        <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {ing.loggedAt.substring(0, 16).replace("T", " ")}
-                        </p>
-                      </div>
-
-                      {onDeleteIngredient && (
-                        <button
-                          onClick={() => onDeleteIngredient(ing.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Xóa món này"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* MODALS SECTION */}
