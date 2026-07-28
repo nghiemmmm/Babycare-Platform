@@ -176,8 +176,9 @@ export interface NotificationItem {
   id: string;
   title: string;
   message: string;
-  type: "medication" | "safety" | "feeding" | "system";
+  type: "medication" | "safety" | "feeding" | "system" | "health_check";
   created_at: string;
   read: boolean;
   action_url?: string;
+  incident_id?: string;
 }

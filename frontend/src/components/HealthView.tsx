@@ -20,7 +20,8 @@ import {
   Sparkles,
   Stethoscope,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Bell
 } from "lucide-react";
 import { BabyProfile, MedicationLog } from "../types";
 
@@ -135,8 +136,9 @@ export default function HealthView({
   // Form states for adding medications
   const [showAddMed, setShowAddMed] = useState(false);
   const [medName, setMedName] = useState("");
+  const [dismissedReminders, setDismissedReminders] = useState<string[]>([]);
   const [medDosage, setMedDosage] = useState("");
-  const [medDoctor, setMedDoctor] = useState("Dr. Aris");
+  const [medDoctor, setMedDoctor] = useState("Phụ huynh ghi nhận");
 
   const toggleSymptomChip = (sym: string) => {
     setSelectedSymptomChips((prev) =>
@@ -307,17 +309,66 @@ export default function HealthView({
               </span>
             </div>
 
+            {/* 🔔 DAILY HEALTH FOLLOW-UP RECOVERY BANNER */}
+            {(() => {
+              const activeMonitoringInc = incidents.find(
+                (i) => i.status === "Confirmed" && !dismissedReminders.includes(i.id)
+              );
+              if (!activeMonitoringInc) return null;
+
+              return (
+                <div className="bg-amber-50/90 border border-amber-200 p-4 rounded-2xl space-y-2.5 shadow-2xs">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-amber-100 text-amber-700 shrink-0">
+                        <Bell className="w-4 h-4 animate-bounce" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-amber-900 flex items-center gap-1.5">
+                          🔔 Nhắc Nhở Theo Dõi Sức Khỏe Hàng Ngày (Cách 1 Ngày)
+                        </h4>
+                        <p className="text-[11px] font-medium text-amber-800 leading-snug pt-0.5">
+                          Bé <span className="font-bold">{activeBaby.name}</span> đã khỏi đợt{" "}
+                          <span className="font-bold text-amber-950">"{activeMonitoringInc.title}"</span> chưa phụ huynh?
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleIncidentStatus(activeMonitoringInc.id)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      ✓ Đồng Ý (Bé Đã Khỏi Bệnh)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDismissedReminders((prev) => [...prev, activeMonitoringInc.id])
+                      }
+                      className="bg-white hover:bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-xl border border-amber-200 transition-all cursor-pointer"
+                    >
+                      Vẫn Đang Theo Dõi
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Quick Symptom Filter Chips */}
             <div className="flex flex-wrap items-center gap-1.5 pt-1 pb-1">
               <span className="text-[11px] font-bold text-slate-400 mr-1">Lọc triệu chứng:</span>
               <button
                 type="button"
                 onClick={() => setSelectedSymptomFilter(null)}
-                className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${
-                  selectedSymptomFilter === null
-                    ? "bg-primary text-white border-primary shadow-xs"
-                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                }`}
+                className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${selectedSymptomFilter === null
+                  ? "bg-primary text-white border-primary shadow-xs"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                  }`}
               >
                 Tất cả
               </button>
@@ -326,11 +377,10 @@ export default function HealthView({
                   key={sym}
                   type="button"
                   onClick={() => setSelectedSymptomFilter(selectedSymptomFilter === sym ? null : sym)}
-                  className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${
-                    selectedSymptomFilter === sym
-                      ? "bg-primary text-white border-primary shadow-xs"
-                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                  }`}
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${selectedSymptomFilter === sym
+                    ? "bg-primary text-white border-primary shadow-xs"
+                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                    }`}
                 >
                   {sym}
                 </button>
@@ -353,11 +403,10 @@ export default function HealthView({
                         <span className="text-xs font-black text-slate-800">{inc.title}</span>
                         {inc.temp && (
                           <span
-                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${
-                              inc.temp >= 38.5
-                                ? "bg-rose-100 text-rose-800 border border-rose-200"
-                                : "bg-amber-100 text-amber-800 border border-amber-200"
-                            }`}
+                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${inc.temp >= 38.5
+                              ? "bg-rose-100 text-rose-800 border border-rose-200"
+                              : "bg-amber-100 text-amber-800 border border-amber-200"
+                              }`}
                           >
                             🌡️ {inc.temp}°C
                           </span>
@@ -367,11 +416,10 @@ export default function HealthView({
                       <button
                         type="button"
                         onClick={() => toggleIncidentStatus(inc.id)}
-                        className={`text-[10px] font-bold px-3 py-1 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
-                          inc.status === "Confirmed"
-                            ? "bg-amber-50 hover:bg-emerald-50 text-amber-800 hover:text-emerald-800 border-amber-200 hover:border-emerald-300"
-                            : "bg-emerald-100 text-emerald-800 border-emerald-200 shadow-2xs"
-                        }`}
+                        className={`text-[10px] font-bold px-3 py-1 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${inc.status === "Confirmed"
+                          ? "bg-amber-50 hover:bg-emerald-50 text-amber-800 hover:text-emerald-800 border-amber-200 hover:border-emerald-300"
+                          : "bg-emerald-100 text-emerald-800 border-emerald-200 shadow-2xs"
+                          }`}
                         title={inc.status === "Confirmed" ? "Bấm để đánh dấu Bé đã khỏi bệnh" : "Bé đã khỏi bệnh"}
                       >
                         {inc.status === "Confirmed" ? (
@@ -564,20 +612,19 @@ export default function HealthView({
                       Đo Thân Nhiệt Bé (°C):
                     </label>
                     <span
-                      className={`text-xs font-extrabold px-3 py-1 rounded-xl ${
-                        incidentTemp >= 38.5
-                          ? "bg-rose-100 text-rose-800 border border-rose-300 animate-pulse"
-                          : incidentTemp >= 37.5
+                      className={`text-xs font-extrabold px-3 py-1 rounded-xl ${incidentTemp >= 38.5
+                        ? "bg-rose-100 text-rose-800 border border-rose-300 animate-pulse"
+                        : incidentTemp >= 37.5
                           ? "bg-amber-100 text-amber-800 border border-amber-200"
                           : "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                      }`}
+                        }`}
                     >
                       {incidentTemp}°C -{" "}
                       {incidentTemp >= 38.5
                         ? "SỐT CAO ⚠️"
                         : incidentTemp >= 37.5
-                        ? "Sốt nhẹ"
-                        : "Bình thường ✓"}
+                          ? "Sốt nhẹ"
+                          : "Bình thường ✓"}
                     </span>
                   </div>
 
@@ -587,11 +634,10 @@ export default function HealthView({
                         key={tempVal}
                         type="button"
                         onClick={() => setIncidentTemp(tempVal)}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-                          incidentTemp === tempVal
-                            ? "bg-primary text-white border-primary shadow-xs"
-                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
-                        }`}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${incidentTemp === tempVal
+                          ? "bg-primary text-white border-primary shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                          }`}
                       >
                         {tempVal}°C
                       </button>
@@ -610,11 +656,10 @@ export default function HealthView({
                           key={sym}
                           type="button"
                           onClick={() => toggleSymptomChip(sym)}
-                          className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-primary text-white border-primary shadow-xs"
-                              : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                          }`}
+                          className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${isSelected
+                            ? "bg-primary text-white border-primary shadow-xs"
+                            : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                            }`}
                         >
                           {sym} {isSelected ? "✓" : ""}
                         </button>
@@ -713,11 +758,10 @@ export default function HealthView({
                         key={dosageChip}
                         type="button"
                         onClick={() => setMedDosage(dosageChip)}
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${
-                          medDosage === dosageChip
-                            ? "bg-primary text-white border-primary shadow-xs"
-                            : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                        }`}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${medDosage === dosageChip
+                          ? "bg-primary text-white border-primary shadow-xs"
+                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                          }`}
                       >
                         {dosageChip}
                       </button>
