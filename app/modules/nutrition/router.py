@@ -9,13 +9,10 @@ from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.schemas import UserRecord
 from app.modules.nutrition.schemas import SolidFoodLogCreate, SolidFoodLogResponse
 from app.modules.nutrition.service import SolidFoodService
-from app.modules.nutrition.ai_recommender import NutritionRecommenderService, WeeklyMealPlanService
 from app.shared.schemas import Message
 
 router = APIRouter(prefix="/babies", tags=["Solid Food Tracking"])
 solid_food_service = SolidFoodService()
-nutrition_recommender_service = NutritionRecommenderService()
-weekly_meal_plan_service = WeeklyMealPlanService()
 
 @router.post("/{baby_id}/nutrition/solid", response_model=SolidFoodLogResponse, status_code=status.HTTP_201_CREATED)
 async def add_solid_food_log(
@@ -56,7 +53,6 @@ from typing import List, Optional
 from google.cloud.firestore import FieldFilter
 from app.infrastructure.database import get_firestore_db
 import uuid
-from pydantic import BaseModel
 from app.modules.nutrition.schemas import (
     FeedCreate,
     FeedResponse,
@@ -65,9 +61,6 @@ from app.modules.nutrition.schemas import (
     IngredientResponse,
     IngredientCreateResponse,
     SuccessResponse,
-    NutritionRecommendationResponse,
-    WeeklyMealPlanResponse,
-    GenerateWeeklyMealPlanRequest,
     FoodSafetyItemResponse,
     AllergenAlertResponse,
     NutritionSafetyResponse,
@@ -91,9 +84,9 @@ async def get_nutrition_feeds(
     solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
     
     db = get_firestore_db()
-    query = db.collection("nutrition_feeds").where("baby_id", "==", baby_id)
+    query = db.collection("nutrition_feeds").where(filter=FieldFilter("baby_id", "==", baby_id))
     if date and date != "Today":
-        query = query.where("date", "==", date)
+        query = query.where(filter=FieldFilter("date", "==", date))
         
     docs = query.stream()
     results = []
@@ -104,8 +97,7 @@ async def get_nutrition_feeds(
             type=d.get("type", ""),
             details=d.get("details", ""),
             amount=d.get("amount", 0.0),
-            time=d.get("time", ""),
-            date=d.get("date", "")
+            time=d.get("time", "")
         ))
     
     # Sắp xếp theo time (đơn giản hoá thành chuỗi thời gian) hoặc theo ngày tạo
@@ -169,7 +161,7 @@ async def get_ingredients(
     solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
     
     db = get_firestore_db()
-    docs = db.collection("nutrition_ingredients").where("baby_id", "==", baby_id).stream()
+    docs = db.collection("nutrition_ingredients").where(filter=FieldFilter("baby_id", "==", baby_id)).stream()
     results = []
     for doc in docs:
         d = doc.to_dict()
@@ -220,82 +212,10 @@ async def delete_ingredient(
         
     ing_data = doc.to_dict()
     solid_food_service.baby_service.get_baby_by_id(ing_data.get("baby_id"), current_user.uid)
-
+    
     doc_ref.delete()
     return SuccessResponse(success=True)
 
-
-# Gợi ý dinh dưỡng AI (RAG, cá nhân hoá theo dị ứng/bệnh lý của bé)
-class GenerateRecommendationRequest(BaseModel):
-    baby_id: str
-
-
-@feeds_router.get("/recommendation", response_model=Optional[NutritionRecommendationResponse])
-async def get_nutrition_recommendation(
-    baby_id: str,
-    current_user: UserRecord = Depends(get_current_user)
-):
-    """
-    Lấy gợi ý dinh dưỡng AI đã sinh gần nhất cho bé (nếu có). Trả về null nếu chưa từng tạo,
-    không phải lỗi - frontend hiển thị trạng thái "chưa có gợi ý" trong trường hợp này.
-    """
-    return nutrition_recommender_service.get_cached(baby_id, current_user.uid)
-
-
-@feeds_router.post("/recommendation/generate", response_model=NutritionRecommendationResponse, status_code=status.HTTP_201_CREATED)
-async def generate_nutrition_recommendation(
-    req: GenerateRecommendationRequest,
-    current_user: UserRecord = Depends(get_current_user)
-):
-    """
-    Sinh mới gợi ý dinh dưỡng AI cho bé (luôn gọi lại LLM + RAG), ghi đè gợi ý đã lưu trước đó.
-    """
-    return await nutrition_recommender_service.generate_recommendation(req.baby_id, current_user.uid)
-
-
-# Thực đơn ăn dặm 7 ngày AI (RAG, trạng thái pending/accepted, khoá tạo mới 7 ngày sau khi chấp nhận)
-class AcceptWeeklyMealPlanRequest(BaseModel):
-    baby_id: str
-
-
-@feeds_router.get("/meal-plan/weekly", response_model=Optional[WeeklyMealPlanResponse])
-async def get_weekly_meal_plan(
-    baby_id: str,
-    current_user: UserRecord = Depends(get_current_user)
-):
-    """
-    Lấy thực đơn 7 ngày đã sinh gần nhất cho bé (nếu có). Trả về null nếu chưa từng tạo,
-    không phải lỗi - frontend hiển thị trạng thái "chưa có thực đơn" trong trường hợp này.
-    """
-    return weekly_meal_plan_service.get_cached_weekly_plan(baby_id, current_user.uid)
-
-
-@feeds_router.post("/meal-plan/weekly/generate", response_model=WeeklyMealPlanResponse, status_code=status.HTTP_201_CREATED)
-async def generate_weekly_meal_plan(
-    req: GenerateWeeklyMealPlanRequest,
-    current_user: UserRecord = Depends(get_current_user)
-):
-    """
-    Sinh thực đơn 7 ngày mới cho bé (luôn gọi lại LLM + RAG), bắt đầu từ hôm nay. Nếu thực đơn
-    hiện tại đã được chấp nhận và chưa hết hạn 7 ngày, backend trả 409 (MealPlanLockedError) -
-    chỉ được ghi đè khi thực đơn hiện tại còn đang pending hoặc đã hết hạn.
-    """
-    return await weekly_meal_plan_service.generate_weekly_plan(req.baby_id, current_user.uid, req.feedback)
-
-
-@feeds_router.post("/meal-plan/weekly/accept", response_model=WeeklyMealPlanResponse)
-async def accept_weekly_meal_plan(
-    req: AcceptWeeklyMealPlanRequest,
-    current_user: UserRecord = Depends(get_current_user)
-):
-    """
-    Chấp nhận thực đơn 7 ngày đang ở trạng thái pending - chuyển sang accepted, bắt đầu khoá
-    7 ngày cho tới khi được tạo thực đơn mới.
-    """
-    return weekly_meal_plan_service.accept_weekly_plan(req.baby_id, current_user.uid)
-
-
-# Hướng dẫn an toàn dinh dưỡng & cẩm nang y khoa (không dùng RAG - dữ liệu tĩnh + Firestore)
 @feeds_router.get("/safety-guidelines", response_model=NutritionSafetyResponse)
 async def get_nutrition_safety_guidelines(
     baby_id: str,
@@ -305,7 +225,7 @@ async def get_nutrition_safety_guidelines(
     Lấy hướng dẫn an toàn dinh dưỡng & cảnh báo dị ứng cá nhân hóa cho bé.
     """
     baby = solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
-
+    
     age_months = 6
     if baby and baby.birth_date:
         try:
@@ -362,7 +282,7 @@ async def get_nutrition_safety_guidelines(
 
     db = get_firestore_db()
     docs = db.collection("nutrition_ingredients").where(filter=FieldFilter("baby_id", "==", baby_id)).stream()
-
+    
     allergic_ingredients = []
     for doc in docs:
         d = doc.to_dict()
@@ -387,7 +307,6 @@ async def get_nutrition_safety_guidelines(
         foods_to_avoid=foods_to_avoid,
         allergen_alerts=allergen_alerts
     )
-
 
 @feeds_router.get("/safety-handbook", response_model=SafetyHandbookResponse)
 async def get_safety_handbook(

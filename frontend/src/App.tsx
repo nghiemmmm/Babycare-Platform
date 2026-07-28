@@ -44,7 +44,7 @@ import GrowthView from "./components/GrowthView";
 import AiHubView from "./components/AiHubView";
 import ProfileView from "./components/ProfileView";
 import NutritionView from "./components/NutritionView";
-import FeedingLogView from "./components/FeedingLogView";
+import LogsView from "./components/LogsView";
 import HealthView from "./components/HealthView";
 
 export default function App() {
@@ -1345,8 +1345,22 @@ export default function App() {
                 />
               )}
 
-              {activeTab === "log" && (
-                <FeedingLogView
+              {((activeTab as string) === "log" || (activeTab as string) === "logs") && (
+                <LogsView
+                  activeBaby={activeBaby}
+                  feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
+                  medications={medications.filter((m) => m.babyId === activeBaby.id)}
+                  measurements={measurements.filter((m) => m.babyId === activeBaby.id)}
+                  onAddFeed={handleAddFeed}
+                  onDeleteFeed={handleDeleteFeed}
+                  onAddMedication={handleAddMedication}
+                  onDeleteMedication={handleDeleteMedication}
+                  onAddMeasurement={handleAddMeasurement}
+                />
+              )}
+
+              {activeTab === "nutrition" && (
+                <NutritionView
                   activeBaby={activeBaby}
                   feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
                   ingredients={ingredients.filter((i) => i.babyId === activeBaby.id)}
@@ -1354,12 +1368,6 @@ export default function App() {
                   onDeleteFeed={handleDeleteFeed}
                   onAddIngredient={handleAddIngredient}
                   onDeleteIngredient={handleDeleteIngredient}
-                />
-              )}
-
-              {activeTab === "nutrition" && (
-                <NutritionView
-                  activeBaby={activeBaby}
                   recommendation={nutritionRecommendation}
                   isGeneratingRecommendation={isGeneratingRecommendation}
                   onGenerateRecommendation={handleGenerateNutritionRecommendation}

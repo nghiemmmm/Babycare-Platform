@@ -1,10 +1,15 @@
 # Quy tắc ứng xử của Agent trong dự án (Workspace Rules)
 
-- **Quy tắc Kiểm thử (Testing Rule)**: Chỉ thực hiện viết test hoặc chạy các ca kiểm thử (tests) phức tạp và thực sự quan trọng đối với các thay đổi lớn của hệ thống. Hạn chế tối đa việc viết thêm test hoặc chạy lại toàn bộ test suite cho những thay đổi đơn giản, nhỏ lẻ hoặc khi không thực sự cần thiết, nhằm tiết kiệm thời gian và tài nguyên.
+- **Quy tắc Kiểm thử (Testing Rule)**: Chỉ thực hiện viết test hoặc chạy các ca kiểm thử (tests) phức tạp và thực sự quan trọng đối với các thay đổi lớn của hệ thống. Hạn chế tối đa việc viết thêm test hoặc chạy lại toàn bộ test suite cho những thay đổi đơn giản, nhỏ lẻ hoặc khi không thực sự cần thiết, nhằm tiết kiệm tài nguyên.
+
+- **Quy tắc Văn phong & UX/UI Copywriting (Tone & Style Rule)**:
+  - Tất cả các tiêu đề, nút bấm, thông báo, nhãn UI phải sử dụng **văn phong Nhi khoa ấm áp, tinh tế, tự nhiên và mượt mà**.
+  - **TUYỆT ĐỐI KHÔNG** sử dụng các từ ngữ thô, mang tính kỹ thuật/debug internal như `(1-Chạm)`, `(Cách 1 ngày)`, `(Cách 1 Ngày)`, `Bấm khi khỏi`, `Bệnh án`, `Sự cố` khi hiển thị cho người dùng.
+  - Ưu tiên dùng các cụm từ dịu nhẹ: *Nhắc nhở theo dõi sức khỏe cho bé*, *Đánh dấu khỏi bệnh*, *Nhật ký bệnh trạng*, *Phụ huynh ghi nhận*.
 
 🔑 Thông tin Đăng nhập Mới:
 Email: nghiem@babycare.com
-Mật khẩu: Nghiem1234
+Mật khẩu:  
 Tên hiển thị: Minh Anh (Mẹ bé Leo)
 👶 Dữ liệu mẫu trên Firebase Firestore:
 Hồ sơ 2 em bé:

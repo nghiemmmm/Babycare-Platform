@@ -7,8 +7,7 @@ export const INITIAL_BABIES: BabyProfile[] = [
     birthDate: "2023-04-20",
     gender: Gender.Boy,
     avatarUrl: "/static/img/leo.png",
-    isActive: true,
-    allergies: []
+    isActive: true
   },
   {
     id: "baby-bo",
@@ -16,8 +15,7 @@ export const INITIAL_BABIES: BabyProfile[] = [
     birthDate: "2023-11-15",
     gender: Gender.Girl,
     avatarUrl: "/static/img/bo.png",
-    isActive: false,
-    allergies: []
+    isActive: false
   }
 ];
 

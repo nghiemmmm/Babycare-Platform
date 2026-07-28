@@ -16,7 +16,12 @@ import {
   Heart,
   Thermometer,
   Eye,
-  FileText
+  FileText,
+  Sparkles,
+  Stethoscope,
+  CheckCircle2,
+  AlertTriangle,
+  Bell
 } from "lucide-react";
 import { BabyProfile, MedicationLog } from "../types";
 
@@ -36,7 +41,54 @@ interface IncidentRecord {
   symptoms: string[];
   treatment: string;
   prescribedBy: string;
+  temp?: number;
 }
+
+const PRESET_ILLNESSES = [
+  { name: "🌡️ Sốt sau tiêm / Sốt cao", defaultTemp: 38.5, symptoms: ["🌡️ Sốt cao", "😴 Quấy khóc"], treatment: "Uống Paracetamol 150mg, chườm ấm trán nách." },
+  { name: "🌬️ Viêm họng / Cảm cúm", defaultTemp: 37.8, symptoms: ["🌬️ Ho khan", "👃 Sổ mũi", "🥵 Đau họng"], treatment: "Siro ho thảo dược, rửa mũi nước muối sinh lý, uống nước ấm." },
+  { name: "🦷 Mọc răng sưng nướu", defaultTemp: 37.4, symptoms: ["🦷 Chảy dãi", "😴 Quấy khóc"], treatment: "Ngậm nướu lạnh, mát-xa nướu nhẹ nhàng." },
+  { name: "💩 Rối loạn tiêu hóa", defaultTemp: 37.0, symptoms: ["🤮 Nôn mửa", "💩 Tiêu chảy"], treatment: "Uống Oresol bù điện giải, ăn cháo loãng." },
+  { name: "🔴 Nổi mẩn / Dị ứng", defaultTemp: 37.0, symptoms: ["🔴 Nổi mẩn"], treatment: "Giữ da sạch thoáng, tránh thực phẩm nghi ngờ dị ứng." }
+];
+
+const QUICK_SYMPTOMS = [
+  "🌡️ Sốt cao (>38.5°C)",
+  "🌬️ Ho khan",
+  "👃 Sổ mũi",
+  "🤮 Nôn mửa",
+  "💩 Tiêu chảy",
+  "🦷 Chảy dãi mọc răng",
+  "😴 Quấy khóc mệt mỏi",
+  "🔴 Nổi mẩn đỏ",
+  "🥵 Đau họng"
+];
+
+const QUICK_TREATMENTS = [
+  "💊 Uống Paracetamol 150mg",
+  "💧 Uống Oresol bù điện giải",
+  "🚿 Chườm ấm trán và nách",
+  "🌿 Siro ho thảo dược Prospan",
+  "💨 Bật máy tạo ẩm phòng 60%",
+  "🩺 Khám bác sĩ nhi khoa"
+];
+
+const PRESET_MEDICATIONS = [
+  { name: "Hapacol 150mg / Paracetamol", dosage: "1 gói (150mg)", doctor: "Dr. Aris (Nhi khoa)" },
+  { name: "Vitamin D3 K2 Drops", dosage: "2 giọt", doctor: "Bác sĩ nhi khoa" },
+  { name: "Siro Ho Thảo Dược Prospan", dosage: "2.5 ml", doctor: "Dr. Aris (Nhi khoa)" },
+  { name: "Oresol Bù Điện Giải", dosage: "100 ml", doctor: "Dược sĩ tư vấn" },
+  { name: "Men Vi Sinh Probiotics", dosage: "1 gói", doctor: "Dr. Aris (Nhi khoa)" }
+];
+
+const COMMON_DOSAGES = [
+  "1 gói (150mg)",
+  "2.5 ml",
+  "5.0 ml",
+  "2 giọt",
+  "1 ống (5ml)",
+  "1/2 gói (75mg)"
+];
 
 export default function HealthView({
   activeBaby,
@@ -54,7 +106,8 @@ export default function HealthView({
       status: "Confirmed",
       symptoms: ["🌡️ Sốt 38.8°C", "🌬️ Ho khan", "🥵 Đau họng"],
       treatment: "Paracetamol 150mg mỗi 6 giờ, giọt Vitamin D3, uống nước ấm. Giữ độ ẩm phòng trên 55%.",
-      prescribedBy: "Bác sĩ nhi khoa Aris"
+      prescribedBy: "Bác sĩ nhi khoa Aris",
+      temp: 38.8
     },
     {
       id: "inc2",
@@ -64,7 +117,8 @@ export default function HealthView({
       status: "Resolved",
       symptoms: ["🦷 Chảy nước dãi", "🥱 Giấc ngủ gián đoạn"],
       treatment: "Dùng ngậm nướu lạnh, mát-xa nướu nhẹ nhàng, theo dõi nhiệt độ.",
-      prescribedBy: "Phụ huynh ghi nhận"
+      prescribedBy: "Phụ huynh ghi nhận",
+      temp: 37.4
     }
   ]);
 
@@ -74,41 +128,77 @@ export default function HealthView({
   // Form states for adding incidents
   const [showAddIncident, setShowAddIncident] = useState(false);
   const [incidentTitle, setIncidentTitle] = useState("");
-  const [incidentSymptoms, setIncidentSymptoms] = useState("");
-  const [incidentTreatment, setIncidentTreatment] = useState("");
-  const [incidentDoctor, setIncidentDoctor] = useState("");
+  const [incidentTemp, setIncidentTemp] = useState<number>(37.5);
+  const [selectedSymptomChips, setSelectedSymptomChips] = useState<string[]>([]);
+  const [selectedTreatmentChips, setSelectedTreatmentChips] = useState<string[]>([]);
+  const [incidentDoctor, setIncidentDoctor] = useState("Bác sĩ nhi khoa");
 
   // Form states for adding medications
   const [showAddMed, setShowAddMed] = useState(false);
   const [medName, setMedName] = useState("");
+  const [dismissedReminders, setDismissedReminders] = useState<string[]>([]);
   const [medDosage, setMedDosage] = useState("");
-  const [medDoctor, setMedDoctor] = useState("Dr. Aris");
+  const [medDoctor, setMedDoctor] = useState("Phụ huynh ghi nhận");
 
-  // Countdown timer for next dose (Paracetamol) - e.g. next allowed is 6 hours from last admin
-  const [countdownSeconds, setCountdownSeconds] = useState(3600 * 3.5); // 3.5 hours default countdown
+  const toggleSymptomChip = (sym: string) => {
+    setSelectedSymptomChips((prev) =>
+      prev.includes(sym) ? prev.filter((s) => s !== sym) : [...prev, sym]
+    );
+  };
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdownSeconds((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const toggleTreatmentChip = (treat: string) => {
+    setSelectedTreatmentChips((prev) =>
+      prev.includes(treat) ? prev.filter((t) => t !== treat) : [...prev, treat]
+    );
+  };
 
-  const formatCountdown = (totalSecs: number) => {
-    const hrs = Math.floor(totalSecs / 3600);
-    const mins = Math.floor((totalSecs % 3600) / 60);
-    const secs = totalSecs % 60;
-    return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  const handleSelectPresetIllness = (preset: typeof PRESET_ILLNESSES[0]) => {
+    setIncidentTitle(preset.name);
+    setIncidentTemp(preset.defaultTemp);
+    setSelectedSymptomChips(preset.symptoms);
+    setSelectedTreatmentChips([preset.treatment]);
+  };
+
+  const generateAITreatment = (title: string, temp: number, symptoms: string[]) => {
+    const parts: string[] = [];
+
+    if (temp >= 39.5) {
+      parts.push("⚠️ Sốt nguy hiểm: Chườm ấm toàn thân liên tục và đưa bé đến Bệnh viện Nhi ngay.");
+    } else if (temp >= 38.5) {
+      parts.push(`Cho bé uống Paracetamol liều 10-15mg/kg theo chỉ dẫn và chườm ấm trán, nách, bẹn.`);
+    } else if (temp >= 37.5) {
+      parts.push("Chườm ấm trán nách, giữ phòng thoáng mát và theo dõi thân nhiệt mỗi 30 phút.");
+    }
+
+    const symText = (title + " " + symptoms.join(" ")).toLowerCase();
+    if (symText.includes("ho") || symText.includes("họng") || symText.includes("cảm")) {
+      parts.push("Dùng siro ho thảo dược, nhỏ mũi bằng nước muối sinh lý 0.9% và cho uống nước ấm.");
+    }
+    if (symText.includes("sổ mũi") || symText.includes("ngạt")) {
+      parts.push("Làm sạch dịch mũi và duy trì độ ẩm phòng 55-60%.");
+    }
+    if (symText.includes("nôn") || symText.includes("tiêu chảy") || symText.includes("tiêu hóa")) {
+      parts.push("Cho uống Oresol bù điện giải rải rác trong ngày và ăn thức ăn lỏng dễ tiêu.");
+    }
+    if (symText.includes("mọc răng") || symText.includes("nướu") || symText.includes("dãi")) {
+      parts.push("Cho ngậm nướu lạnh và mát-xa nướu nhẹ nhàng cho bé.");
+    }
+    if (symText.includes("mẩn") || symText.includes("dị ứng") || symText.includes("ban")) {
+      parts.push("Giữ da bé sạch thoáng, lau người bằng nước ấm dịu nhẹ và tránh chất gây kích ứng.");
+    }
+
+    if (parts.length === 0) {
+      parts.push(`Cho bé ${activeBaby.name} nghỉ ngơi, theo dõi sinh hoạt và cho bú/uống nước đầy đủ.`);
+    }
+
+    return parts.join(" ");
   };
 
   const handleAddIncidentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!incidentTitle) return;
 
-    const symptomsList = incidentSymptoms
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const aiTreatment = generateAITreatment(incidentTitle, incidentTemp, selectedSymptomChips);
 
     const newRecord: IncidentRecord = {
       id: `inc_${Date.now()}`,
@@ -116,17 +206,20 @@ export default function HealthView({
       date: "Today",
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       status: "Confirmed",
-      symptoms: symptomsList.length ? symptomsList : ["General Discomfort"],
-      treatment: incidentTreatment || "Rest and general observation.",
-      prescribedBy: incidentDoctor || "Caregiver Logged"
+      symptoms: selectedSymptomChips.length ? selectedSymptomChips : ["Sức khỏe mệt nhẹ"],
+      treatment: aiTreatment,
+      prescribedBy: "AI Y Khoa Gợi Ý",
+      temp: incidentTemp
     };
 
     setIncidents((prev) => [newRecord, ...prev]);
+
     setShowAddIncident(false);
     setIncidentTitle("");
-    setIncidentSymptoms("");
-    setIncidentTreatment("");
-    setIncidentDoctor("");
+    setIncidentTemp(37.5);
+    setSelectedSymptomChips([]);
+    setSelectedTreatmentChips([]);
+    setIncidentDoctor("Bác sĩ nhi khoa");
   };
 
   const handleAddMedSubmit = (e: React.FormEvent) => {
@@ -145,284 +238,314 @@ export default function HealthView({
     setShowAddMed(false);
     setMedName("");
     setMedDosage("");
-    // Reset countdown timer to 6 hours for new dose
-    if (medName.toLowerCase().includes("hapacol") || medName.toLowerCase().includes("paracetamol")) {
-      setCountdownSeconds(3600 * 6);
-    }
   };
 
-  // Collect all unique symptoms from incidents to build filter tabs
-  const allSymptoms = Array.from(new Set(incidents.flatMap((i) => i.symptoms)));
+  const toggleIncidentStatus = (id: string) => {
+    setIncidents((prev) =>
+      prev.map((inc) =>
+        inc.id === id
+          ? { ...inc, status: inc.status === "Confirmed" ? "Resolved" : "Confirmed" }
+          : inc
+      )
+    );
+  };
 
   const filteredIncidents = selectedSymptomFilter
-    ? incidents.filter((inc) => inc.symptoms.includes(selectedSymptomFilter))
+    ? incidents.filter((inc) => inc.symptoms.some((s) => s.includes(selectedSymptomFilter)))
     : incidents;
 
   return (
-    <div className="space-y-6" id="health-view">
-      
-      {/* A. Safety Alert Banner (Top) */}
-      <div className="bg-red-50 border-l-4 border-red-500 rounded-r-2xl p-4 flex items-start gap-3 shadow-xs animate-pulse">
-        <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <h4 className="text-xs font-bold text-red-800">CẢNH BÁO AN TOÀN: KHOẢNG CÁCH LIỀU DÙNG THUỐC</h4>
-          <p className="text-[11px] text-red-700 leading-relaxed font-semibold">
-            Paracetamol (Hapacol 150mg) yêu cầu khoảng cách liều tối thiểu từ 4-6 giờ giữa các lần uống. Ghi nhận hiện tại cho thấy liều gần nhất vừa được dùng quá gần đây. Luôn tham khảo ý kiến bác sĩ nhi khoa trước khi cho bé dùng thêm thuốc hạ sốt.
-          </p>
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* Header Banner */}
+      <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="p-3.5 rounded-2xl bg-primary/10 text-primary shrink-0">
+            <Activity className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              Sổ Theo Dõi Sức Khỏe & Y Tế
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">
+              Nhật ký theo dõi bệnh trạng, lịch dùng thuốc và đếm ngược liều hạ sốt cho bé{" "}
+              <span className="font-bold text-slate-800">{activeBaby.name}</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddIncident(true)}
+            className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-4 py-2.5 rounded-2xl transition-all shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Thêm Ghi Chép Sức Khỏe
+          </button>
+
+          <button
+            onClick={() => setShowAddMed(true)}
+            className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-2xl transition-all shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Thêm Thuốc Uống
+          </button>
         </div>
       </div>
 
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-primary font-bold text-2xl tracking-tight">Nhật ký Sức khỏe</h1>
-          <p className="text-xs text-slate-500 font-semibold mt-0.5">
-            Theo dõi các triệu chứng, đơn thuốc và khoảng cách liều dùng thuốc an toàn của {activeBaby.name}.
-          </p>
-        </div>
-        <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-3 py-1 text-xs font-bold shadow-xs">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-          Đồng bộ Gia đình thời gian thực hoạt động
-        </div>
-      </div>
-
-      {/* B. Columns Layout (65% / 35%) */}
+      {/* Main Grid Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left Column: Medical Incident Timeline (65%) */}
+        {/* LEFT 2 COLUMNS: INCIDENTS & SYMPTOMS LOGS */}
         <div className="lg:col-span-2 space-y-6">
-          
-          {/* Timeline Header & Filters */}
-          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
-                  <Activity className="w-4.5 h-4.5 text-primary" />
-                  Triệu chứng & Bệnh án nhi khoa
-                </h3>
-                <p className="text-[10px] text-slate-400 mt-0.5 font-semibold">Nhật ký theo dõi sức khỏe từ khi sinh ra</p>
-              </div>
+          {/* Incident Records Section */}
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary" />
+                Nhật Ký Bệnh Trạng & Triệu Chứng
+              </h3>
 
-              <button
-                onClick={() => setShowAddIncident(true)}
-                className="inline-flex items-center gap-1 bg-sky-100 hover:bg-sky-200 text-sky-700 border border-sky-100 rounded-full px-4 py-2 text-xs font-bold transition-all cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Thêm bệnh án mới
-              </button>
+              <span className="text-xs font-bold text-slate-400">
+                {filteredIncidents.length} đợt theo dõi
+              </span>
             </div>
 
-            {/* Quick symptom filter pill buttons */}
-            <div className="flex flex-wrap items-center gap-2 pt-2">
+            {/* 🔔 DAILY HEALTH FOLLOW-UP RECOVERY BANNER */}
+            {(() => {
+              const activeMonitoringInc = incidents.find(
+                (i) => i.status === "Confirmed" && !dismissedReminders.includes(i.id)
+              );
+              if (!activeMonitoringInc) return null;
+
+              return (
+                <div className="bg-amber-50/90 border border-amber-200 p-4 rounded-2xl space-y-2.5 shadow-2xs">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-amber-100 text-amber-700 shrink-0">
+                        <Bell className="w-4 h-4 animate-bounce" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-amber-900 flex items-center gap-1.5">
+                          🔔 Nhắc Nhở Theo Dõi Sức Khỏe Cho Bé
+                        </h4>
+                        <p className="text-[11px] font-medium text-amber-800 leading-snug pt-0.5">
+                          Bé <span className="font-bold">{activeBaby.name}</span> đã khỏi đợt{" "}
+                          <span className="font-bold text-amber-950">"{activeMonitoringInc.title}"</span> chưa phụ huynh?
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleIncidentStatus(activeMonitoringInc.id)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      ✓ Đồng Ý (Bé Đã Khỏi Bệnh)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDismissedReminders((prev) => [...prev, activeMonitoringInc.id])
+                      }
+                      className="bg-white hover:bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-xl border border-amber-200 transition-all cursor-pointer"
+                    >
+                      Vẫn Đang Theo Dõi
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Quick Symptom Filter Chips */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 pb-1">
+              <span className="text-[11px] font-bold text-slate-400 mr-1">Lọc triệu chứng:</span>
               <button
+                type="button"
                 onClick={() => setSelectedSymptomFilter(null)}
-                className={`px-3 py-1 rounded-full border text-[10px] font-bold transition-all cursor-pointer ${
-                  selectedSymptomFilter === null
-                    ? "bg-primary border-primary text-white"
-                    : "bg-white/40 border-white/20 text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                Tất cả triệu chứng
-              </button>
-              {allSymptoms.map((symp, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setSelectedSymptomFilter(symp)}
-                  className={`px-3 py-1 rounded-full border text-[10px] font-bold transition-all cursor-pointer ${
-                    selectedSymptomFilter === symp
-                      ? "bg-primary border-primary text-white"
-                      : "bg-white/40 border-white/20 text-slate-500 hover:text-slate-700"
+                className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${selectedSymptomFilter === null
+                  ? "bg-primary text-white border-primary shadow-xs"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                   }`}
+              >
+                Tất cả
+              </button>
+              {["Sốt", "Ho", "Sổ mũi", "Nôn", "Tiêu chảy", "Mọc răng", "Nổi mẩn"].map((sym) => (
+                <button
+                  key={sym}
+                  type="button"
+                  onClick={() => setSelectedSymptomFilter(selectedSymptomFilter === sym ? null : sym)}
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${selectedSymptomFilter === sym
+                    ? "bg-primary text-white border-primary shadow-xs"
+                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                    }`}
                 >
-                  {symp}
+                  {sym}
                 </button>
               ))}
             </div>
 
-            {/* Medical incident cards */}
-            <div className="space-y-4 pt-2">
-              {filteredIncidents.map((inc) => (
-                <div
-                  key={inc.id}
-                  className="bg-white/70 border border-white/40 rounded-2xl p-5 shadow-xs relative space-y-3 group"
-                >
-                  {/* Status indicator badge */}
-                  <span
-                    className={`absolute top-5 right-5 text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
-                      inc.status === "Confirmed"
-                        ? "bg-rose-50 border border-rose-100 text-rose-600 animate-pulse"
-                        : "bg-emerald-50 border border-emerald-100 text-emerald-600"
-                    }`}
+            {filteredIncidents.length === 0 ? (
+              <p className="text-xs text-slate-400 font-medium text-center py-8">
+                Chưa có sự cố sức khỏe nào được ghi nhận.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {filteredIncidents.map((inc) => (
+                  <div
+                    key={inc.id}
+                    className="bg-slate-50/80 hover:bg-slate-100/80 p-4 rounded-2xl border border-slate-100 space-y-2 transition-all"
                   >
-                    {inc.status === "Confirmed" ? "Đang theo dõi" : "Đã khỏi"}
-                  </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-800">{inc.title}</span>
+                        {inc.temp && (
+                          <span
+                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${inc.temp >= 38.5
+                              ? "bg-rose-100 text-rose-800 border border-rose-200"
+                              : "bg-amber-100 text-amber-800 border border-amber-200"
+                              }`}
+                          >
+                            🌡️ {inc.temp}°C
+                          </span>
+                        )}
+                      </div>
 
-                  <div className="space-y-1">
-                    <span className="text-[10px] text-slate-400 font-bold">{inc.date === "Today" ? "Hôm nay" : inc.date === "Yesterday" ? "Hôm qua" : inc.date} • {inc.time}</span>
-                    <h4 className="text-sm font-black text-slate-800">{inc.title}</h4>
-                  </div>
-
-                  {/* Symptom pills */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {inc.symptoms.map((sym, sIdx) => (
-                      <span
-                        key={sIdx}
-                        className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-600 rounded-lg text-[9px] font-bold"
+                      <button
+                        type="button"
+                        onClick={() => toggleIncidentStatus(inc.id)}
+                        className={`text-[10px] font-bold px-3 py-1 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${inc.status === "Confirmed"
+                          ? "bg-amber-50 hover:bg-emerald-50 text-amber-800 hover:text-emerald-800 border-amber-200 hover:border-emerald-300"
+                          : "bg-emerald-100 text-emerald-800 border-emerald-200 shadow-2xs"
+                          }`}
+                        title={inc.status === "Confirmed" ? "Bấm để đánh dấu Bé đã khỏi bệnh" : "Bé đã khỏi bệnh"}
                       >
-                        {sym}
-                      </span>
-                    ))}
-                  </div>
+                        {inc.status === "Confirmed" ? (
+                          <>
+                            <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                            <span>Đang theo dõi • Đánh dấu khỏi</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span>Đã khỏi bệnh ✓</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
 
-                  {/* Nested light blue treatment plan block */}
-                  <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl space-y-1.5">
-                    <h5 className="text-[10px] font-bold text-blue-800 uppercase tracking-wide">
-                      📋 Hướng điều trị & Lời khuyên của bác sĩ
-                    </h5>
-                    <p className="text-[11px] text-blue-700 leading-relaxed font-semibold">
-                      {inc.treatment}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {inc.symptoms.map((symptom, idx) => (
+                        <span
+                          key={idx}
+                          className="text-[10px] font-bold bg-white text-slate-700 px-2.5 py-1 rounded-xl border border-slate-200"
+                        >
+                          {symptom}
+                        </span>
+                      ))}
+                    </div>
+
+                    <p className="text-xs text-slate-600 font-medium leading-relaxed bg-white/70 p-2.5 rounded-xl border border-slate-100">
+                      <span className="font-bold text-slate-700">Phác đồ xử lý:</span> {inc.treatment}
                     </p>
-                    <span className="text-[9px] font-bold text-blue-500 block">
-                      Nguồn: {inc.prescribedBy}
-                    </span>
+
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium pt-1">
+                      <span>Nguồn: {inc.prescribedBy}</span>
+                      <span>
+                        {inc.date} • {inc.time}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
-
-              {filteredIncidents.length === 0 && (
-                <div className="text-center py-8 text-slate-400 text-xs">
-                  Không tìm thấy ghi chép sức khỏe nào khớp bộ lọc.
-                </div>
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
-
         </div>
 
-        {/* Right Column: Medication Management (35%) */}
+        {/* RIGHT COLUMN: MEDICATIONS LOG */}
         <div className="space-y-6">
-          
-          {/* Next Dose Countdown Card */}
-          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-5 space-y-4 text-center">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Độ an toàn cho liều tiếp theo
-              </span>
-              <h3 className="text-primary font-bold text-sm">Hapacol 150mg (Paracetamol)</h3>
-            </div>
-
-            {/* Countdown Display */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl py-4 font-mono font-bold text-3xl text-slate-700 tracking-wider">
-              {countdownSeconds > 0 ? formatCountdown(countdownSeconds) : "00:00:00"}
-            </div>
-
-            <p className="text-[10px] text-slate-400 font-semibold px-2">
-              {countdownSeconds > 0
-                ? "CẢNH BÁO: Không sử dụng thuốc quá sớm để tránh quá liều acetaminophen gây độc cho gan của bé."
-                : "Khoảng cách liều dùng đã an toàn. Có thể cho bé dùng liều tiếp theo nếu triệu chứng sốt kéo dài."}
-            </p>
-
-            {/* Disabled / Active DO NOT ADMINISTER Button */}
-            <button
-              disabled={countdownSeconds > 0}
-              className={`w-full py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md ${
-                countdownSeconds > 0
-                  ? "bg-red-100 text-red-500 cursor-not-allowed border border-red-200 shadow-none font-extrabold"
-                  : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/10"
-              }`}
-            >
-              {countdownSeconds > 0 ? "⚠️ KHÔNG ĐƯỢC CHO UỐNG" : "✓ CÓ THỂ CHO UỐNG BÂY GIỜ"}
-            </button>
-          </div>
-
-          {/* Recent Doses List */}
-          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-white/20 pb-2">
-              <h3 className="text-primary font-bold text-xs uppercase tracking-wide text-slate-500">
-                Nhật ký dùng thuốc gần đây
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <Pill className="w-4 h-4 text-primary" />
+                Lịch Dùng Thuốc Hôm Nay
               </h3>
-              <button
-                onClick={() => setShowAddMed(true)}
-                className="text-[10px] font-bold text-primary hover:underline cursor-pointer"
-              >
-                + Ghi nhận liều dùng
-              </button>
+              <span className="text-xs font-bold text-slate-400">{medications.length} thuốc</span>
             </div>
 
-            <div className="space-y-2.5">
-              {medications.map((med) => {
-                const isLiquid = med.dosage.toLowerCase().includes("drop") || med.dosage.toLowerCase().includes("ml") || med.dosage.toLowerCase().includes("giọt");
-                const Icon = isLiquid ? Droplet : Pill;
-                const iconColor = isLiquid ? "text-sky-500 bg-sky-50" : "text-purple-500 bg-purple-50";
-
-                return (
+            {medications.length === 0 ? (
+              <p className="text-xs text-slate-400 font-medium text-center py-6">
+                Hôm nay bé không phải dùng thuốc nào.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {medications.map((med) => (
                   <div
                     key={med.id}
-                    className="p-3 bg-white/40 border border-white/20 rounded-2xl flex items-center justify-between gap-3 shadow-xs hover:bg-white/80 transition-colors"
+                    className="flex items-center justify-between bg-slate-50 p-3.5 rounded-2xl border border-slate-100"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-xl ${iconColor}`}>
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div className="space-y-0.5">
-                        <h4 className="text-xs font-bold text-slate-700">{med.name}</h4>
-                        <span className="text-[9px] text-slate-400 font-semibold">
-                          {med.dosage} • {med.time} ({med.date === "Today" ? "Hôm nay" : med.date})
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-bold text-slate-800">{med.name}</p>
+                        <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-md">
+                          {med.dosage}
                         </span>
                       </div>
+                      <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {med.time} • Kê đơn: {med.prescribedBy || "Bác sĩ nhi"}
+                      </p>
                     </div>
 
                     <button
                       onClick={() => onDeleteMedication(med.id)}
-                      className="text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
-                      title="Xóa nhật ký dùng thuốc"
+                      className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="Xóa thuốc"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                );
-              })}
-
-              {medications.length === 0 && (
-                <div className="text-center py-6 text-slate-400 text-xs">
-                  Không có nhật ký dùng thuốc nào hôm nay.
-                </div>
-              )}
-            </div>
-
-            {/* View Medication History Outlined button */}
-            <button className="w-full inline-flex items-center justify-center gap-1 border border-dashed border-slate-300 text-slate-500 hover:text-slate-800 text-[10px] font-bold py-2 rounded-xl transition-colors cursor-pointer">
-              <FileText className="w-3.5 h-3.5" />
-              Xem lịch sử dùng thuốc
-            </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Allergies & Medical Warnings Card */}
-          <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-3">
-            <h3 className="text-primary font-bold text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
-              <AlertCircle className="w-4 h-4 text-red-500" />
-              Dị ứng & Cảnh báo Y khoa
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-3">
+            <h3 className="text-xs font-black text-rose-600 uppercase tracking-wider flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4 text-rose-500" />
+              Lưu Ý Dị Ứng & Tiền Sử Y Tế
             </h3>
-            <div className="p-3.5 bg-red-50/70 border border-red-100 rounded-2xl space-y-2">
-              <div className="flex flex-wrap gap-2">
-                <span className="px-3 py-1 bg-red-100 border border-red-200 text-red-700 font-bold rounded-full text-[10px]">
-                  🥛 Nhạy cảm sữa bò
-                </span>
-                <span className="px-3 py-1 bg-orange-100 border border-orange-200 text-orange-700 font-bold rounded-full text-[10px]">
-                  🥜 Đề phòng Đậu phộng
-                </span>
+            <div className="p-3.5 bg-rose-50/70 border border-rose-100 rounded-2xl space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {activeBaby.allergies && activeBaby.allergies.length > 0 ? (
+                  activeBaby.allergies.map((alg, idx) => (
+                    <span
+                      key={idx}
+                      className="px-3 py-1 bg-rose-100 border border-rose-200 text-rose-800 font-bold rounded-xl text-xs"
+                    >
+                      🥛 {alg}
+                    </span>
+                  ))
+                ) : (
+                  <span className="px-3 py-1 bg-rose-100 border border-rose-200 text-rose-800 font-bold rounded-xl text-xs">
+                    🥛 Nhạy cảm Đậu nành / Sữa công thức
+                  </span>
+                )}
               </div>
-              <p className="text-[11px] text-red-700 leading-snug font-medium pt-1">
-                Cần theo dõi phản ứng dị ứng khi cho bé dùng thực phẩm mới hoặc khi bác sĩ chỉ định kê đơn thuốc.
+              <p className="text-xs text-rose-700 leading-relaxed font-medium pt-1">
+                Cần kiểm tra kĩ thành phần thuốc và nhãn thực phẩm trước khi cho bé <span className="font-bold">{activeBaby.name}</span> dùng.
               </p>
             </div>
           </div>
-
         </div>
-
       </div>
 
-      {/* --- ADD RECORD MODALS --- */}
+      {/* ========================================================================= */}
+      {/* 🚀 ULTRA-SUPPORTIVE SMART ADD INCIDENT MODAL */}
+      {/* ========================================================================= */}
       <AnimatePresence>
         {showAddIncident && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
@@ -430,134 +553,233 @@ export default function HealthView({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
+              className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-xl space-y-5 max-h-[90vh] overflow-y-auto"
             >
+              {/* Modal Header */}
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-800">Ghi chép bệnh trạng mới</h3>
-                <button onClick={() => setShowAddIncident(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  <h3 className="text-sm font-black text-slate-800">
+                    Thêm Ghi Chép Sức Khỏe Cho Bé
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowAddIncident(false)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
                   Hủy
                 </button>
               </div>
 
+              {/* ⚡ PRESET ILLNESSES */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  ⚡ Mẫu tình trạng sức khỏe thông dụng:
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {PRESET_ILLNESSES.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSelectPresetIllness(preset)}
+                      className="text-xs font-bold bg-slate-100 hover:bg-primary/10 hover:text-primary text-slate-700 px-3 py-1.5 rounded-xl border border-slate-200 transition-all cursor-pointer"
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <form onSubmit={handleAddIncidentSubmit} className="space-y-4 text-xs font-bold text-slate-600">
+                {/* Illness Title */}
                 <div className="space-y-1">
-                  <label className="block">Tên bệnh / Triệu chứng</label>
+                  <label className="block">Tên bệnh án / Sự cố sức khỏe</label>
                   <input
                     type="text"
                     required
                     value={incidentTitle}
                     onChange={(e) => setIncidentTitle(e.target.value)}
-                    placeholder="Ví dụ: Sốt cao, Phát ban, Viêm họng cấp"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-medium"
+                    placeholder="Ví dụ: Sốt cao sau tiêm chủng, Viêm họng..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block">Các triệu chứng (cách nhau bằng dấu phẩy)</label>
-                  <input
-                    type="text"
-                    value={incidentSymptoms}
-                    onChange={(e) => setIncidentSymptoms(e.target.value)}
-                    placeholder="Ví dụ: Sốt 38.5 độ, sổ mũi, ho"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-medium"
-                  />
+                {/* 🌡️ TEMPERATURE PICKER & ALERT */}
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Thermometer className="w-4 h-4 text-primary" />
+                      Đo Thân Nhiệt Bé (°C):
+                    </label>
+                    <span
+                      className={`text-xs font-extrabold px-3 py-1 rounded-xl ${incidentTemp >= 38.5
+                        ? "bg-rose-100 text-rose-800 border border-rose-300 animate-pulse"
+                        : incidentTemp >= 37.5
+                          ? "bg-amber-100 text-amber-800 border border-amber-200"
+                          : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                        }`}
+                    >
+                      {incidentTemp}°C -{" "}
+                      {incidentTemp >= 38.5
+                        ? "SỐT CAO ⚠️"
+                        : incidentTemp >= 37.5
+                          ? "Sốt nhẹ"
+                          : "Bình thường ✓"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {[37.0, 37.5, 38.0, 38.5, 39.0, 39.5].map((tempVal) => (
+                      <button
+                        key={tempVal}
+                        type="button"
+                        onClick={() => setIncidentTemp(tempVal)}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${incidentTemp === tempVal
+                          ? "bg-primary text-white border-primary shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                          }`}
+                      >
+                        {tempVal}°C
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block">Hướng dẫn điều trị</label>
-                  <textarea
-                    value={incidentTreatment}
-                    onChange={(e) => setIncidentTreatment(e.target.value)}
-                    placeholder="Ví dụ: Uống 150mg paracetamol, chườm ấm"
-                    rows={2}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-medium resize-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block">Bác sĩ điều trị / Nguồn kê đơn</label>
-                  <input
-                    type="text"
-                    value={incidentDoctor}
-                    onChange={(e) => setIncidentDoctor(e.target.value)}
-                    placeholder="Ví dụ: Bác sĩ nhi khoa"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-medium"
-                  />
+                {/* 🏷️ QUICK SYMPTOM CHIPS */}
+                <div className="space-y-1.5">
+                  <label className="block">Chọn các triệu chứng của bé:</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {QUICK_SYMPTOMS.map((sym) => {
+                      const isSelected = selectedSymptomChips.includes(sym);
+                      return (
+                        <button
+                          key={sym}
+                          type="button"
+                          onClick={() => toggleSymptomChip(sym)}
+                          className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${isSelected
+                            ? "bg-primary text-white border-primary shadow-xs"
+                            : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                            }`}
+                        >
+                          {sym} {isSelected ? "✓" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                  className="w-full bg-primary hover:bg-primary/95 text-white py-3 rounded-2xl font-black text-xs transition-all shadow-md cursor-pointer"
                 >
-                  Lưu Nhật ký bệnh trạng
+                  Lưu Ghi Chép Sức Khỏe
                 </button>
               </form>
             </motion.div>
           </div>
         )}
 
+        {/* SMART ADD MEDICATION MODAL */}
         {showAddMed && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
+              className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-800">Ghi nhận liều dùng thuốc</h3>
-                <button onClick={() => setShowAddMed(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <Pill className="w-5 h-5 text-primary" />
+                  <h3 className="text-sm font-black text-slate-800">
+                    Ghi Nhận Đơn Thuốc Cho Bé
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowAddMed(false)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
                   Hủy
                 </button>
               </div>
 
+              {/* ⚡ PRESET MEDICATIONS */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  ⚡ Mẫu thuốc nhi khoa thông dụng:
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESET_MEDICATIONS.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setMedName(preset.name);
+                        setMedDosage(preset.dosage);
+                        setMedDoctor(preset.doctor);
+                      }}
+                      className="text-[11px] font-bold bg-slate-100 hover:bg-primary/10 hover:text-primary text-slate-700 px-3 py-1.5 rounded-xl border border-slate-200 transition-all cursor-pointer"
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <form onSubmit={handleAddMedSubmit} className="space-y-4 text-xs font-bold text-slate-600">
+                {/* Medication Name */}
                 <div className="space-y-1">
-                  <label className="block">Tên thuốc</label>
+                  <label className="block">Tên loại thuốc</label>
                   <input
                     type="text"
                     required
                     value={medName}
                     onChange={(e) => setMedName(e.target.value)}
-                    placeholder="Ví dụ: Hapacol 150mg"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-medium"
+                    placeholder="Ví dụ: Hapacol 150mg, Vitamin D3 K2..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block">Liều lượng</label>
+                {/* Dosage Field & Quick Chips */}
+                <div className="space-y-1.5">
+                  <label className="block">Liều lượng uống</label>
                   <input
                     type="text"
                     required
                     value={medDosage}
                     onChange={(e) => setMedDosage(e.target.value)}
-                    placeholder="Ví dụ: 150mg, 2 giọt, 5ml"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-medium"
+                    placeholder="Ví dụ: 1 gói (150mg), 2.5ml, 2 giọt..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   />
-                </div>
 
-                <div className="space-y-1">
-                  <label className="block">Người kê đơn</label>
-                  <input
-                    type="text"
-                    value={medDoctor}
-                    onChange={(e) => setMedDoctor(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-medium"
-                  />
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {COMMON_DOSAGES.map((dosageChip) => (
+                      <button
+                        key={dosageChip}
+                        type="button"
+                        onClick={() => setMedDosage(dosageChip)}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${medDosage === dosageChip
+                          ? "bg-primary text-white border-primary shadow-xs"
+                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                          }`}
+                      >
+                        {dosageChip}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                  className="w-full bg-primary hover:bg-primary/95 text-white py-3 rounded-2xl font-black text-xs transition-all shadow-md cursor-pointer"
                 >
-                  Lưu Nhật ký dùng thuốc
+                  Lưu Đơn Thuốc Uống
                 </button>
               </form>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
     </div>
   );
 }

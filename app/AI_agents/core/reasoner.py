@@ -2,13 +2,13 @@ import os
 import time
 import json
 from datetime import datetime, timezone
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage, AnyMessage
 from app.core.config import settings
 from app.AI_agents.core.constant import DEFAULT_CHAT_MODEL, DEFAULT_TEMPERATURE
 
 class AIReasoner:
     def __init__(self, model_name: str = DEFAULT_CHAT_MODEL, temperature: float = DEFAULT_TEMPERATURE):
+        from langchain_google_genai import ChatGoogleGenerativeAI
         self.model_name = model_name
         self.model = ChatGoogleGenerativeAI(
             model=model_name,
