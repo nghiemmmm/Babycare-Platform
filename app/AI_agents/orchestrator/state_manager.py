@@ -1,13 +1,19 @@
 from typing import Optional, Annotated
-import operator
 from typing_extensions import TypedDict
 from langchain_core.messages import AnyMessage
+from langgraph.graph.message import add_messages
 
 class OverallState(TypedDict):
     """
     Central state definition for the BabyCare AI LangGraph orchestrator.
     """
-    messages: Annotated[list[AnyMessage], operator.add]
+    # add_messages (không phải operator.add) - RouterGraph nhúng các subgraph (chat_graph,
+    # health_graph...) trực tiếp làm node và dùng CHUNG schema OverallState. Khi subgraph chạy,
+    # nó nhận toàn bộ "messages" hiện tại của parent làm state khởi đầu, tự cộng dồn thêm tin nhắn
+    # mới của riêng nó, rồi trả nguyên state đó về cho parent - nếu parent lại cộng dồn (operator.add)
+    # thêm một lần nữa thì toàn bộ lịch sử cũ bị nhân đôi mỗi lượt chat. add_messages so khớp theo
+    # message.id, tin nhắn đã có id trùng sẽ được ghi đè thay vì nối thêm nên tránh nhân đôi.
+    messages: Annotated[list[AnyMessage], add_messages]
     baby_id: Optional[str]
     current_user_id: Optional[str]
     extracted_intent: Optional[str]
@@ -28,7 +34,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     ChannelVersions
 )
-from google.cloud.firestore import FieldFilter
+from google.cloud.firestore import FieldFilter, Query
 from app.infrastructure.database.connection import get_firestore_db
 from app.AI_agents.core.constant import CHECKPOINT_COLLECTION
 import pickle
@@ -101,9 +107,15 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
                     parent_config=None,
                 )
         else:
+            # Không có checkpoint_id cụ thể nghĩa là caller muốn checkpoint MỚI NHẤT (vd. aget_state
+            # khi load lại trang) - phải order_by checkpoint_id giảm dần trước khi limit(1), nếu
+            # không Firestore trả về bất kỳ document nào khớp filter (thứ tự không xác định), có thể
+            # trúng một checkpoint cũ/rỗng từ đầu phiên thay vì checkpoint chứa đủ lịch sử chat mới
+            # nhất - đây là lý do lịch sử chat biến mất ngẫu nhiên sau khi reload trang.
             docs = (
                 col.where(filter=FieldFilter("thread_id", "==", thread_id))
                 .where(filter=FieldFilter("checkpoint_ns", "==", checkpoint_ns))
+                .order_by("checkpoint_id", direction=Query.DESCENDING)
                 .limit(1)
                 .get()
             )

@@ -203,12 +203,11 @@ async def get_thread_messages(
     config = {"configurable": {"thread_id": thread_id}}
     state = await orchestrator.graph.aget_state(config)
     messages = state.values.get("messages", [])
-    
-    # Hiện đầy đủ lịch sử chat trong vòng 1 tuần gần nhất (không giới hạn số lượng tin nhắn) -
-    # message cũ thiếu response_metadata.created_at (trước khi các workflow được gắn timestamp
-    # thật) sẽ fallback về thời điểm hiện tại nên vẫn hiển thị bình thường, không bị lọc mất.
-    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
+    # Trả về TOÀN BỘ tin nhắn của đoạn chat này, không lọc theo thời gian - bộ lọc "7 ngày" chỉ
+    # nên áp dụng ở list_chat_threads (ẩn bớt các CUỘC TRÒ CHUYỆN không còn hoạt động khỏi sidebar),
+    # áp lại lần nữa cho nội dung BÊN TRONG một đoạn chat đã chọn sẽ làm mất tin nhắn cũ của chính
+    # đoạn chat đó nếu cuộc trò chuyện đã kéo dài hơn 1 tuần.
     result = []
     for msg in messages:
         role = "user" if msg.type == "human" else "assistant"
@@ -219,9 +218,6 @@ async def get_thread_messages(
         ts = getattr(msg, "response_metadata", {}).get("created_at")
         if not ts:
             ts = datetime.now(timezone.utc).isoformat()
-
-        if ts < cutoff_iso:
-            continue
 
         result.append(ChatMessageResponse(
             id=msg_id,
