@@ -515,12 +515,59 @@ export default function HealthView({
                     ))}
                   </div>
 
-                  {incidentTemp >= 38.5 && (
-                    <p className="text-[11px] text-rose-600 font-bold bg-rose-50 p-2 rounded-xl border border-rose-200 flex items-center gap-1.5">
-                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                      Cảnh báo sốt cao: Khuyên dùng Paracetamol 150mg & chườm ấm. Hệ thống sẽ tự kích hoạt đồng hồ đếm ngược liều tiếp theo.
-                    </p>
-                  )}
+                  {/* Real-time AI Risk Assessment & Medical Guidance (WHO/AAP) */}
+                  <div className="pt-1">
+                    {incidentTemp < 37.5 && (
+                      <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl space-y-1 text-emerald-900">
+                        <p className="text-xs font-bold flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          🩺 AI Đánh Giá Nguy Cơ: Thân nhiệt an toàn ({incidentTemp}°C)
+                        </p>
+                        <p className="text-[11px] leading-relaxed font-medium text-emerald-800">
+                          Thân nhiệt của bé ở mức bình thường. Khuyên phụ huynh tiếp tục cho bé bú đủ cữ, duy trì phòng thoáng mát và theo dõi sinh hoạt.
+                        </p>
+                      </div>
+                    )}
+
+                    {incidentTemp >= 37.5 && incidentTemp < 38.5 && (
+                      <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl space-y-1 text-amber-900">
+                        <p className="text-xs font-bold flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                          🩺 AI Đánh Giá Nguy Cơ: Sốt nhẹ ({incidentTemp}°C - Chuẩn WHO)
+                        </p>
+                        <p className="text-[11px] leading-relaxed font-medium text-amber-800">
+                          Chưa cần dùng thuốc hạ sốt. Khuyên dùng khăn ấm chườm trán, nách, bẹn; cho bé uống nhiều nước/sữa và đo lại nhiệt độ sau 30 phút.
+                        </p>
+                      </div>
+                    )}
+
+                    {incidentTemp >= 38.5 && incidentTemp < 39.5 && (
+                      <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl space-y-1.5 text-rose-900">
+                        <p className="text-xs font-black flex items-center gap-1.5 text-rose-800">
+                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 animate-pulse" />
+                          🩺 AI Đánh Giá Nguy Cơ: SỐT CAO ({incidentTemp}°C - Chuẩn AAP/WHO)
+                        </p>
+                        <p className="text-[11px] leading-relaxed font-medium text-rose-800">
+                          Khuyên dùng Paracetamol liều 10 - 15mg/kg cân nặng (Cho bé {activeBaby.name}: liều khoảng 75 - 100mg hoặc 1 gói Paracetamol 150mg theo chỉ định). Giãn cách tối thiểu 4 - 6 tiếng/liều.
+                        </p>
+                        <p className="text-[10px] font-bold text-rose-700 bg-rose-100/80 px-2.5 py-1 rounded-lg">
+                          ⏱️ Hệ thống sẽ tự động bật đồng hồ đếm ngược 6 tiếng cho liều kế tiếp ngay khi lưu form này.
+                        </p>
+                      </div>
+                    )}
+
+                    {incidentTemp >= 39.5 && (
+                      <div className="bg-rose-100 border border-rose-300 p-3 rounded-xl space-y-1.5 text-rose-950 animate-pulse">
+                        <p className="text-xs font-black flex items-center gap-1.5 text-rose-900">
+                          <AlertCircle className="w-4 h-4 text-rose-700 shrink-0" />
+                          🚨 CẢNH BÁO NGUY HIỂM: SỐT NGUY HẠI ({incidentTemp}°C)
+                        </p>
+                        <p className="text-[11px] leading-relaxed font-bold text-rose-900">
+                          Cần đưa bé đến cơ sở y tế / Bệnh viện Nhi gần nhất ngay lập tức! Cởi bớt quần áo, chườm ấm liên tục toàn thân trong lúc di chuyển.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* 🏷️ QUICK SYMPTOM CHIPS */}
