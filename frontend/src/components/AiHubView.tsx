@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { apiFetch } from "../lib/authClient";
 import { motion, AnimatePresence } from "motion/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -71,12 +72,8 @@ export default function AiHubView({
       const formData = new FormData();
       formData.append("audio_file", file);
 
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-      const token = localStorage.getItem("token") || "mock-token";
-      
-      const res = await fetch(`${baseUrl}/api/v1/babies/${activeBaby.id}/cry-prediction`, {
+      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/cry-prediction`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
 

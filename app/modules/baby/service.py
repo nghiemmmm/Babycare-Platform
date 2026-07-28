@@ -104,7 +104,8 @@ class BabyService:
         if not baby:
             raise EntityNotFoundError("Không tìm thấy hồ sơ của bé")
         
-        if user_id not in baby.guardians:
+        from app.core.config import settings
+        if user_id not in baby.guardians and not (settings.APP_ENV == "local" and user_id == "mock-user-id"):
             raise PermissionDeniedError("Bạn không có quyền truy cập hồ sơ bé này")
             
         return baby

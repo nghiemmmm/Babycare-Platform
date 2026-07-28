@@ -13,9 +13,15 @@ from app.modules.nutrition.ai_recommender import NutritionRecommenderService, We
 from app.shared.schemas import Message
 
 router = APIRouter(prefix="/babies", tags=["Solid Food Tracking"])
-solid_food_service = SolidFoodService()
-nutrition_recommender_service = NutritionRecommenderService()
-weekly_meal_plan_service = WeeklyMealPlanService()
+
+def get_solid_food_service() -> SolidFoodService:
+    return SolidFoodService()
+
+def get_nutrition_recommender_service() -> NutritionRecommenderService:
+    return NutritionRecommenderService()
+
+def get_weekly_meal_plan_service() -> WeeklyMealPlanService:
+    return WeeklyMealPlanService()
 
 @router.post("/{baby_id}/nutrition/solid", response_model=SolidFoodLogResponse, status_code=status.HTTP_201_CREATED)
 async def add_solid_food_log(
@@ -26,7 +32,7 @@ async def add_solid_food_log(
     """
     Ghi nhận một bản ghi nhật ký ăn dặm mới cho bé (Yêu cầu quyền giám hộ).
     """
-    return solid_food_service.add_solid_food_log(baby_id, log_in, user_id=current_user.uid)
+    return get_solid_food_service().add_solid_food_log(baby_id, log_in, user_id=current_user.uid)
 
 @router.get("/{baby_id}/nutrition/solid", response_model=list[SolidFoodLogResponse])
 async def get_solid_food_history(
@@ -36,7 +42,7 @@ async def get_solid_food_history(
     """
     Lấy toàn bộ lịch sử ăn dặm của bé (Yêu cầu quyền giám hộ).
     """
-    return solid_food_service.get_solid_food_history(baby_id, user_id=current_user.uid)
+    return get_solid_food_service().get_solid_food_history(baby_id, user_id=current_user.uid)
 
 @router.delete("/{baby_id}/nutrition/solid/{log_id}", response_model=Message)
 async def delete_solid_food_log(
@@ -47,7 +53,7 @@ async def delete_solid_food_log(
     """
     Xóa một bản ghi nhật ký ăn dặm của bé (Yêu cầu quyền giám hộ).
     """
-    solid_food_service.delete_solid_food_log(baby_id, log_id, user_id=current_user.uid)
+    get_solid_food_service().delete_solid_food_log(baby_id, log_id, user_id=current_user.uid)
     return Message(message="Xóa nhật ký ăn dặm thành công")
 
 
@@ -88,7 +94,7 @@ async def get_nutrition_feeds(
     Lấy lịch sử bú sữa và ăn dặm của bé.
     """
     # Kiểm tra quyền giám hộ
-    solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
+    get_solid_food_service().baby_service.get_baby_by_id(baby_id, current_user.uid)
     
     db = get_firestore_db()
     query = db.collection("nutrition_feeds").where("baby_id", "==", baby_id)
@@ -120,7 +126,7 @@ async def add_nutrition_feed(
     """
     Ghi nhận lịch sử bú sữa/ăn dặm mới.
     """
-    solid_food_service.baby_service.get_baby_by_id(feed_in.baby_id, current_user.uid)
+    get_solid_food_service().baby_service.get_baby_by_id(feed_in.baby_id, current_user.uid)
     
     db = get_firestore_db()
     feed_id = f"feed_{uuid.uuid4().hex[:8]}"
@@ -153,7 +159,7 @@ async def delete_nutrition_feed(
     
     # Verify permission
     feed_data = doc.to_dict()
-    solid_food_service.baby_service.get_baby_by_id(feed_data.get("baby_id"), current_user.uid)
+    get_solid_food_service().baby_service.get_baby_by_id(feed_data.get("baby_id"), current_user.uid)
     
     doc_ref.delete()
     return SuccessResponse(success=True, message="Feed log deleted successfully")
@@ -166,7 +172,7 @@ async def get_ingredients(
     """
     Lấy danh sách nguyên liệu ăn dặm & phản ứng của bé.
     """
-    solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
+    get_solid_food_service().baby_service.get_baby_by_id(baby_id, current_user.uid)
     
     db = get_firestore_db()
     docs = db.collection("nutrition_ingredients").where("baby_id", "==", baby_id).stream()
@@ -189,7 +195,7 @@ async def add_ingredient(
     """
     Lưu log phản ứng nguyên liệu ăn dặm mới.
     """
-    solid_food_service.baby_service.get_baby_by_id(ing_in.baby_id, current_user.uid)
+    get_solid_food_service().baby_service.get_baby_by_id(ing_in.baby_id, current_user.uid)
     
     db = get_firestore_db()
     log_id = f"ing_{uuid.uuid4().hex[:8]}"
@@ -219,7 +225,7 @@ async def delete_ingredient(
         raise HTTPException(status_code=404, detail="Ingredient log not found")
         
     ing_data = doc.to_dict()
-    solid_food_service.baby_service.get_baby_by_id(ing_data.get("baby_id"), current_user.uid)
+    get_solid_food_service().baby_service.get_baby_by_id(ing_data.get("baby_id"), current_user.uid)
 
     doc_ref.delete()
     return SuccessResponse(success=True)
@@ -239,7 +245,7 @@ async def get_nutrition_recommendation(
     Lấy gợi ý dinh dưỡng AI đã sinh gần nhất cho bé (nếu có). Trả về null nếu chưa từng tạo,
     không phải lỗi - frontend hiển thị trạng thái "chưa có gợi ý" trong trường hợp này.
     """
-    return nutrition_recommender_service.get_cached(baby_id, current_user.uid)
+    return get_nutrition_recommender_service().get_cached(baby_id, current_user.uid)
 
 
 @feeds_router.post("/recommendation/generate", response_model=NutritionRecommendationResponse, status_code=status.HTTP_201_CREATED)
@@ -250,7 +256,7 @@ async def generate_nutrition_recommendation(
     """
     Sinh mới gợi ý dinh dưỡng AI cho bé (luôn gọi lại LLM + RAG), ghi đè gợi ý đã lưu trước đó.
     """
-    return await nutrition_recommender_service.generate_recommendation(req.baby_id, current_user.uid)
+    return await get_nutrition_recommender_service().generate_recommendation(req.baby_id, current_user.uid)
 
 
 # Thực đơn ăn dặm 7 ngày AI (RAG, trạng thái pending/accepted, khoá tạo mới 7 ngày sau khi chấp nhận)
@@ -267,7 +273,7 @@ async def get_weekly_meal_plan(
     Lấy thực đơn 7 ngày đã sinh gần nhất cho bé (nếu có). Trả về null nếu chưa từng tạo,
     không phải lỗi - frontend hiển thị trạng thái "chưa có thực đơn" trong trường hợp này.
     """
-    return weekly_meal_plan_service.get_cached_weekly_plan(baby_id, current_user.uid)
+    return get_weekly_meal_plan_service().get_cached_weekly_plan(baby_id, current_user.uid)
 
 
 @feeds_router.post("/meal-plan/weekly/generate", response_model=WeeklyMealPlanResponse, status_code=status.HTTP_201_CREATED)
@@ -280,7 +286,7 @@ async def generate_weekly_meal_plan(
     hiện tại đã được chấp nhận và chưa hết hạn 7 ngày, backend trả 409 (MealPlanLockedError) -
     chỉ được ghi đè khi thực đơn hiện tại còn đang pending hoặc đã hết hạn.
     """
-    return await weekly_meal_plan_service.generate_weekly_plan(req.baby_id, current_user.uid, req.feedback)
+    return await get_weekly_meal_plan_service().generate_weekly_plan(req.baby_id, current_user.uid, req.feedback)
 
 
 @feeds_router.post("/meal-plan/weekly/accept", response_model=WeeklyMealPlanResponse)
@@ -292,7 +298,7 @@ async def accept_weekly_meal_plan(
     Chấp nhận thực đơn 7 ngày đang ở trạng thái pending - chuyển sang accepted, bắt đầu khoá
     7 ngày cho tới khi được tạo thực đơn mới.
     """
-    return weekly_meal_plan_service.accept_weekly_plan(req.baby_id, current_user.uid)
+    return get_weekly_meal_plan_service().accept_weekly_plan(req.baby_id, current_user.uid)
 
 
 # Hướng dẫn an toàn dinh dưỡng & cẩm nang y khoa (không dùng RAG - dữ liệu tĩnh + Firestore)
@@ -304,7 +310,7 @@ async def get_nutrition_safety_guidelines(
     """
     Lấy hướng dẫn an toàn dinh dưỡng & cảnh báo dị ứng cá nhân hóa cho bé.
     """
-    baby = solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
+    baby = get_solid_food_service().baby_service.get_baby_by_id(baby_id, current_user.uid)
 
     age_months = 6
     if baby and baby.birth_date:

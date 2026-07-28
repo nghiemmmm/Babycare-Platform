@@ -9,7 +9,7 @@ import json
 import logging
 import re
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Any
 
 from pydantic import BaseModel
 
@@ -26,8 +26,6 @@ from app.modules.nutrition.schemas import (
 from app.modules.health_records.service import HealthRecordService
 from app.modules.medication.service import MedicationService
 from app.modules.growth_tracking.service import GrowthTrackingService
-from app.AI_agents.core.reasoner import AIReasoner
-from app.AI_agents.knowledge.retriever import MedicalRetriever
 from app.infrastructure.database import get_firestore_db
 from app.shared.exceptions import AIGenerationError, EntityNotFoundError, MealPlanLockedError
 
@@ -81,8 +79,8 @@ class NutritionRecommenderService:
         health_service: Optional[HealthRecordService] = None,
         medication_service: Optional[MedicationService] = None,
         growth_service: Optional[GrowthTrackingService] = None,
-        retriever: Optional[MedicalRetriever] = None,
-        reasoner: Optional[AIReasoner] = None,
+        retriever: Optional[Any] = None,
+        reasoner: Optional[Any] = None,
     ):
         self.baby_service = baby_service or BabyService()
         self.solid_food_service = solid_food_service or SolidFoodService(self.baby_service)
@@ -93,18 +91,20 @@ class NutritionRecommenderService:
         self._reasoner = reasoner
 
     @property
-    def retriever(self) -> MedicalRetriever:
+    def retriever(self):
         # Lazy init để tránh load FAISS/embedding lúc import module.
         if self._retriever is None:
+            from app.AI_agents.knowledge.retriever import MedicalRetriever
             self._retriever = MedicalRetriever()
         return self._retriever
 
     @property
-    def reasoner(self) -> AIReasoner:
+    def reasoner(self):
         # Lazy init: NutritionRecommenderService được khởi tạo dạng singleton module-level
         # trong router.py, nên không được chạm GEMINI_API_KEY lúc import (sẽ crash app khi
         # thiếu key, kể cả với các request không liên quan đến gợi ý dinh dưỡng).
         if self._reasoner is None:
+            from app.AI_agents.core.reasoner import AIReasoner
             self._reasoner = AIReasoner(model_name="gemini-flash-latest")
         return self._reasoner
 
