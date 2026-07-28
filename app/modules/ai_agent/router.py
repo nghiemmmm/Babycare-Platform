@@ -72,9 +72,9 @@ async def list_chat_threads(
             last_updated=d.get("last_updated", "")
         ))
         
-    # Sắp xếp cuộc trò chuyện gần nhất lên đầu và giới hạn 6 phiên
+    # Sắp xếp cuộc trò chuyện gần nhất lên đầu
     threads.sort(key=lambda x: x.last_updated, reverse=True)
-    threads = threads[:6]
+    threads = threads[:50]
     
     # Nếu chưa có thread nào, tự động tạo một thread ban đầu cho người dùng
     if not threads:
@@ -92,7 +92,7 @@ async def list_chat_threads(
             last_updated=datetime.now(timezone.utc).isoformat()
         ))
         
-    return threads[:6]
+    return threads[:50]
 
 @ai_agent_router.post("/threads", response_model=ThreadCreateResponse)
 async def create_chat_thread(
@@ -123,7 +123,7 @@ async def get_thread_messages(
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
-    Lấy danh sách các tin nhắn trong phiên chat từ Redis Cache (nếu có) hoặc LangGraph Firestore Checkpointer.
+    Lấy danh sách các tin nhắn trong phiên chat từ Redis Cache, Firestore subcollection, hoặc LangGraph Checkpointer.
     """
     cache_key = f"chat_messages:{thread_id}:{current_user.uid}"
     
@@ -132,9 +132,35 @@ async def get_thread_messages(
     if cached_data and isinstance(cached_data, list):
         return [ChatMessageResponse(**item) for item in cached_data]
 
-    # 2. Cache-miss: Đọc từ LangGraph Firestore Checkpointer
+    db = get_firestore_db()
+
+    # 2. Đọc từ Firestore subcollection chat_threads/{thread_id}/messages
+    msg_docs = list(
+        db.collection("chat_threads")
+        .document(thread_id)
+        .collection("messages")
+        .stream()
+    )
+    if msg_docs:
+        result = []
+        for doc in msg_docs:
+            d = doc.to_dict()
+            result.append(ChatMessageResponse(
+                id=doc.id,
+                role=d.get("role", "user"),
+                content=d.get("content", ""),
+                timestamp=d.get("timestamp", datetime.now(timezone.utc).isoformat())
+            ))
+        result.sort(key=lambda x: x.timestamp)
+        final_messages = result[-100:]
+        if final_messages:
+            serializable = [m.model_dump() for m in final_messages]
+            await run_in_threadpool(cache_redis.set_json, cache_key, serializable, 1800)
+        return final_messages
+
+    # 3. Fallback: Đọc từ LangGraph Firestore Checkpointer
     orchestrator = AgentOrchestrator()
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": thread_id, "user_id": current_user.uid}}
     state = await orchestrator.graph.aget_state(config)
     messages = state.values.get("messages", [])
     
@@ -154,9 +180,9 @@ async def get_thread_messages(
             timestamp=ts
         ))
         
-    final_messages = result[-15:]  # Trả về tối đa 15 tin nhắn gần nhất
+    final_messages = result[-100:]
     
-    # 3. Ghi vào Redis Cache với TTL 30 phút (1800s)
+    # Ghi vào Redis Cache với TTL 30 phút (1800s)
     if final_messages:
         serializable = [m.model_dump() for m in final_messages]
         await run_in_threadpool(cache_redis.set_json, cache_key, serializable, 1800)
@@ -174,10 +200,12 @@ async def create_thread_message(
     """
     # 1. Tìm hoặc gán mặc định active baby
     db = get_firestore_db()
-    baby_id = None
-    babies = baby_service.get_my_babies(current_user.uid)
-    if babies:
-        baby_id = babies[0].id
+    baby_id = req.baby_id
+    if not baby_id:
+        babies = baby_service.get_my_babies(current_user.uid)
+        if babies:
+            active_b = next((b for b in babies if b.is_active), babies[0])
+            baby_id = active_b.id
         
     # 2. Gọi AgentOrchestrator chạy LangGraph
     orchestrator = AgentOrchestrator()
@@ -192,18 +220,42 @@ async def create_thread_message(
     next_step = result.get("next_step")
     extracted_data = result.get("extracted_data")
     
-    # 3. Xóa cache Redis của thread_id để lượt GET tiếp theo tự làm mới tin nhắn mới
+    # 3. Lưu bản ghi tin nhắn Human & AI vào Firestore subcollection
+    now_iso = datetime.now(timezone.utc).isoformat()
+    msgs_col = db.collection("chat_threads").document(thread_id).collection("messages")
+    user_msg_id = f"msg_{uuid.uuid4().hex[:8]}"
+    ai_msg_id = f"msg_{uuid.uuid4().hex[:8]}"
+    
+    msgs_col.document(user_msg_id).set({
+        "role": "user",
+        "content": req.content,
+        "timestamp": now_iso
+    })
+    msgs_col.document(ai_msg_id).set({
+        "role": "assistant",
+        "content": last_message,
+        "timestamp": now_iso
+    })
+
+    # Xóa cache Redis của thread_id để lượt GET tiếp theo tự làm mới tin nhắn mới
     cache_key = f"chat_messages:{thread_id}:{current_user.uid}"
     await run_in_threadpool(cache_redis.delete, cache_key)
     
-    # 4. Cập nhật thời gian hoạt động của thread
+    # 4. Cập nhật thời gian hoạt động và tiêu đề của thread
     thread_ref = db.collection("chat_threads").document(thread_id)
     if thread_ref.get().exists:
-        update_fields = {"last_updated": datetime.now(timezone.utc).isoformat()}
+        update_fields = {"last_updated": now_iso}
         thread_data = thread_ref.get().to_dict()
-        if thread_data.get("title") == "New Chat Session":
+        if thread_data.get("title") in ["New Chat Session", "Baby Progress Chat"]:
             update_fields["title"] = req.content[:30] + "..." if len(req.content) > 30 else req.content
         thread_ref.update(update_fields)
+    else:
+        thread_ref.set({
+            "user_id": current_user.uid,
+            "title": req.content[:30] + "..." if len(req.content) > 30 else req.content,
+            "last_updated": now_iso,
+            "created_at": now_iso
+        })
         
     # 5. Trích xuất nhật ký thực tế nếu LangGraph nhận dạng được
     extracted_logs = []

@@ -28,6 +28,8 @@ import { BabyProfile, ChatMessage, SmartExtraction } from "../types";
 
 interface AiHubViewProps {
   activeBaby: BabyProfile;
+  babies: BabyProfile[];
+  onSelectBaby: (id: string) => void;
   chats: ChatMessage[];
   onSendMessage: (text: string) => Promise<void>;
   onConfirmExtraction: (ext: SmartExtraction) => void;
@@ -43,6 +45,8 @@ interface AiHubViewProps {
 
 export default function AiHubView({
   activeBaby,
+  babies,
+  onSelectBaby,
   chats,
   onSendMessage,
   onConfirmExtraction,
@@ -59,6 +63,16 @@ export default function AiHubView({
   const [activeThread, setActiveThread] = useState("sitting");
   const [showCitationDropdown, setShowCitationDropdown] = useState(false);
   const [showSwitchBabyDropdown, setShowSwitchBabyDropdown] = useState(false);
+
+  const formatBabyName = (name: string) => {
+    if (!name) return "Bé";
+    const trimmed = name.trim();
+    return /^bé\b/i.test(trimmed) ? trimmed : `Bé ${trimmed}`;
+  };
+
+  const uniqueBabies = Array.from(
+    new Map(babies.map((b) => [b.name.trim().toLowerCase(), b])).values()
+  );
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploadingChatFile, setIsUploadingChatFile] = useState(false);
@@ -180,7 +194,7 @@ export default function AiHubView({
         <div className="flex-1 overflow-y-auto space-y-1">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2.5 mb-2">Cuộc trò chuyện gần đây</p>
           
-          {threads.slice(0, 6).map((thread) => (
+          {threads.map((thread) => (
             <button
               key={thread.id}
               onClick={() => onSelectThread(thread.id)}
@@ -197,60 +211,80 @@ export default function AiHubView({
         </div>
 
         {/* User Mini-Profile panel */}
-        <div className="p-3 bg-white/50 border border-white/30 rounded-2xl flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-rose-200 overflow-hidden flex items-center justify-center border border-white">
-              <span className="text-[10px] font-black text-rose-600">Bo</span>
+        <div className="relative">
+          <button
+            onClick={() => setShowSwitchBabyDropdown(!showSwitchBabyDropdown)}
+            className="w-full p-3 bg-white/60 hover:bg-white border border-white/40 rounded-2xl flex items-center justify-between gap-2 cursor-pointer transition-all shadow-xs"
+          >
+            <div className="flex items-center gap-2.5">
+              <img
+                src={activeBaby.avatarUrl || "/static/img/leo.png"}
+                alt={activeBaby.name}
+                className="w-8 h-8 rounded-full object-cover border border-white shrink-0"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/static/img/leo.png"; }}
+              />
+              <div className="text-left">
+                <p className="text-xs font-black text-slate-800">{formatBabyName(activeBaby.name)}</p>
+                <p className="text-[9px] text-slate-400 font-bold">Đang chọn</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-800">Bé Bo</p>
-              <p className="text-[9px] text-slate-400 font-bold">6 tháng tuổi</p>
-            </div>
-          </div>
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          </button>
+
+          <AnimatePresence>
+            {showSwitchBabyDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 5 }}
+                className="absolute bottom-full left-0 mb-2 w-full bg-white border border-slate-100 rounded-2xl shadow-xl p-1.5 z-50 text-xs font-bold"
+              >
+                <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider px-2 py-1">Chọn hồ sơ bé</p>
+                {uniqueBabies.map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={() => {
+                      onSelectBaby(b.id);
+                      setShowSwitchBabyDropdown(false);
+                    }}
+                    className={`w-full text-left p-2 rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
+                      b.id === activeBaby.id
+                        ? "bg-[#e0f2fe]/70 text-[#1c648e] font-black"
+                        : "text-slate-600 hover:bg-slate-50 font-medium"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={b.avatarUrl || "/static/img/leo.png"}
+                        alt={b.name}
+                        className="w-6 h-6 rounded-full object-cover"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/static/img/leo.png"; }}
+                      />
+                      <span>{formatBabyName(b.name)}</span>
+                    </div>
+                    {b.id === activeBaby.id && <Check className="w-3.5 h-3.5 text-[#1c648e]" />}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
       {/* 2. Cột Trung tâm (55%): Cửa sổ Chat thông minh (The AI Hub) */}
-      <div className="flex-1 flex flex-col bg-slate-50/40 relative h-full">
+      <div className="flex-1 flex flex-col bg-[#f8fafc] relative h-full">
         {/* Header Chat */}
         {(() => {
           const currentThread = threads.find((t) => t.id === activeThreadId);
           return (
-            <div className="p-4 border-b border-white/20 flex items-center justify-between bg-white/30 backdrop-blur-md">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white/70 backdrop-blur-md">
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-sm font-black text-slate-800">{currentThread?.title || "Trò chuyện với Trợ lý AI"}</h2>
-              
-              {/* Switch Baby Dropdown selector button */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowSwitchBabyDropdown(!showSwitchBabyDropdown)}
-                  className="bg-white/60 hover:bg-white border border-slate-200 px-2 py-0.5 rounded-md text-[9px] font-extrabold text-slate-500 inline-flex items-center gap-1 cursor-pointer"
-                >
-                  Chọn bé
-                  <ChevronDown className="w-2.5 h-2.5" />
-                </button>
-
-                <AnimatePresence>
-                  {showSwitchBabyDropdown && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 5 }}
-                      className="absolute left-0 mt-1.5 w-32 bg-white border border-slate-100 rounded-xl shadow-lg p-1 z-50 text-[10px] font-bold"
-                    >
-                      <button className="w-full text-left p-2 hover:bg-slate-50 rounded-lg text-[#1c648e]">
-                        Bé Bo (Đang chọn)
-                      </button>
-                      <button className="w-full text-left p-2 hover:bg-slate-50 rounded-lg text-slate-600">
-                        {activeBaby.name}
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
+                  <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-[#1c648e]/10 text-[#1c648e]">
+                    {formatBabyName(activeBaby.name)}
+                  </span>
+                </div>
             
             <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
@@ -284,7 +318,7 @@ export default function AiHubView({
               </p>
             </div>
           ) : (
-            chats.slice(-6).map((msg) => (
+            chats.map((msg) => (
               <div
                 key={msg.id}
                 className={`flex items-start gap-3 max-w-[85%] ${

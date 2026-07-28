@@ -45,6 +45,8 @@ import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 
 interface DashboardViewProps {
   activeBaby: BabyProfile;
+  babies?: BabyProfile[];
+  onSelectBaby?: (id: string) => void;
   medications: MedicationLog[];
   feeds: FeedLog[];
   measurements: Measurement[];
@@ -106,6 +108,8 @@ const WHO_GIRL_HEIGHT_STANDARDS = [
 
 export default function DashboardView({
   activeBaby,
+  babies = [],
+  onSelectBaby,
   medications,
   feeds,
   measurements,
@@ -126,6 +130,7 @@ export default function DashboardView({
 }: DashboardViewProps) {
   // Modals visibility states
   const [activeModal, setActiveModal] = useState<"none" | "add-entry" | "feed" | "sleep" | "diaper" | "medication" | "growth">("none");
+  const [showBabyDropdown, setShowBabyDropdown] = useState(false);
 
   // Growth Metric Toggle state (weight or height)
   const [growthMetric, setGrowthMetric] = useState<"weight" | "height">("weight");
@@ -643,26 +648,76 @@ export default function DashboardView({
       <div className="relative z-30 bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           {/* Baby selector profile */}
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <img
-                src={activeBaby.avatarUrl}
-                alt={activeBaby.name}
-                className="w-16 h-16 rounded-full object-cover border-2 border-white/40 shadow-sm"
-              />
-              <span className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center">
-                <Check className="w-2.5 h-2.5 text-white" />
-              </span>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-primary font-bold text-2xl tracking-tight">{activeBaby.name}</h1>
-                <ChevronDown className="w-5 h-5 text-primary cursor-pointer" />
+          <div className="relative">
+            <div
+              onClick={() => setShowBabyDropdown(!showBabyDropdown)}
+              className="flex items-center gap-4 cursor-pointer group"
+            >
+              <div className="relative">
+                <img
+                  src={activeBaby.avatarUrl}
+                  alt={activeBaby.name}
+                  className="w-16 h-16 rounded-full object-cover border-2 border-white/40 shadow-sm group-hover:scale-105 transition-transform"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/static/img/leo.png"; }}
+                />
+                <span className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center">
+                  <Check className="w-2.5 h-2.5 text-white" />
+                </span>
               </div>
-              <p className="text-sm font-semibold text-slate-500 mt-0.5">
-                {calculateAgeStr(activeBaby.birthDate) === "0 ngày" ? "Mới sinh" : calculateAgeStr(activeBaby.birthDate)} • {getLatestWeight()}
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-primary font-bold text-2xl tracking-tight group-hover:text-primary/80">{activeBaby.name}</h1>
+                  <ChevronDown className="w-5 h-5 text-primary group-hover:translate-y-0.5 transition-transform" />
+                </div>
+                <p className="text-sm font-semibold text-slate-500 mt-0.5">
+                  {calculateAgeStr(activeBaby.birthDate) === "0 ngày" ? "Mới sinh" : calculateAgeStr(activeBaby.birthDate)} • {getLatestWeight()}
+                </p>
+              </div>
             </div>
+
+            <AnimatePresence>
+              {showBabyDropdown && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute left-0 top-full mt-3 w-64 bg-white border border-slate-100 rounded-2xl shadow-xl p-2 z-50 text-xs font-bold"
+                >
+                  <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider px-3 py-1.5">Chuyển hồ sơ em bé</p>
+                  {Array.from(new Map(babies.map((b) => [b.name.trim().toLowerCase(), b])).values()).map((b) => {
+                    const displayName = !b.name ? "Bé" : /^bé\b/i.test(b.name.trim()) ? b.name.trim() : `Bé ${b.name.trim()}`;
+                    return (
+                      <button
+                        key={b.id}
+                        onClick={() => {
+                          onSelectBaby?.(b.id);
+                          setShowBabyDropdown(false);
+                        }}
+                        className={`w-full text-left p-2.5 rounded-xl flex items-center justify-between cursor-pointer transition-all ${
+                          b.id === activeBaby.id
+                            ? "bg-primary/10 text-primary font-black"
+                            : "text-slate-600 hover:bg-slate-50 font-medium"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={b.avatarUrl || "/static/img/leo.png"}
+                            alt={b.name}
+                            className="w-8 h-8 rounded-full object-cover"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/static/img/leo.png"; }}
+                          />
+                          <div>
+                            <p className="text-xs font-bold">{displayName}</p>
+                            <p className="text-[10px] text-slate-400">{b.gender === "Boy" || b.gender === "boy" ? "Bé trai" : "Bé gái"}</p>
+                          </div>
+                        </div>
+                        {b.id === activeBaby.id && <Check className="w-4 h-4 text-primary" />}
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
             {/* Action buttons */}

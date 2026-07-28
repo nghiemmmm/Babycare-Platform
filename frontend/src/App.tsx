@@ -71,6 +71,7 @@ export default function App() {
   const [isAcceptingWeeklyPlan, setIsAcceptingWeeklyPlan] = useState(false);
   const [threads, setThreads] = useState<Array<{ id: string; title: string }>>([]);
   const [activeThreadId, setActiveThreadId] = useState<string>("thread_default");
+  const threadCacheRef = useRef<Record<string, ChatMessage[]>>({});
   const [nutritionSafety, setNutritionSafety] = useState<NutritionSafety | null>(null);
   const [safetyHandbook, setSafetyHandbook] = useState<SafetyHandbook | null>(null);
   const [isLoadingSafetyHandbook, setIsLoadingSafetyHandbook] = useState(false);
@@ -310,22 +311,31 @@ export default function App() {
 
   // Fetch messages inside the selected thread
   const loadThreadMessages = async (threadId: string) => {
+    // Instant UI update if thread messages are cached in memory
+    if (threadCacheRef.current[threadId]) {
+      setChats(threadCacheRef.current[threadId]);
+    }
+
     try {
       const res = await apiFetch(`/api/v1/ai/threads/${threadId}/messages`);
       if (res.ok) {
         const data = await res.json();
-        setChats(data.map((c: any) => ({
+        const mapped = data.map((c: any) => ({
           id: c.id,
           role: c.role,
           content: c.content,
           timestamp: c.timestamp.includes("T") ? c.timestamp.slice(11, 16) : c.timestamp
-        })));
-      } else {
+        }));
+        threadCacheRef.current[threadId] = mapped;
+        setChats(mapped);
+      } else if (!threadCacheRef.current[threadId]) {
         setChats([]);
       }
     } catch (e) {
       console.error("Failed to load thread messages:", e);
-      setChats([]);
+      if (!threadCacheRef.current[threadId]) {
+        setChats([]);
+      }
     }
   };
 
@@ -368,7 +378,15 @@ export default function App() {
       }
     };
     loadInitialBabies();
+    loadThreads();
   }, []);
+
+  // Automatically fetch thread messages whenever activeThreadId changes
+  useEffect(() => {
+    if (activeThreadId) {
+      loadThreadMessages(activeThreadId);
+    }
+  }, [activeThreadId]);
 
   // Check URL query parameters for invitation acceptance link
   useEffect(() => {
@@ -875,7 +893,8 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content: userMsg.content,
-          type: "text"
+          type: "text",
+          baby_id: activeBaby?.id
         })
       });
 
@@ -905,17 +924,20 @@ export default function App() {
         };
       }
 
-      setChats((prev) => [
-        ...prev,
-        {
-          id: `ai_${Date.now()}`,
-          role: "assistant",
-          content: aiContent,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          extraction,
-          citations
-        }
-      ]);
+      const aiMsgObj: ChatMessage = {
+        id: `ai_${Date.now()}`,
+        role: "assistant",
+        content: aiContent,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        extraction,
+        citations
+      };
+
+      setChats((prev) => {
+        const next = [...prev, aiMsgObj];
+        threadCacheRef.current[activeThreadId] = next;
+        return next;
+      });
     } catch (error) {
       console.error("Failed to message Gemini API:", error);
       // Fallback
@@ -954,6 +976,9 @@ export default function App() {
 
   const handleSelectThread = (threadId: string) => {
     setActiveThreadId(threadId);
+    if (threadCacheRef.current[threadId]) {
+      setChats(threadCacheRef.current[threadId]);
+    }
   };
 
   const handleConfirmExtraction = (ext: SmartExtraction) => {
@@ -1276,6 +1301,8 @@ export default function App() {
               {activeTab === "dashboard" && (
                 <DashboardView
                   activeBaby={activeBaby}
+                  babies={babies}
+                  onSelectBaby={handleSelectBaby}
                   medications={medications.filter((m) => m.babyId === activeBaby.id)}
                   feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
                   measurements={measurements.filter((m) => m.babyId === activeBaby.id)}
@@ -1317,6 +1344,8 @@ export default function App() {
               {activeTab === "ai" && (
                 <AiHubView
                   activeBaby={activeBaby}
+                  babies={babies}
+                  onSelectBaby={handleSelectBaby}
                   chats={chats}
                   onSendMessage={handleSendMessage}
                   onConfirmExtraction={handleConfirmExtraction}

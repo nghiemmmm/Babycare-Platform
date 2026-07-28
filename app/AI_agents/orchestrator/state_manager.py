@@ -101,14 +101,15 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
                     parent_config=None,
                 )
         else:
-            docs = (
+            docs = list(
                 col.where(filter=FieldFilter("thread_id", "==", thread_id))
                 .where(filter=FieldFilter("checkpoint_ns", "==", checkpoint_ns))
-                .limit(1)
-                .get()
+                .limit(20)
+                .stream()
             )
             if docs:
-                d = docs[0].to_dict()
+                sorted_docs = sorted(docs, key=lambda x: x.to_dict().get("checkpoint_id", ""), reverse=True)
+                d = sorted_docs[0].to_dict()
                 if d.get("user_id") and user_id and d.get("user_id") != user_id:
                     raise PermissionError("Access denied: You do not have permission to access this chat thread.")
                 return CheckpointTuple(

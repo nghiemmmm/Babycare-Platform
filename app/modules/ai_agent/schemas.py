@@ -24,6 +24,7 @@ class ThreadCreateResponse(BaseModel):
 class MessageCreateRequest(BaseModel):
     content: str
     type: str = "text"
+    baby_id: Optional[str] = None
 
 class Citation(BaseModel):
     title: str
