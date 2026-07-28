@@ -313,7 +313,26 @@ class DashboardAggregator:
         except Exception as e:
             logger.warning(f"Error aggregating medication notifications: {e}")
 
-        # 3. Tự động bổ sung thông báo mẫu nếu danh sách rỗng
+        # 3. Tự động bổ sung thông báo Nhắc nhở theo dõi khỏi bệnh (health_check)
+        try:
+            health_records = self.health_svc.get_history(baby_id, user_id)
+            for hr in health_records[:2]:
+                diag = hr.diagnosis or (hr.symptoms[0] if hr.symptoms else "Sức khỏe mệt")
+                notifications.append(
+                    NotificationResponse(
+                        id=f"notif_health_{hr.id}",
+                        title="🔔 Theo dõi sức khỏe (Cách 1 Ngày)",
+                        message=f"Bé đã khỏi đợt '{diag}' chưa phụ huynh?",
+                        type="health_check",
+                        created_at=hr.recorded_at,
+                        read=False,
+                        action_url=f"/health?resolve_id={hr.id}"
+                    )
+                )
+        except Exception as e:
+            logger.warning(f"Error aggregating health check notifications: {e}")
+
+        # 4. Tự động bổ sung thông báo mẫu nếu danh sách rỗng
         if not notifications:
             notifications = [
                 NotificationResponse(

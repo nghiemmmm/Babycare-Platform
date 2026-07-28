@@ -27,7 +27,8 @@ import {
   Scale,
   Ruler,
   Upload,
-  RefreshCw
+  RefreshCw,
+  CheckCircle2
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -726,11 +727,30 @@ export default function DashboardView({
                               {n.type === "feeding" && "🍼"}
                               {n.type === "safety" && "⚠️"}
                               {n.type === "system" && "📌"}
+                              {n.type === "health_check" && "🩺"}
                               {n.title}
                             </span>
                             {!n.read && <span className="w-1.5 h-1.5 bg-sky-500 rounded-full shrink-0" />}
                           </div>
                           <p className="text-[10px] text-slate-600 leading-snug">{n.message}</p>
+                          {n.type === "health_check" && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNotifications((prev) => prev.filter((item) => item.id !== n.id));
+                                setToast({
+                                  title: "Sức Khỏe Bé",
+                                  message: "✅ Đã xác nhận: Bé đã khỏi bệnh!",
+                                  type: "success"
+                                });
+                                setTimeout(() => setToast(null), 3000);
+                              }}
+                              className="mt-2 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                              ✓ Đồng Ý (Bé Đã Khỏi)
+                            </button>
+                          )}
                         </div>
                       ))
                     )}
