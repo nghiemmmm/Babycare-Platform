@@ -440,10 +440,10 @@ export default function HealthView({
                 </button>
               </div>
 
-              {/* ⚡ 1-CLICK PRESET ILLNESSES */}
+              {/* ⚡ PRESET ILLNESSES */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-slate-700">
-                  ⚡ Chọn nhanh mẫu bệnh án thông dụng (1-Chạm):
+                  ⚡ Mẫu tình trạng sức khỏe thông dụng:
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {PRESET_ILLNESSES.map((preset, idx) => (
@@ -525,7 +525,7 @@ export default function HealthView({
 
                 {/* 🏷️ QUICK SYMPTOM CHIPS */}
                 <div className="space-y-1.5">
-                  <label className="block">Bấm chọn triệu chứng của bé (1-Chạm):</label>
+                  <label className="block">Chọn các triệu chứng của bé:</label>
                   <div className="flex flex-wrap gap-1.5">
                     {QUICK_SYMPTOMS.map((sym) => {
                       const isSelected = selectedSymptomChips.includes(sym);
