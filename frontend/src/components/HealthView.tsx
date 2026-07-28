@@ -377,7 +377,7 @@ export default function HealthView({
                         {inc.status === "Confirmed" ? (
                           <>
                             <Clock className="w-3 h-3 text-amber-600 shrink-0" />
-                            <span>Đang theo dõi • Bấm khi khỏi</span>
+                            <span>Đang theo dõi • Đánh dấu khỏi</span>
                           </>
                         ) : (
                           <>
