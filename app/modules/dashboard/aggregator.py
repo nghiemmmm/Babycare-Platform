@@ -321,7 +321,7 @@ class DashboardAggregator:
                 notifications.append(
                     NotificationResponse(
                         id=f"notif_health_{hr.id}",
-                        title="🔔 Theo dõi sức khỏe (Cách 1 Ngày)",
+                        title="🔔 Nhắc nhở theo dõi sức khỏe",
                         message=f"Bé đã khỏi đợt '{diag}' chưa phụ huynh?",
                         type="health_check",
                         created_at=hr.recorded_at,

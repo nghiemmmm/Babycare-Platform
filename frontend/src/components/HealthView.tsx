@@ -325,7 +325,7 @@ export default function HealthView({
                       </div>
                       <div>
                         <h4 className="text-xs font-black text-amber-900 flex items-center gap-1.5">
-                          🔔 Nhắc Nhở Theo Dõi Sức Khỏe Hàng Ngày (Cách 1 Ngày)
+                          🔔 Nhắc Nhở Theo Dõi Sức Khỏe Cho Bé
                         </h4>
                         <p className="text-[11px] font-medium text-amber-800 leading-snug pt-0.5">
                           Bé <span className="font-bold">{activeBaby.name}</span> đã khỏi đợt{" "}
