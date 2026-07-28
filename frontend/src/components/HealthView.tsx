@@ -157,11 +157,46 @@ export default function HealthView({
     setSelectedTreatmentChips([preset.treatment]);
   };
 
+  const generateAITreatment = (title: string, temp: number, symptoms: string[]) => {
+    const parts: string[] = [];
+
+    if (temp >= 39.5) {
+      parts.push("⚠️ Sốt nguy hiểm: Chườm ấm toàn thân liên tục và đưa bé đến Bệnh viện Nhi ngay.");
+    } else if (temp >= 38.5) {
+      parts.push(`Cho bé uống Paracetamol liều 10-15mg/kg theo chỉ dẫn và chườm ấm trán, nách, bẹn.`);
+    } else if (temp >= 37.5) {
+      parts.push("Chườm ấm trán nách, giữ phòng thoáng mát và theo dõi thân nhiệt mỗi 30 phút.");
+    }
+
+    const symText = (title + " " + symptoms.join(" ")).toLowerCase();
+    if (symText.includes("ho") || symText.includes("họng") || symText.includes("cảm")) {
+      parts.push("Dùng siro ho thảo dược, nhỏ mũi bằng nước muối sinh lý 0.9% và cho uống nước ấm.");
+    }
+    if (symText.includes("sổ mũi") || symText.includes("ngạt")) {
+      parts.push("Làm sạch dịch mũi và duy trì độ ẩm phòng 55-60%.");
+    }
+    if (symText.includes("nôn") || symText.includes("tiêu chảy") || symText.includes("tiêu hóa")) {
+      parts.push("Cho uống Oresol bù điện giải rải rác trong ngày và ăn thức ăn lỏng dễ tiêu.");
+    }
+    if (symText.includes("mọc răng") || symText.includes("nướu") || symText.includes("dãi")) {
+      parts.push("Cho ngậm nướu lạnh và mát-xa nướu nhẹ nhàng cho bé.");
+    }
+    if (symText.includes("mẩn") || symText.includes("dị ứng") || symText.includes("ban")) {
+      parts.push("Giữ da bé sạch thoáng, lau người bằng nước ấm dịu nhẹ và tránh chất gây kích ứng.");
+    }
+
+    if (parts.length === 0) {
+      parts.push(`Cho bé ${activeBaby.name} nghỉ ngơi, theo dõi sinh hoạt và cho bú/uống nước đầy đủ.`);
+    }
+
+    return parts.join(" ");
+  };
+
   const handleAddIncidentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!incidentTitle) return;
 
-    const treatmentString = selectedTreatmentChips.join("; ");
+    const aiTreatment = generateAITreatment(incidentTitle, incidentTemp, selectedSymptomChips);
 
     const newRecord: IncidentRecord = {
       id: `inc_${Date.now()}`,
@@ -170,8 +205,8 @@ export default function HealthView({
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       status: "Confirmed",
       symptoms: selectedSymptomChips.length ? selectedSymptomChips : ["Sức khỏe mệt nhẹ"],
-      treatment: treatmentString || "Cho bé nghỉ ngơi và theo dõi thân nhiệt.",
-      prescribedBy: incidentDoctor || "Phụ huynh ghi nhận",
+      treatment: aiTreatment,
+      prescribedBy: "AI Y Khoa Gợi Ý",
       temp: incidentTemp
     };
 
