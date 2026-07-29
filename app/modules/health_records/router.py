@@ -6,7 +6,7 @@ Defines HTTP API endpoints for managing baby medical history and symptoms.
 from fastapi import APIRouter, Depends, status
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.schemas import UserRecord
-from app.modules.health_records.schemas import HealthRecordCreate, HealthRecordResponse
+from app.modules.health_records.schemas import HealthRecordCreate, HealthRecordResponse, HealthRecordUpdate
 from app.modules.health_records.service import HealthRecordService
 from app.shared.schemas import Message
 
