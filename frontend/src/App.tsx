@@ -924,7 +924,7 @@ export default function App() {
         {
           id: `ai_${Date.now()}`,
           role: "assistant",
-          content: "I ran into a connection glitch reaching the core servers, but rest assured, your logs are saved. Let me know if you want to track feeding volume, check paracetamol schedules, or solids advice!",
+          content: "Hệ thống đang kết nối lại với máy chủ AI nhi khoa. Phụ huynh yên tâm, các ghi chép của bé vẫn được bảo mật và lưu an toàn! Bạn có cần kiểm tra cữ bú, lịch uống thuốc hạ sốt Hapacol hay tư vấn dinh dưỡng cho bé không?",
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);

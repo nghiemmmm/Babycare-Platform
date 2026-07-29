@@ -221,7 +221,8 @@ async def create_thread_message(
         user_id=current_user.uid
     )
     
-    last_message = result["messages"][-1].content
+    last_msg_obj = result["messages"][-1] if result.get("messages") else "Tôi đã ghi nhận thông tin đó!"
+    last_message = last_msg_obj.content if hasattr(last_msg_obj, "content") else str(last_msg_obj)
     next_step = result.get("next_step")
     extracted_data = result.get("extracted_data")
     raw_tool_steps = result.get("tool_steps", [])
