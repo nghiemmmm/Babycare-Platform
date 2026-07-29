@@ -1550,17 +1550,31 @@ export default function DashboardView({
                 </div>
 
                 {feedType !== "Solids" ? (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <label className="block">Lượng dùng (ml)</label>
                     <input
                       type="number"
                       value={feedAmount}
-                      onChange={(e) => setFeedAmount(parseInt(e.target.value))}
+                      onChange={(e) => setFeedAmount(parseInt(e.target.value) || 0)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40 focus:outline-hidden"
                     />
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {[60, 90, 120, 150, 180, 210].map((ml) => (
+                        <button
+                          key={ml}
+                          type="button"
+                          onClick={() => setFeedAmount(ml)}
+                          className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                            feedAmount === ml ? "bg-primary text-white border-primary" : "bg-sky-50/70 border-sky-100 text-[#1c648e] hover:bg-sky-100"
+                          }`}
+                        >
+                          {ml}ml
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 ) : (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <label className="block">Chi tiết món ăn dặm</label>
                     <input
                       type="text"
@@ -1569,6 +1583,18 @@ export default function DashboardView({
                       placeholder="Ví dụ: Khoai lang nghiền, bột bí đỏ"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40 focus:outline-hidden"
                     />
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {["🎃 Bí đỏ nghiền", "🥑 Bơ dầm sữa", "🥣 Cháo rây 1:10", "🌾 Yến mạch táo"].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setFeedDetails(preset)}
+                          className="px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-[10px] font-bold hover:bg-amber-100 transition-all cursor-pointer"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -1716,7 +1742,7 @@ export default function DashboardView({
               </div>
 
               <form onSubmit={handleAddMedicationSubmit} className="space-y-4 text-xs font-bold text-slate-600">
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <label className="block">Tên thuốc</label>
                   <input
                     type="text"
@@ -1726,9 +1752,29 @@ export default function DashboardView({
                     placeholder="Ví dụ: Hapacol 150mg, Vitamin D"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40 focus:outline-hidden"
                   />
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {[
+                      { name: "Hapacol 150mg", dose: "1 gói" },
+                      { name: "Vitamin D3 K2", dose: "2 giọt" },
+                      { name: "Siro Prospan", dose: "2.5ml" },
+                      { name: "Oresol Bù Điện Giải", dose: "100ml" }
+                    ].map((preset) => (
+                      <button
+                        key={preset.name}
+                        type="button"
+                        onClick={() => {
+                          setMedName(preset.name);
+                          setMedDosage(preset.dose);
+                        }}
+                        className="px-2 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-800 text-[10px] font-bold hover:bg-purple-100 transition-all cursor-pointer"
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <label className="block">Liều lượng</label>
                   <input
                     type="text"
@@ -1738,6 +1784,18 @@ export default function DashboardView({
                     placeholder="Ví dụ: 150mg, 2 giọt"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40 focus:outline-hidden"
                   />
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {["1 gói", "2 giọt", "2.5 ml", "5.0 ml", "100 ml"].map((dose) => (
+                      <button
+                        key={dose}
+                        type="button"
+                        onClick={() => setMedDosage(dose)}
+                        className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-[10px] font-bold hover:bg-slate-100 transition-all cursor-pointer"
+                      >
+                        {dose}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -1792,7 +1850,7 @@ export default function DashboardView({
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40"
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <label className="block">Cân nặng (kg)</label>
                     <input
                       type="number"
@@ -1802,10 +1860,22 @@ export default function DashboardView({
                       onChange={(e) => setGrowthWeight(parseFloat(e.target.value))}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40"
                     />
+                    <div className="flex gap-1 pt-1">
+                      {[0.1, 0.2, 0.5].map((add) => (
+                        <button
+                          key={add}
+                          type="button"
+                          onClick={() => setGrowthWeight(parseFloat((growthWeight + add).toFixed(2)))}
+                          className="px-1.5 py-0.5 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 text-[9px] font-bold hover:bg-emerald-100 transition-all cursor-pointer"
+                        >
+                          +{add}kg
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <label className="block">Chiều cao (cm)</label>
                   <input
                     type="number"
