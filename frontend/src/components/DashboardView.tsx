@@ -903,23 +903,31 @@ export default function DashboardView({
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mt-8 max-w-xl mx-auto">
+        <div className="grid grid-cols-5 gap-3 sm:gap-4 mt-8 max-w-3xl mx-auto">
           {[
             { label: "Ăn uống", icon: Droplet, color: "text-[#7cb9e8] bg-[#7cb9e8]/10 border-[#7cb9e8]/20", modal: "feed" },
             { label: "Giấc ngủ", icon: Moon, color: "text-[#b19cd9] bg-[#b19cd9]/10 border-[#b19cd9]/20", modal: "sleep" },
-            { label: "Uống thuốc", icon: Pill, color: "text-[#b2e2f2] bg-[#b2e2f2]/20 border-[#b2e2f2]/30", modal: "medication" }
+            { label: "Uống thuốc", icon: Pill, color: "text-[#b2e2f2] bg-[#b2e2f2]/20 border-[#b2e2f2]/30", modal: "medication" },
+            { label: "Tăng trưởng", icon: TrendingUp, color: "text-emerald-600 bg-emerald-50 border-emerald-200", modal: "growth" },
+            { label: "Bệnh trạng", icon: Activity, color: "text-rose-600 bg-rose-50 border-rose-200", modal: "health" }
           ].map((action, idx) => {
             const Icon = action.icon;
             return (
               <button
                 key={idx}
-                onClick={() => setActiveModal(action.modal as any)}
+                onClick={() => {
+                  if (action.modal === "health") {
+                    onNavigateTab?.("health");
+                  } else {
+                    setActiveModal(action.modal as any);
+                  }
+                }}
                 className="flex flex-col items-center gap-2 cursor-pointer group"
               >
-                <div className={`w-14 h-14 rounded-full border flex items-center justify-center transition-all ${action.color} group-hover:scale-105 group-hover:shadow-md`}>
-                  <Icon className="w-6 h-6" />
+                <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full border flex items-center justify-center transition-all ${action.color} group-hover:scale-105 group-hover:shadow-md`}>
+                  <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <span className="text-xs font-bold text-slate-600 group-hover:text-primary">{action.label}</span>
+                <span className="text-[11px] sm:text-xs font-bold text-slate-600 group-hover:text-primary">{action.label}</span>
               </button>
             );
           })}
