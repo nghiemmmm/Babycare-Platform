@@ -1516,9 +1516,14 @@ export default function DashboardView({
                 <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
                   🍼 Ghi nhận cữ ăn/uống
                 </h3>
-                <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-primary hover:text-primary/80 cursor-pointer">
-                  Quay lại
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
+                    Danh mục
+                  </button>
+                  <button onClick={() => setActiveModal("none")} className="text-xs font-bold text-[#1c648e] bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-lg cursor-pointer">
+                    ✕ Đóng
+                  </button>
+                </div>
               </div>
 
               <form onSubmit={handleAddFeedSubmit} className="space-y-4 text-xs font-bold text-slate-600">
@@ -1622,9 +1627,14 @@ export default function DashboardView({
                 <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
                   💤 Theo dõi giấc ngủ
                 </h3>
-                <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-primary hover:text-primary/80 cursor-pointer">
-                  Quay lại
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
+                    Danh mục
+                  </button>
+                  <button onClick={() => setActiveModal("none")} className="text-xs font-bold text-[#1c648e] bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-lg cursor-pointer">
+                    ✕ Đóng
+                  </button>
+                </div>
               </div>
 
               <div className="text-center space-y-4 py-4">
@@ -1655,74 +1665,6 @@ export default function DashboardView({
           </div>
         )}
 
-        {/* Modal: Quick log diaper */}
-        {activeModal === "diaper" && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
-            >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
-                  💩 Thay tã cho bé
-                </h3>
-                <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-primary hover:text-primary/80 cursor-pointer">
-                  Quay lại
-                </button>
-              </div>
-
-              <form onSubmit={handleAddDiaperSubmit} className="space-y-4 text-xs font-bold text-slate-600">
-                <div className="space-y-1">
-                  <label className="block">Loại tã</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {["Wet", "Dirty", "Both"].map((type) => {
-                      const labels: Record<string, string> = {
-                        Wet: "Ướt",
-                        Dirty: "Bẩn",
-                        Both: "Cả hai"
-                      };
-                      return (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => setDiaperType(type as any)}
-                          className={`py-2 rounded-xl border text-center transition-all cursor-pointer ${
-                            diaperType === type
-                              ? "bg-primary border-primary text-white"
-                              : "bg-slate-50 border-slate-200 hover:bg-slate-100"
-                          }`}
-                        >
-                          {labels[type]}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block">Trạng thái chất thải</label>
-                  <input
-                    type="text"
-                    value={diaperStatus}
-                    onChange={(e) => setDiaperStatus(e.target.value)}
-                    placeholder="Ví dụ: Bình thường, phân lỏng, khô"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40 focus:outline-hidden"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
-                >
-                  Lưu nhật ký tã
-                </button>
-              </form>
-            </motion.div>
-          </div>
-        )}
-
         {/* Modal: Quick log medication */}
         {activeModal === "medication" && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
@@ -1736,9 +1678,14 @@ export default function DashboardView({
                 <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
                   💊 Ghi nhận dùng thuốc
                 </h3>
-                <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-primary hover:text-primary/80 cursor-pointer">
-                  Quay lại
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
+                    Danh mục
+                  </button>
+                  <button onClick={() => setActiveModal("none")} className="text-xs font-bold text-[#1c648e] bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-lg cursor-pointer">
+                    ✕ Đóng
+                  </button>
+                </div>
               </div>
 
               <form onSubmit={handleAddMedicationSubmit} className="space-y-4 text-xs font-bold text-slate-600">
@@ -1833,9 +1780,14 @@ export default function DashboardView({
                 <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
                   📈 Nhập chỉ số tăng trưởng WHO
                 </h3>
-                <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-primary hover:text-primary/80 cursor-pointer">
-                  Quay lại
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
+                    Danh mục
+                  </button>
+                  <button onClick={() => setActiveModal("none")} className="text-xs font-bold text-[#1c648e] bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-lg cursor-pointer">
+                    ✕ Đóng
+                  </button>
+                </div>
               </div>
 
               <form onSubmit={handleAddMeasurementSubmit} className="space-y-4 text-xs font-bold text-slate-600">
