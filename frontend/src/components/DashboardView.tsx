@@ -1048,9 +1048,15 @@ export default function DashboardView({
                   Trợ lý Trò chuyện AI
                 </h3>
               </div>
-              <span className="text-[10px] font-bold text-slate-400 bg-white/40 border border-white/20 rounded-md px-2 py-0.5">
-                Trợ lý đắc lực
-              </span>
+              <div className="flex items-center gap-1.5 bg-sky-50/80 border border-sky-100 px-2.5 py-1 rounded-full text-[10px] font-extrabold text-[#1c648e]">
+                <img
+                  src={activeBaby.avatarUrl}
+                  alt={activeBaby.name}
+                  className="w-4 h-4 rounded-full object-cover"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/static/img/leo.png"; }}
+                />
+                <span>Hồ sơ: {activeBaby.name} ({calculateAgeStr(activeBaby.birthDate)})</span>
+              </div>
             </div>
 
             {/* Chats list area */}
