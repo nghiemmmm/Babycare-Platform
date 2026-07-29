@@ -948,159 +948,88 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* 2. Real-time Status Card Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[
-          { title: "LẦN BÚ CUỐI", value: lastFeedStr, subtitle: lastFeedDetail.replace("Formula Milk", "Sữa công thức").replace("Breastmilk", "Sữa mẹ"), icon: Droplet, time: "🍼 " + (lastFeed ? lastFeed.time : "01:00 PM"), color: "text-accent-blue bg-accent-blue/10 border-accent-blue/20" },
-          { title: "TỔNG GIỜ NGỦ", value: isNapTimerRunning ? "Đang tính..." : "12.5 giờ", subtitle: "Mục tiêu: 14 giờ", icon: Moon, time: "💤 4 giấc hôm nay", color: "text-accent-purple bg-accent-purple/10 border-accent-purple/20" }
-        ].map((card, idx) => {
-          const Icon = card.icon;
-          return (
-            <div key={idx} className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-5 flex flex-col justify-between space-y-4 hover:scale-105 transition-transform duration-300">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{card.title}</span>
-                <div className={`p-1.5 rounded-full ${card.color}`}>
-                  <Icon className="w-4 h-4" />
+      {/* 2. Real-time Status Card Grid - Unified 100% Style */}
+      {(() => {
+        const milkCurrent = dashboardData?.milk_intake?.current || (feeds.reduce((acc, f) => acc + (f.amount || 0), 0) || 750);
+        const milkTarget = dashboardData?.milk_intake?.target || 800;
+        const milkPercent = Math.min(100, Math.round((milkCurrent / milkTarget) * 100));
+
+        const allStatCards = [
+          {
+            title: "LẦN BÚ CUỐI",
+            value: lastFeedStr,
+            subtitle: lastFeedDetail.replace("Formula Milk", "Sữa công thức").replace("Breastmilk", "Sữa mẹ"),
+            icon: Droplet,
+            badge: "🍼 " + (lastFeed ? lastFeed.time : "01:00 PM"),
+            color: "text-accent-blue bg-accent-blue/10 border-accent-blue/20"
+          },
+          {
+            title: "TỔNG GIỜ NGỦ",
+            value: isNapTimerRunning ? "Đang tính..." : "12.5 giờ",
+            subtitle: "Mục tiêu: 14 giờ",
+            icon: Moon,
+            badge: "💤 4 giấc hôm nay",
+            color: "text-accent-purple bg-accent-purple/10 border-accent-purple/20"
+          },
+          {
+            title: "TIẾN ĐỘ SỮA NÀY",
+            value: `${milkCurrent} ml / ${milkTarget} ml`,
+            subtitle: milkCurrent >= milkTarget ? "🎉 Đạt mục tiêu khuyến nghị" : `Cần bổ sung thêm ${milkTarget - milkCurrent}ml cữ tối`,
+            icon: Coffee,
+            badge: `🥛 Đạt ${milkPercent}% mục tiêu`,
+            color: "text-sky-600 bg-sky-50 border-sky-100"
+          },
+          {
+            title: "ĐẾM NGƯỢC THUỐC",
+            value: dashboardData?.countdown_widget?.is_administer_disabled ? "⏳ Giãn cách liều" : "✅ Đã an toàn liều mới",
+            subtitle: "Thuốc: Hapacol 150mg",
+            icon: Pill,
+            badge: "⏱ " + (dashboardData?.countdown_widget?.next_eligible_time ? new Date(dashboardData.countdown_widget.next_eligible_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Cách 4-6 tiếng"),
+            color: "text-purple-600 bg-purple-50 border-purple-100"
+          },
+          {
+            title: "DỰ ĐOÁN GIỜ NGỦ AI",
+            value: "02:30 PM (Cữ trưa)",
+            subtitle: `Cửa sổ thức 2.5h • Tuổi: ${calculateAgeStr(activeBaby.birthDate)}`,
+            icon: Clock,
+            badge: "🌙 Chuẩn bị phòng tối trước 10ph",
+            color: "text-amber-600 bg-amber-50 border-amber-100"
+          },
+          {
+            title: "LỊCH TIÊM CHỦNG",
+            value: activeBaby.name.includes("Leo") ? "Mốc 6 Tháng Tuổi" : "Mốc 3 Tháng Tuổi",
+            subtitle: activeBaby.name.includes("Leo") ? "Cúm mùa & Phế cầu (Synflorix)" : "6-trong-1 cữ 2 & Rota",
+            icon: Activity,
+            badge: "💉 Nhắc: Tiêm trong tuần",
+            color: "text-emerald-600 bg-emerald-50 border-emerald-100"
+          }
+        ];
+
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {allStatCards.map((card, idx) => {
+              const Icon = card.icon;
+              return (
+                <div key={idx} className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-5 flex flex-col justify-between space-y-4 hover:scale-105 transition-transform duration-300">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{card.title}</span>
+                    <div className={`p-1.5 rounded-full ${card.color}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-primary font-semibold text-xl">{card.value}</h3>
+                    <p className="text-xs font-semibold text-slate-400 mt-0.5">{card.subtitle}</p>
+                  </div>
+                  <div className="text-[10px] font-bold text-slate-500 bg-white/40 border border-white/20 rounded-lg px-2 py-1 inline-flex items-center gap-1 self-start">
+                    {card.badge}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <h3 className="text-primary font-semibold text-xl">{card.value}</h3>
-                <p className="text-xs font-semibold text-slate-400 mt-0.5">{card.subtitle}</p>
-              </div>
-              <div className="text-[10px] font-bold text-slate-500 bg-white/40 border border-white/20 rounded-lg px-2 py-1 inline-flex items-center gap-1 self-start">
-                {card.time}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* 2.5 UPGRADED DASHBOARD STATISTICS & AI FORECAST WIDGETS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        
-        {/* Widget 1: Tiến Độ Lượng Sữa Trong Ngày */}
-        <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-5 space-y-3 hover:scale-102 transition-transform">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              🍼 Tiến Độ Lượng Sữa Trong Ngày
-            </span>
-            <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-              {Math.min(100, Math.round(((dashboardData?.milk_intake?.current || (feeds.reduce((acc, f) => acc + (f.amount || 0), 0) || 750)) / (dashboardData?.milk_intake?.target || 800)) * 100))}%
-            </span>
+              );
+            })}
           </div>
-          <div className="space-y-1">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xl font-extrabold text-[#1c648e]">
-                {dashboardData?.milk_intake?.current || (feeds.reduce((acc, f) => acc + (f.amount || 0), 0) || 750)} ml
-              </span>
-              <span className="text-xs text-slate-400 font-bold">Mục tiêu: {dashboardData?.milk_intake?.target || 800} ml</span>
-            </div>
-            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-              <div
-                className="bg-primary h-full rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, Math.round(((dashboardData?.milk_intake?.current || (feeds.reduce((acc, f) => acc + (f.amount || 0), 0) || 750)) / (dashboardData?.milk_intake?.target || 800)) * 100))}%` }}
-              />
-            </div>
-          </div>
-          <p className="text-[10px] font-semibold text-slate-400">
-            {((dashboardData?.milk_intake?.current || 750) >= 800) ? "🎉 Bé đã đạt mục tiêu lượng sữa khuyến nghị!" : `Bé cần bổ sung thêm ${(dashboardData?.milk_intake?.target || 800) - (dashboardData?.milk_intake?.current || 750)}ml cho cữ tối.`}
-          </p>
-        </div>
-
-        {/* Widget 2: Đếm Ngược An Toàn Thuốc Hạ Sốt */}
-        <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-5 space-y-3 hover:scale-102 transition-transform">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              💊 Đếm Ngược An Toàn Thuốc
-            </span>
-            <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
-              Hapacol 150mg
-            </span>
-          </div>
-          <div>
-            <h4 className="text-base font-extrabold text-slate-800">
-              {dashboardData?.countdown_widget?.is_administer_disabled ? "⏳ Giãn cách liều tiếp theo" : "✅ Đã an toàn cho liều mới"}
-            </h4>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
-              {dashboardData?.countdown_widget?.is_administer_disabled ? "Vui lòng giữ khoảng cách 4-6 tiếng giữa các cữ thuốc hạ sốt." : "Phụ huynh có thể cho bé uống nếu bé sốt lại ≥ 38.5°C."}
-            </p>
-          </div>
-          <div className="text-[10px] font-bold text-purple-600 bg-purple-50/80 rounded-lg px-2.5 py-1 inline-flex items-center gap-1">
-            ⏱ Mốc khuyến nghị: {dashboardData?.countdown_widget?.next_eligible_time ? new Date(dashboardData.countdown_widget.next_eligible_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Sau 4 tiếng"}
-          </div>
-        </div>
-
-        {/* Widget 3: Dự Đoán Cữ Ngủ Trưa AI (SweetSpot Sleep) */}
-        <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-5 space-y-3 hover:scale-102 transition-transform">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              💤 Dự Đoán Cữ Ngủ AI (SweetSpot)
-            </span>
-            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
-              Cửa sổ thức 2.5h
-            </span>
-          </div>
-          <div>
-            <h4 className="text-base font-extrabold text-[#1c648e]">02:30 PM (Cữ trưa)</h4>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
-              Dựa vào tuổi bé ({calculateAgeStr(activeBaby.birthDate)}), AI dự đoán bé sẽ có dấu hiệu gắt ngủ sau 2.5 giờ thức.
-            </p>
-          </div>
-          <div className="text-[10px] font-bold text-amber-600 bg-amber-50/80 rounded-lg px-2.5 py-1 inline-flex items-center gap-1">
-            🌙 Chuẩn bị phòng tối 10 phút trước cữ ngủ
-          </div>
-        </div>
-
-        {/* Widget 4: Cảnh Báo Tiêm Chủng Mốc Tuổi Tiếp Theo */}
-        <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-5 space-y-3 hover:scale-102 transition-transform">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              💉 Cảnh Báo Lịch Tiêm Chủng
-            </span>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-              {calculateAgeStr(activeBaby.birthDate)}
-            </span>
-          </div>
-          <div>
-            <h4 className="text-base font-extrabold text-slate-800">
-              {activeBaby.name.includes("Leo") ? "Mốc 6 Tháng Tuổi" : "Mốc 3 Tháng Tuổi"}
-            </h4>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
-              {activeBaby.name.includes("Leo") ? "Vắc-xin Cúm mùa & Phế cầu khuẩn (Synflorix)" : "Vắc-xin 6-trong-1 mũi 2 & Rota virus"}
-            </p>
-          </div>
-          <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50/80 rounded-lg px-2.5 py-1 inline-flex items-center gap-1">
-            🗓 Nhắc nhở: Đăng ký lịch tiêm trạm y tế tuần này
-          </div>
-        </div>
-
-        {/* Widget 5: Thẻ Bách Phân Vị WHO & Sức Khỏe */}
-        <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-5 space-y-3 md:col-span-2 lg:col-span-2 hover:scale-101 transition-transform">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              🩺 Đánh Giá Thể Trạng & Bách Phân Vị WHO
-            </span>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-              🟢 Thể trạng khỏe mạnh
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            <div className="p-3 bg-sky-50/70 border border-sky-100 rounded-2xl">
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Cân nặng so chuẩn WHO</span>
-              <p className="text-sm font-extrabold text-[#1c648e] mt-0.5">
-                {dashboardData?.growth_snapshot?.weight_percentile || "50th (Standard WHO Normal)"}
-              </p>
-            </div>
-            <div className="p-3 bg-purple-50/70 border border-purple-100 rounded-2xl">
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Chiều cao so chuẩn WHO</span>
-              <p className="text-sm font-extrabold text-purple-800 mt-0.5">
-                {dashboardData?.growth_snapshot?.height_percentile || "50th (Standard WHO Normal)"}
-              </p>
-            </div>
-          </div>
-        </div>
-
-      </div>
+        );
+      })()}
 
       {/* 3. Columns Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
