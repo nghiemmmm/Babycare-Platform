@@ -903,11 +903,10 @@ export default function DashboardView({
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-4 mt-8 max-w-2xl mx-auto">
+        <div className="grid grid-cols-3 gap-4 mt-8 max-w-xl mx-auto">
           {[
             { label: "Ăn uống", icon: Droplet, color: "text-[#7cb9e8] bg-[#7cb9e8]/10 border-[#7cb9e8]/20", modal: "feed" },
             { label: "Giấc ngủ", icon: Moon, color: "text-[#b19cd9] bg-[#b19cd9]/10 border-[#b19cd9]/20", modal: "sleep" },
-            { label: "Thay tã", icon: Baby, color: "text-[#fdfd96] bg-[#fdfd96]/20 border-[#fdfd96]/30", modal: "diaper" },
             { label: "Uống thuốc", icon: Pill, color: "text-[#b2e2f2] bg-[#b2e2f2]/20 border-[#b2e2f2]/30", modal: "medication" }
           ].map((action, idx) => {
             const Icon = action.icon;
@@ -928,11 +927,10 @@ export default function DashboardView({
       </div>
 
       {/* 2. Real-time Status Card Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { title: "LẦN BÚ CUỐI", value: lastFeedStr, subtitle: lastFeedDetail.replace("Formula Milk", "Sữa công thức").replace("Breastmilk", "Sữa mẹ"), icon: Droplet, time: "🍼 " + (lastFeed ? lastFeed.time : "01:00 PM"), color: "text-accent-blue bg-accent-blue/10 border-accent-blue/20" },
           { title: "TỔNG GIỜ NGỦ", value: isNapTimerRunning ? "Đang tính..." : "12.5 giờ", subtitle: "Mục tiêu: 14 giờ", icon: Moon, time: "💤 4 giấc hôm nay", color: "text-accent-purple bg-accent-purple/10 border-accent-purple/20" },
-          { title: "SỐ LẦN THAY TÃ", value: diaperCountStr.replace("today", "hôm nay"), subtitle: "Mọi thứ bình thường", icon: Baby, time: "💩 3 lần ướt / bẩn", color: "text-amber-500 bg-accent-gold/20 border-accent-gold/30" },
           { title: "NHIỆT ĐỘ", value: `${currentTemp}°C`, subtitle: "Ngưỡng tối ưu", icon: Activity, time: "🌡️ Đo lúc 9:0 SA", color: "text-[#1c648e] bg-[#b2e2f2]/20 border-[#b2e2f2]/30" }
         ].map((card, idx) => {
           const Icon = card.icon;
