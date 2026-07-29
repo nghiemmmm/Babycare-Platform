@@ -593,14 +593,6 @@ export default function DashboardView({
       title: m.name,
       detail: `Dosage: ${m.dosage} • Prescribed by: ${m.prescribedBy || "Self"}`,
       rawType: "Med"
-    })),
-    ...diaperLogs.map(d => ({
-      id: d.id,
-      time: d.time,
-      type: "diaper",
-      title: "Diaper Change",
-      detail: `${d.type} Diaper • ${d.status}`,
-      rawType: "Diaper"
     }))
   ].sort((a, b) => {
     const timeToMinutes = (tStr: string) => {

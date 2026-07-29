@@ -219,14 +219,14 @@ export default function LogsView({
         </div>
       </div>
 
-      {/* 2. Summary Statistics Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Stat 1: Total Milk Intake */}
+      {/* 2. Quick Summary Stat Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Stat 1: Total Milk / Feed Intake */}
         <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-4 space-y-2 hover:scale-105 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tổng lượng sữa</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cữ bú & Ăn uống</span>
             <div className="p-2 rounded-xl bg-sky-50 text-[#1c648e]">
-              <Coffee className="w-4 h-4" />
+              <Droplet className="w-4 h-4" />
             </div>
           </div>
           <div>
@@ -235,21 +235,7 @@ export default function LogsView({
           </div>
         </div>
 
-        {/* Stat 2: Diaper Changes */}
-        <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-4 space-y-2 hover:scale-105 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Thay tã</span>
-            <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
-              <Droplet className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <h3 className="text-xl font-extrabold text-slate-800">{diaperCount} cữ</h3>
-            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Tã ướt & bẩn • {timeRangeLabel[timeRange]}</p>
-          </div>
-        </div>
-
-        {/* Stat 3: Medication Administered */}
+        {/* Stat 2: Medication Administered */}
         <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-4 space-y-2 hover:scale-105 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Uống thuốc</span>
@@ -263,7 +249,7 @@ export default function LogsView({
           </div>
         </div>
 
-        {/* Stat 4: Growth Index */}
+        {/* Stat 3: Growth Index */}
         <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-4 space-y-2 hover:scale-105 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Chỉ số WHO</span>
@@ -289,7 +275,6 @@ export default function LogsView({
             {[
               { id: "all", label: "Tất cả hoạt động" },
               { id: "feed", label: "🍼 Cữ bú & Ăn dặm" },
-              { id: "diaper", label: "💩 Thay tã" },
               { id: "medication", label: "💊 Uống thuốc" },
               { id: "growth", label: "📈 Tăng trưởng WHO" }
             ].map((tab) => (
