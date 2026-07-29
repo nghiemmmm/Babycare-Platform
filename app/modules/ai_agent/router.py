@@ -149,7 +149,8 @@ async def get_thread_messages(
                 id=doc.id,
                 role=d.get("role", "user"),
                 content=d.get("content", ""),
-                timestamp=d.get("timestamp", datetime.now(timezone.utc).isoformat())
+                timestamp=d.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                tool_steps=d.get("tool_steps", [])
             ))
         result.sort(key=lambda x: x.timestamp)
         final_messages = result[-100:]
@@ -219,6 +220,9 @@ async def create_thread_message(
     last_message = result["messages"][-1].content
     next_step = result.get("next_step")
     extracted_data = result.get("extracted_data")
+    raw_tool_steps = result.get("tool_steps", [])
+    tool_steps_models = [ToolStep(**ts) if isinstance(ts, dict) else ts for ts in raw_tool_steps]
+    tool_steps_dicts = [m.model_dump() for m in tool_steps_models]
     
     # 3. Lưu bản ghi tin nhắn Human & AI vào Firestore subcollection
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -234,7 +238,8 @@ async def create_thread_message(
     msgs_col.document(ai_msg_id).set({
         "role": "assistant",
         "content": last_message,
-        "timestamp": now_iso
+        "timestamp": now_iso,
+        "tool_steps": tool_steps_dicts
     })
 
     # Xóa cache Redis của thread_id để lượt GET tiếp theo tự làm mới tin nhắn mới
@@ -268,7 +273,7 @@ async def create_thread_message(
                 type="feeding",
                 title="Feeding Log",
                 detail=f"{amount}ml {food}",
-                value=amount,
+                value=f"{amount}ml",
                 time=time_str
             ))
         elif next_step == "medication":
@@ -282,10 +287,10 @@ async def create_thread_message(
                 time=time_str
             ))
         elif next_step == "growth":
-            h = extracted_data.get("height", 66.0)
-            w = extracted_data.get("weight", 7.2)
+            h = extracted_data.get("height", 65)
+            w = extracted_data.get("weight", 7.0)
             extracted_logs.append(ExtractedLog(
-                type="nutrition",
+                type="growth",
                 title="Growth Log",
                 detail=f"Height: {h}cm, Weight: {w}kg",
                 value=f"{h}cm",
@@ -303,7 +308,8 @@ async def create_thread_message(
             content=last_message,
             citations=citations
         ),
-        extracted_logs=extracted_logs
+        extracted_logs=extracted_logs,
+        tool_steps=tool_steps_models
     )
 
 @ai_agent_router.post("/sleep/timer", response_model=SleepTimerResponse)

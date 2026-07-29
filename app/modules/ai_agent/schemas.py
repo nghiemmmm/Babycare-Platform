@@ -37,6 +37,17 @@ class ExtractedLog(BaseModel):
     value: Any
     time: str
 
+class ToolStep(BaseModel):
+    id: Optional[str] = None
+    tool_name: str
+    display_name: str
+    args: Optional[dict] = {}
+    status: str = "completed"  # "running" | "completed" | "failed"
+    result_summary: str = ""
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    duration_ms: Optional[int] = None
+
 class MessageResponseDetails(BaseModel):
     content: str
     citations: List[Citation] = []
@@ -44,6 +55,7 @@ class MessageResponseDetails(BaseModel):
 class MessageCreateResponse(BaseModel):
     ai_response: MessageResponseDetails
     extracted_logs: List[ExtractedLog] = []
+    tool_steps: List[ToolStep] = []
 
 class SleepTimerRequest(BaseModel):
     baby_id: str
@@ -59,6 +71,7 @@ class ChatMessageResponse(BaseModel):
     role: str  # "user" / "assistant"
     content: str
     timestamp: str
+    tool_steps: List[ToolStep] = []
 
 class VoiceExtractRequest(BaseModel):
     transcript: str

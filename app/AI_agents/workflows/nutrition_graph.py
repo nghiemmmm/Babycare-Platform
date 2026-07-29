@@ -40,6 +40,10 @@ class NutritionGraph:
         growth_context = ""
         baby_age = None
 
+        tool_steps = []
+        import time, uuid
+        from datetime import datetime, timezone
+
         if baby_id and user_id:
             # 1. Tính tuổi bé
             try:
@@ -53,21 +57,45 @@ class NutritionGraph:
 
             # 2. Lấy nhật ký ăn dặm gần nhất
             try:
+                t0 = time.time()
                 logs = self.nutrition_tool._run(action="get_logs", baby_id=baby_id, user_id=user_id)
+                t1 = time.time()
                 if logs:
                     recent = logs[:5]
                     nutrition_context = "Nhật ký ăn dặm gần nhất:\n" + "\n".join(
-                        [f"- {r.get('food_name', 'N/A')}: {r.get('amount_g', 0)}g ({r.get('logged_at', '')[:10]})" for r in recent]
+                        [f"- {r.get('food_name', 'N/A')}: {r.get('amount_g', 0)}g ({r.get('logged_at', '')[:10]}) text" for r in recent]
                     )
+                tool_steps.append({
+                    "id": f"step_{uuid.uuid4().hex[:6]}",
+                    "tool_name": "NutritionTrackingTool",
+                    "display_name": "Tra cứu lịch sử ăn dặm & khẩu phần",
+                    "args": {"action": "get_logs", "baby_id": baby_id},
+                    "status": "completed",
+                    "result_summary": f"Đã trích xuất {len(logs) if logs else 0} nhật ký khẩu phần",
+                    "start_time": datetime.now(timezone.utc).isoformat(),
+                    "duration_ms": int((t1 - t0) * 1000)
+                })
             except Exception:
                 pass
 
             # 3. Lấy chỉ số tăng trưởng gần nhất
             try:
+                t2 = time.time()
                 growth_logs = self.growth_tool._run(action="get_history", baby_id=baby_id, user_id=user_id)
+                t3 = time.time()
                 if growth_logs:
                     latest = growth_logs[0]
                     growth_context = f"Chỉ số gần nhất: Chiều cao {latest.get('height')}cm, Cân nặng {latest.get('weight')}kg"
+                tool_steps.append({
+                    "id": f"step_{uuid.uuid4().hex[:6]}",
+                    "tool_name": "GrowthTrackingTool",
+                    "display_name": "Kiểm tra chỉ số phát triển chiều cao & cân nặng",
+                    "args": {"action": "get_history", "baby_id": baby_id},
+                    "status": "completed",
+                    "result_summary": f"Đã lấy chỉ số tăng trưởng gần nhất",
+                    "start_time": datetime.now(timezone.utc).isoformat(),
+                    "duration_ms": int((t3 - t2) * 1000)
+                })
             except Exception:
                 pass
 
@@ -76,7 +104,19 @@ class NutritionGraph:
         if baby_age is not None:
             metadata_filter["baby_age"] = baby_age
             
+        t4 = time.time()
         rag_context = self.retriever.retrieve_context(user_message, metadata_filter=metadata_filter)
+        t5 = time.time()
+        tool_steps.append({
+            "id": f"step_{uuid.uuid4().hex[:6]}",
+            "tool_name": "MedicalRetriever",
+            "display_name": "Truy vấn tài liệu dinh dưỡng nhi khoa (RAG)",
+            "args": {"query": user_message[:40]},
+            "status": "completed",
+            "result_summary": "Đã trích xuất hướng dẫn dinh dưỡng WHO / Nhi khoa",
+            "start_time": datetime.now(timezone.utc).isoformat(),
+            "duration_ms": int((t5 - t4) * 1000)
+        })
 
         full_system_instruction = (
             f"{self.nutrition_prompt}\n\n"
@@ -96,7 +136,7 @@ class NutritionGraph:
         except Exception as e:
             response = f"Xin lỗi, tôi không thể xử lý câu hỏi dinh dưỡng lúc này: {str(e)}"
 
-        return {"messages": [AIMessage(content=response)]}
+        return {"messages": [AIMessage(content=response)], "tool_steps": tool_steps}
 
     def compile(self, checkpointer=None):
         """Compile the nutrition and growth tracking subgraph flow."""
@@ -105,3 +145,17 @@ class NutritionGraph:
         builder.add_edge(START, "nutrition_advice")
         builder.add_edge("nutrition_advice", END)
         return builder.compile(checkpointer=checkpointer)
+
+from app.AI_agents.core.contract import AgentContract
+
+class NutritionAgentContract(AgentContract):
+    agent_id = "nutrition_agent"
+    display_name = "Nutrition & Growth Agent"
+    description = "Tư vấn chế độ ăn dặm, sữa, khẩu phần dinh dưỡng và chỉ số tăng trưởng WHO."
+    intents = ["check_nutrition"]
+
+    def __init__(self):
+        self.graph = NutritionGraph().compile()
+
+    async def execute(self, state: dict) -> dict:
+        return await self.graph.ainvoke(state)

@@ -42,7 +42,18 @@ class ChatGraph:
                 history = self.growth_service.get_growth_history(baby_id, user_id)
                 if history:
                     latest = history[0]
-                    growth_info = f"Chiều cao: {latest.height}cm, Cân nặng: {latest.weight}kg vào ngày {latest.logged_at[:10]}"
+                t1 = time.time()
+                summary_str = f"Đã nạp hồ sơ bé {baby_name} ({baby_age} tháng tuổi, {growth_info})"
+                tool_steps.append({
+                    "id": f"step_{uuid.uuid4().hex[:6]}",
+                    "tool_name": "BabyProfileService",
+                    "display_name": "Kiểm tra thông tin hồ sơ & chỉ số tăng trưởng bé",
+                    "args": {"baby_id": baby_id},
+                    "status": "completed",
+                    "result_summary": summary_str,
+                    "start_time": datetime.now(timezone.utc).isoformat(),
+                    "duration_ms": int((t1 - t0) * 1000)
+                })
             except Exception:
                 pass
 
@@ -64,7 +75,7 @@ class ChatGraph:
         except Exception as e:
             response_content = f"Xin lỗi, tôi gặp lỗi kết nối với máy chủ AI: {str(e)}"
 
-        return {"messages": [AIMessage(content=response_content)]}
+        return {"messages": [AIMessage(content=response_content)], "tool_steps": tool_steps}
 
     def compile(self, checkpointer=None):
         """Compile the chat subgraph flow."""
@@ -73,3 +84,17 @@ class ChatGraph:
         builder.add_edge(START, "chat_node")
         builder.add_edge("chat_node", END)
         return builder.compile(checkpointer=checkpointer)
+
+from app.AI_agents.core.contract import AgentContract
+
+class ChatAgentContract(AgentContract):
+    agent_id = "chat_agent"
+    display_name = "General Parenting Chat Agent"
+    description = "Hỏi đáp, trò chuyện và tư vấn nuôi dạy con tổng quan."
+    intents = ["chat"]
+
+    def __init__(self):
+        self.graph = ChatGraph().compile()
+
+    async def execute(self, state: dict) -> dict:
+        return await self.graph.ainvoke(state)

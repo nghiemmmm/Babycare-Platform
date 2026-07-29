@@ -21,13 +21,27 @@ class VoiceLoggingGraph:
 
     async def extract_entities_node(self, state: OverallState) -> dict:
         user_message = state["messages"][-1].content
+        import uuid, time
+        t0 = time.time()
         try:
             response_text = await self.reasoner.areason(prompt=user_message, system_instruction=self.extraction_prompt)
             cleaned_text = response_text.replace("```json", "").replace("```", "").strip()
             result = json.loads(cleaned_text)
+            t1 = time.time()
+            step = {
+                "id": f"step_{uuid.uuid4().hex[:6]}",
+                "tool_name": "EntityExtractionTool",
+                "display_name": "Phân tích trích xuất dữ liệu nhật ký",
+                "args": {"message": user_message[:40]},
+                "status": "completed",
+                "result_summary": f"Đã bóc tách loại hoạt động: {result.get('activity_type', 'N/A')}",
+                "start_time": datetime.now(timezone.utc).isoformat(),
+                "duration_ms": int((t1 - t0) * 1000)
+            }
             return {
                 "extracted_data": result.get("data", {}),
-                "next_step": result.get("activity_type", "chat")
+                "next_step": result.get("activity_type", "chat"),
+                "tool_steps": [step]
             }
         except Exception as e:
             return {"error_message": str(e), "next_step": "chat"}
@@ -37,55 +51,84 @@ class VoiceLoggingGraph:
         data = state.get("extracted_data", {})
         baby_id = state.get("baby_id")
         user_id = state.get("current_user_id")
+        import uuid, time
+        t0 = time.time()
 
         if not baby_id or not user_id:
             return {"messages": [AIMessage(content="Error: baby_id or user_id is missing in current state.")]}
 
+        tool_name = "ActivityLogTool"
+        display_name = "Lưu nhật ký chăm sóc bé"
+        status = "completed"
+        summary = ""
+
         try:
             if activity_type == "feeding":
-                # Validate using Pydantic
+                tool_name = "NutritionTrackingTool"
+                display_name = "Ghi nhận nhật ký ăn dặm / dinh dưỡng"
                 validated = FeedingLogSchema(**data)
                 validated_data = validated.model_dump(exclude_none=True)
                 if "logged_at" not in validated_data:
                     validated_data["logged_at"] = datetime.now(timezone.utc).isoformat()
                 self.nutrition_tool._run(action="add", baby_id=baby_id, user_id=user_id, data=validated_data)
                 msg = f"Đã ghi nhận cữ ăn dặm của bé: {validated_data.get('food_name')} với lượng {validated_data.get('amount_g')}g thành công."
+                summary = f"Lưu thành công {validated_data.get('food_name')} ({validated_data.get('amount_g')}g)"
             elif activity_type == "medication":
-                # Validate using Pydantic
+                tool_name = "HealthRecordsTool"
+                display_name = "Ghi nhận lịch uống thuốc cho bé"
                 validated = MedicationLogSchema(**data)
                 validated_data = validated.model_dump(exclude_none=True)
                 if "logged_at" not in validated_data:
                     validated_data["logged_at"] = datetime.now(timezone.utc).isoformat()
                 self.health_tool._run(action="add_medication", baby_id=baby_id, user_id=user_id, data=validated_data)
                 msg = f"Đã ghi nhận cữ dùng thuốc: {validated_data.get('medication_name')} với liều lượng {validated_data.get('dosage')} thành công."
+                summary = f"Lưu thành công thuốc {validated_data.get('medication_name')}"
             elif activity_type == "symptom":
-                # Validate using Pydantic
+                tool_name = "HealthRecordsTool"
+                display_name = "Ghi nhận theo dõi sức khỏe & triệu chứng"
                 validated = SymptomLogSchema(**data)
                 validated_data = validated.model_dump(exclude_none=True)
                 self.health_tool._run(action="add_record", baby_id=baby_id, user_id=user_id, data=validated_data)
                 msg = f"Đã ghi nhận triệu chứng sức khỏe: {', '.join(validated_data.get('symptoms', []))} thành công."
+                summary = f"Lưu thành công triệu chứng sức khỏe"
             elif activity_type == "growth":
-                # Validate using Pydantic
+                tool_name = "GrowthTrackingTool"
+                display_name = "Ghi nhận chỉ số tăng trưởng (Chiều cao & Cân nặng)"
                 validated = GrowthLogSchema(**data)
                 validated_data = validated.model_dump(exclude_none=True)
                 self.growth_tool._run(action="add", baby_id=baby_id, user_id=user_id, data=validated_data)
                 msg = f"Đã ghi nhận chỉ số đo chiều cao {validated_data.get('height')}cm và cân nặng {validated_data.get('weight')}kg thành công."
+                summary = f"Lưu chiều cao {validated_data.get('height')}cm, cân nặng {validated_data.get('weight')}kg"
             else:
                 msg = "Không xác định được dữ liệu nhật ký phù hợp."
+                status = "failed"
+                summary = "Không xác định loại nhật ký"
         except ValidationError as ve:
             errors_str = "; ".join([f"{e['loc'][0]}: {e['msg']}" for e in ve.errors()])
             msg = f"Lỗi xác thực dữ liệu trích xuất từ AI: {errors_str}."
+            status = "failed"
+            summary = f"Lỗi xác thực: {errors_str}"
         except Exception as e:
             msg = f"Lỗi lưu trữ nhật ký: {str(e)}"
+            status = "failed"
+            summary = f"Lỗi lưu trữ: {str(e)}"
 
-        return {"messages": [AIMessage(content=msg)]}
+        t1 = time.time()
+        step = {
+            "id": f"step_{uuid.uuid4().hex[:6]}",
+            "tool_name": tool_name,
+            "display_name": display_name,
+            "args": data,
+            "status": status,
+            "result_summary": summary,
+            "start_time": datetime.now(timezone.utc).isoformat(),
+            "duration_ms": int((t1 - t0) * 1000)
+        }
+
+        return {"messages": [AIMessage(content=msg)], "tool_steps": [step]}
 
     def compile(self, checkpointer=None):
-        """Compile the activity logging subgraph flow.
-        
-        Pipeline: START → extract_entities → write_to_db → END
-        (Speech-to-Text transcription is handled on Frontend)
-        """
+        """Compile the activity logging subgraph flow."""
         builder = StateGraph(OverallState)
         builder.add_node("extract_entities", self.extract_entities_node)
         builder.add_node("write_to_db", self.write_to_db_node)
@@ -95,5 +138,19 @@ class VoiceLoggingGraph:
         builder.add_edge("write_to_db", END)
         
         return builder.compile(checkpointer=checkpointer)
+
+from app.AI_agents.core.contract import AgentContract
+
+class VoiceLoggingAgentContract(AgentContract):
+    agent_id = "voice_logging_agent"
+    display_name = "Activity & Voice Logging Agent"
+    description = "Ghi nhận nhật ký cữ bú, uống thuốc, đo chiều cao cân nặng và triệu chứng của bé."
+    intents = ["log_activity"]
+
+    def __init__(self):
+        self.graph = VoiceLoggingGraph().compile()
+
+    async def execute(self, state: dict) -> dict:
+        return await self.graph.ainvoke(state)
 
 

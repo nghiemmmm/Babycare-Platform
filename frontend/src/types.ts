@@ -161,6 +161,18 @@ export interface Citation {
   uri: string;
 }
 
+export interface ToolStep {
+  id?: string;
+  tool_name: string;
+  display_name: string;
+  args?: Record<string, any>;
+  status: "running" | "completed" | "failed";
+  result_summary: string;
+  start_time?: string;
+  end_time?: string;
+  duration_ms?: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -170,6 +182,7 @@ export interface ChatMessage {
   citations?: Citation[];
   isVoice?: boolean;
   voiceDuration?: string;
+  tool_steps?: ToolStep[];
 }
 
 export interface NotificationItem {

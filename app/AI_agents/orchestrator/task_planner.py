@@ -50,23 +50,53 @@ class TaskPlanner:
 
     async def aclassify_intent(self, state: OverallState) -> dict:
         """
-        Classifies user query intent asynchronously from messages state.
+        Classifies user query intent asynchronously using Gemini Flash AIReasoner.
         """
         messages = state.get("messages", [])
         if not messages:
             return {"extracted_intent": "chat", "next_step": "chat"}
 
         user_message = messages[-1].content
-        try:
-            import asyncio
-            response_text = await asyncio.get_event_loop().run_in_executor(
-                None, self._call_pollinations, user_message
-            )
-            cleaned_text = response_text.replace("```json", "").replace("```", "").strip()
-            data = json.loads(cleaned_text)
-            intent = data.get("intent", "chat")
-        except Exception:
-            intent = "chat"
+        import time, uuid
+        from datetime import datetime, timezone
+        t0 = time.time()
+        intent = "chat"
 
-        return {"extracted_intent": intent, "next_step": intent}
+        msg_lower = user_message.lower()
+        # Fast keyword pre-checks for health & nutrition
+        if any(k in msg_lower for k in ["sốt", "nhiệt độ", "hapacol", "thuốc", "bệnh", "bác sĩ", "ho", "sổ mũi", "co giật", "triệu chứng"]):
+            intent = "check_health"
+        elif any(k in msg_lower for k in ["ăn", "sữa", "bú", "cháo", "bột", "dinh dưỡng", "cân nặng", "chiều cao", "whos", "thực đơn"]):
+            intent = "check_nutrition"
+        else:
+            try:
+                response_text = await self.reasoner.areason(
+                    prompt=user_message,
+                    system_instruction=INTENT_PROMPT
+                )
+                cleaned_text = response_text.replace("```json", "").replace("```", "").strip()
+                data = json.loads(cleaned_text)
+                intent = data.get("intent", "chat")
+            except Exception:
+                # Fallback to pollinations or chat
+                try:
+                    import asyncio
+                    res_p = await asyncio.get_event_loop().run_in_executor(None, self._call_pollinations, user_message)
+                    data = json.loads(res_p.replace("```json", "").replace("```", "").strip())
+                    intent = data.get("intent", "chat")
+                except Exception:
+                    intent = "chat"
 
+        t1 = time.time()
+        step = {
+            "id": f"step_{uuid.uuid4().hex[:6]}",
+            "tool_name": "TaskPlanner",
+            "display_name": "Phân tích ý định câu hỏi (Intent Classifier)",
+            "args": {"message": user_message[:40]},
+            "status": "completed",
+            "result_summary": f"Kết quả bóc tách: '{intent}'",
+            "start_time": datetime.now(timezone.utc).isoformat(),
+            "duration_ms": int((t1 - t0) * 1000)
+        }
+
+        return {"extracted_intent": intent, "next_step": intent, "tool_steps": [step]}

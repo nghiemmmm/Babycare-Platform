@@ -47,20 +47,38 @@ class OutOfScopeGraph:
 
         logger.info(f"[OutOfScope] web_search_node: query='{query}'")
 
-        import asyncio
+        import time, uuid
+        from datetime import datetime, timezone
+
+        t0 = time.time()
         search_result = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: self.web_search_tool._run(query, max_results=3)
         )
+        t1 = time.time()
+        results = search_result.get("results", [])
+        provider = search_result.get("provider", "web")
 
         logger.info(
-            f"[OutOfScope] web_search_node: provider={search_result.get('provider')}, "
-            f"results={len(search_result.get('results', []))}"
+            f"[OutOfScope] web_search_node: provider={provider}, "
+            f"results={len(results)}"
         )
 
+        step = {
+            "id": f"step_{uuid.uuid4().hex[:6]}",
+            "tool_name": "WebSearchTool",
+            "display_name": "Tìm kiếm thông tin mở rộng (Web Search)",
+            "args": {"query": query, "provider": provider},
+            "status": "completed",
+            "result_summary": f"Đã thu thập {len(results)} kết quả từ nguồn web ({provider})",
+            "start_time": datetime.now(timezone.utc).isoformat(),
+            "duration_ms": int((t1 - t0) * 1000)
+        }
+
         return {
-            "web_search_results": search_result.get("results", []),
+            "web_search_results": results,
             "is_out_of_scope": True,
+            "tool_steps": [step]
         }
 
     async def web_finalize_node(self, state: OverallState) -> dict:
@@ -141,3 +159,17 @@ class OutOfScopeGraph:
             checkpointer=checkpointer,
             interrupt_before=interrupt_before,
         )
+
+from app.AI_agents.core.contract import AgentContract
+
+class OutOfScopeAgentContract(AgentContract):
+    agent_id = "out_of_scope_agent"
+    display_name = "Web Search & General Out-Of-Scope Agent"
+    description = "Tìm kiếm thông tin tổng hợp trên mạng cho các câu hỏi nằm ngoài phạm vi nhi khoa."
+    intents = ["out_of_scope"]
+
+    def __init__(self, checkpointer=None):
+        self.graph = OutOfScopeGraph().compile(checkpointer=checkpointer, interrupt_before=[])
+
+    async def execute(self, state: dict) -> dict:
+        return await self.graph.ainvoke(state)

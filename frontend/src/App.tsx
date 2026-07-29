@@ -324,7 +324,8 @@ export default function App() {
           id: c.id,
           role: c.role,
           content: c.content,
-          timestamp: c.timestamp.includes("T") ? c.timestamp.slice(11, 16) : c.timestamp
+          timestamp: c.timestamp.includes("T") ? c.timestamp.slice(11, 16) : c.timestamp,
+          tool_steps: c.tool_steps || []
         }));
         threadCacheRef.current[threadId] = mapped;
         setChats(mapped);
@@ -930,7 +931,8 @@ export default function App() {
         content: aiContent,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         extraction,
-        citations
+        citations,
+        tool_steps: data.tool_steps || []
       };
 
       setChats((prev) => {

@@ -17,6 +17,7 @@ class OverallState(TypedDict):
     # Out-of-scope web search fields
     web_search_results: Optional[list[dict]]   # Raw results from WebSearchTool
     is_out_of_scope: Optional[bool]            # Flag set when intent = "out_of_scope"
+    tool_steps: Annotated[list[dict], operator.add]
 
 
 from typing import Any, Iterator, Tuple

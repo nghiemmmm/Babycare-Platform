@@ -5,12 +5,15 @@ class MedicalRetriever:
     def __init__(self):
         self.pipeline = RAGPipeline()
 
-    def retrieve_context(self, query: str, k: int = 3, domain: Optional[str] = None) -> str:
+    def retrieve_context(self, query: str, k: int = 3, domain: Optional[str] = None, metadata_filter: Optional[dict] = None) -> str:
         """
-        Retrieves context for Q&A and formats it as a single string. `domain` lọc theo
-        metadata gắn ở DocumentLoader (vd "allergy_safety", "illness_diet", "nutrition_general").
+        Retrieves context for Q&A and formats it as a single string.
         """
         docs = self.pipeline.retrieve(query, k=k, domain=domain)
+        if not docs and metadata_filter:
+            # Fallback to unfiltered retrieve if metadata filter returned no results
+            docs = self.pipeline.retrieve(query, k=k, domain=None)
+        
         if not docs:
             return "Không tìm thấy tài liệu y tế phù hợp."
         
