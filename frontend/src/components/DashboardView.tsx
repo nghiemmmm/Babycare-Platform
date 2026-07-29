@@ -1478,13 +1478,20 @@ export default function DashboardView({
                   {[
                     { label: "🍼 Cữ ăn/uống", modal: "feed" },
                     { label: "💤 Giấc ngủ", modal: "sleep" },
-                    { label: "💩 Thay tã", modal: "diaper" },
                     { label: "💊 Uống thuốc", modal: "medication" },
-                    { label: "📈 Chỉ số WHO", modal: "growth" }
+                    { label: "📈 Chỉ số WHO", modal: "growth" },
+                    { label: "🏥 Bệnh trạng", modal: "health" }
                   ].map((item, idx) => (
                     <button
                       key={idx}
-                      onClick={() => setActiveModal(item.modal as any)}
+                      onClick={() => {
+                        if (item.modal === "health") {
+                          setActiveModal("none");
+                          onNavigateTab?.("health");
+                        } else {
+                          setActiveModal(item.modal as any);
+                        }
+                      }}
                       className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-100 rounded-2xl text-left text-xs font-bold text-slate-600 hover:text-primary transition-all cursor-pointer"
                     >
                       {item.label}
