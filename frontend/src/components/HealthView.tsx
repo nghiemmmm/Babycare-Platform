@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch } from "../lib/authClient";
 import {
   AlertCircle,
   Plus,
@@ -140,6 +141,36 @@ export default function HealthView({
   const [medDosage, setMedDosage] = useState("");
   const [medDoctor, setMedDoctor] = useState("Phụ huynh ghi nhận");
 
+  // Fetch real health records from backend API
+  useEffect(() => {
+    if (!activeBaby?.id) return;
+    let isMounted = true;
+    apiFetch(`/api/v1/babies/${activeBaby.id}/health-records`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: any[]) => {
+        if (!isMounted || !Array.isArray(data) || data.length === 0) return;
+        const mapped: IncidentRecord[] = data.map((item) => {
+          const recDate = item.recorded_at ? new Date(item.recorded_at) : new Date();
+          return {
+            id: item.id || `inc_${Date.now()}`,
+            title: item.diagnosis || "Bệnh lý / Triệu chứng",
+            date: recDate.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
+            time: recDate.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+            status: (item.status === "Resolved" ? "Resolved" : "Confirmed") as "Confirmed" | "Resolved",
+            symptoms: Array.isArray(item.symptoms) && item.symptoms.length > 0 ? item.symptoms : ["Sức khỏe mệt nhẹ"],
+            treatment: item.treatment || "Theo dõi sinh hoạt và nghỉ ngơi.",
+            prescribedBy: item.doctor_name || "AI Y Khoa Gợi Ý",
+            temp: item.temp ? Number(item.temp) : undefined
+          };
+        });
+        setIncidents(mapped);
+      })
+      .catch((err) => console.error("Failed to fetch health records:", err));
+    return () => {
+      isMounted = false;
+    };
+  }, [activeBaby?.id]);
+
   const toggleSymptomChip = (sym: string) => {
     setSelectedSymptomChips((prev) =>
       prev.includes(sym) ? prev.filter((s) => s !== sym) : [...prev, sym]
@@ -194,7 +225,7 @@ export default function HealthView({
     return parts.join(" ");
   };
 
-  const handleAddIncidentSubmit = (e: React.FormEvent) => {
+  const handleAddIncidentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!incidentTitle) return;
 
@@ -203,7 +234,7 @@ export default function HealthView({
     const newRecord: IncidentRecord = {
       id: `inc_${Date.now()}`,
       title: incidentTitle,
-      date: "Today",
+      date: "Hôm nay",
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       status: "Confirmed",
       symptoms: selectedSymptomChips.length ? selectedSymptomChips : ["Sức khỏe mệt nhẹ"],
@@ -220,6 +251,32 @@ export default function HealthView({
     setSelectedSymptomChips([]);
     setSelectedTreatmentChips([]);
     setIncidentDoctor("Bác sĩ nhi khoa");
+
+    // Sync to backend API
+    try {
+      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/health-records`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          diagnosis: incidentTitle,
+          temp: incidentTemp,
+          symptoms: selectedSymptomChips.length ? selectedSymptomChips : ["Sức khỏe mệt nhẹ"],
+          treatment: aiTreatment,
+          doctor_name: "AI Y Khoa Gợi Ý",
+          status: "Confirmed"
+        })
+      });
+      if (res.ok) {
+        const created = await res.json();
+        if (created.id) {
+          setIncidents((prev) =>
+            prev.map((item) => (item.id === newRecord.id ? { ...item, id: created.id } : item))
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Failed to save health record to backend:", err);
+    }
   };
 
   const handleAddMedSubmit = (e: React.FormEvent) => {
@@ -240,19 +297,32 @@ export default function HealthView({
     setMedDosage("");
   };
 
-  const toggleIncidentStatus = (id: string) => {
+  const toggleIncidentStatus = async (id: string) => {
+    const target = incidents.find((i) => i.id === id);
+    if (!target) return;
+    const newStatus = target.status === "Confirmed" ? "Resolved" : "Confirmed";
+
     setIncidents((prev) =>
-      prev.map((inc) =>
-        inc.id === id
-          ? { ...inc, status: inc.status === "Confirmed" ? "Resolved" : "Confirmed" }
-          : inc
-      )
+      prev.map((inc) => (inc.id === id ? { ...inc, status: newStatus } : inc))
     );
+
+    if (!id.startsWith("inc_")) {
+      try {
+        await apiFetch(`/api/v1/babies/${activeBaby.id}/health-records/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus })
+        });
+      } catch (err) {
+        console.error("Failed to update status on backend:", err);
+      }
+    }
   };
 
   const filteredIncidents = selectedSymptomFilter
     ? incidents.filter((inc) => inc.symptoms.some((s) => s.includes(selectedSymptomFilter)))
     : incidents;
+
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">

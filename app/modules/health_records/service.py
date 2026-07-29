@@ -77,6 +77,8 @@ class HealthRecordService:
             treatment=treatment,
             doctor_name=record_in.doctor_name or "AI Y Khoa Gợi Ý",
             notes=record_in.notes,
+            temp=record_in.temp,
+            status=record_in.status or "Confirmed",
             recorded_at=now
         )
         return repo.create(record_obj)
@@ -84,13 +86,6 @@ class HealthRecordService:
     def get_history(self, baby_id: str, user_id: str) -> list[HealthRecordResponse]:
         """
         Lấy toàn bộ lịch sử bệnh án của bé (Yêu cầu quyền giám hộ).
-
-        Args:
-            baby_id: ID của bé.
-            user_id: UID của người giám hộ yêu cầu.
-
-        Returns:
-            Danh sách bệnh án HealthRecordResponse sắp xếp mới nhất lên đầu.
         """
         self.baby_service.get_baby_by_id(baby_id, user_id)
 
@@ -100,17 +95,20 @@ class HealthRecordService:
         records.sort(key=lambda x: x.recorded_at, reverse=True)
         return records
 
+    def update_record(self, baby_id: str, record_id: str, update_data: dict, user_id: str) -> HealthRecordResponse:
+        """
+        Cập nhật thông tin bệnh án (ví dụ đổi trạng thái Confirmed -> Resolved).
+        """
+        self.baby_service.get_baby_by_id(baby_id, user_id)
+        repo = HealthRecordRepository(baby_id)
+        existing = repo.get(record_id)
+        if not existing:
+            raise EntityNotFoundError("Không tìm thấy thông tin bệnh án cần cập nhật")
+        return repo.update(record_id, update_data)
+
     def delete_record(self, baby_id: str, record_id: str, user_id: str) -> bool:
         """
         Xóa một bản ghi bệnh án khỏi hệ thống.
-
-        Args:
-            baby_id: ID của bé.
-            record_id: ID của bản ghi bệnh án cần xóa.
-            user_id: UID của người giám hộ yêu cầu.
-
-        Returns:
-            True nếu xóa thành công.
         """
         self.baby_service.get_baby_by_id(baby_id, user_id)
 
@@ -120,3 +118,4 @@ class HealthRecordService:
             raise EntityNotFoundError("Không tìm thấy thông tin bệnh án cần xóa")
 
         return repo.delete(record_id)
+
