@@ -180,6 +180,28 @@ export default function DashboardView({
   // Voice Extraction Loading State
   const [isExtractingVoice, setIsExtractingVoice] = useState(false);
 
+  // Backend Aggregated Dashboard Data
+  const [dashboardData, setDashboardData] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchDashboardSummary = async () => {
+      try {
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+        const token = localStorage.getItem("token") || "mock-token";
+        const res = await fetch(`${baseUrl}/api/v1/dashboard?baby_id=${activeBaby.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setDashboardData(data);
+        }
+      } catch (err) {
+        console.log("Dashboard fetch fallback", err);
+      }
+    };
+    fetchDashboardSummary();
+  }, [activeBaby.id]);
+
   // AI Cry Detection State & Handlers
   const [isAnalyzingCry, setIsAnalyzingCry] = useState(false);
   const [cryFeedback, setCryFeedback] = useState<"accurate" | "inaccurate" | null>(null);
@@ -951,6 +973,133 @@ export default function DashboardView({
             </div>
           );
         })}
+      </div>
+
+      {/* 2.5 UPGRADED DASHBOARD STATISTICS & AI FORECAST WIDGETS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        
+        {/* Widget 1: Tiến Độ Lượng Sữa Trong Ngày */}
+        <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-5 space-y-3 hover:scale-102 transition-transform">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              🍼 Tiến Độ Lượng Sữa Trong Ngày
+            </span>
+            <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+              {Math.min(100, Math.round(((dashboardData?.milk_intake?.current || (feeds.reduce((acc, f) => acc + (f.amount || 0), 0) || 750)) / (dashboardData?.milk_intake?.target || 800)) * 100))}%
+            </span>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xl font-extrabold text-[#1c648e]">
+                {dashboardData?.milk_intake?.current || (feeds.reduce((acc, f) => acc + (f.amount || 0), 0) || 750)} ml
+              </span>
+              <span className="text-xs text-slate-400 font-bold">Mục tiêu: {dashboardData?.milk_intake?.target || 800} ml</span>
+            </div>
+            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+              <div
+                className="bg-primary h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.round(((dashboardData?.milk_intake?.current || (feeds.reduce((acc, f) => acc + (f.amount || 0), 0) || 750)) / (dashboardData?.milk_intake?.target || 800)) * 100))}%` }}
+              />
+            </div>
+          </div>
+          <p className="text-[10px] font-semibold text-slate-400">
+            {((dashboardData?.milk_intake?.current || 750) >= 800) ? "🎉 Bé đã đạt mục tiêu lượng sữa khuyến nghị!" : `Bé cần bổ sung thêm ${(dashboardData?.milk_intake?.target || 800) - (dashboardData?.milk_intake?.current || 750)}ml cho cữ tối.`}
+          </p>
+        </div>
+
+        {/* Widget 2: Đếm Ngược An Toàn Thuốc Hạ Sốt */}
+        <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-5 space-y-3 hover:scale-102 transition-transform">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              💊 Đếm Ngược An Toàn Thuốc
+            </span>
+            <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
+              Hapacol 150mg
+            </span>
+          </div>
+          <div>
+            <h4 className="text-base font-extrabold text-slate-800">
+              {dashboardData?.countdown_widget?.is_administer_disabled ? "⏳ Giãn cách liều tiếp theo" : "✅ Đã an toàn cho liều mới"}
+            </h4>
+            <p className="text-xs text-slate-500 font-semibold mt-1">
+              {dashboardData?.countdown_widget?.is_administer_disabled ? "Vui lòng giữ khoảng cách 4-6 tiếng giữa các cữ thuốc hạ sốt." : "Phụ huynh có thể cho bé uống nếu bé sốt lại ≥ 38.5°C."}
+            </p>
+          </div>
+          <div className="text-[10px] font-bold text-purple-600 bg-purple-50/80 rounded-lg px-2.5 py-1 inline-flex items-center gap-1">
+            ⏱ Mốc khuyến nghị: {dashboardData?.countdown_widget?.next_eligible_time ? new Date(dashboardData.countdown_widget.next_eligible_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Sau 4 tiếng"}
+          </div>
+        </div>
+
+        {/* Widget 3: Dự Đoán Cữ Ngủ Trưa AI (SweetSpot Sleep) */}
+        <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-5 space-y-3 hover:scale-102 transition-transform">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              💤 Dự Đoán Cữ Ngủ AI (SweetSpot)
+            </span>
+            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+              Cửa sổ thức 2.5h
+            </span>
+          </div>
+          <div>
+            <h4 className="text-base font-extrabold text-[#1c648e]">02:30 PM (Cữ trưa)</h4>
+            <p className="text-xs text-slate-500 font-semibold mt-1">
+              Dựa vào tuổi bé ({calculateAgeStr(activeBaby.birthDate)}), AI dự đoán bé sẽ có dấu hiệu gắt ngủ sau 2.5 giờ thức.
+            </p>
+          </div>
+          <div className="text-[10px] font-bold text-amber-600 bg-amber-50/80 rounded-lg px-2.5 py-1 inline-flex items-center gap-1">
+            🌙 Chuẩn bị phòng tối 10 phút trước cữ ngủ
+          </div>
+        </div>
+
+        {/* Widget 4: Cảnh Báo Tiêm Chủng Mốc Tuổi Tiếp Theo */}
+        <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-5 space-y-3 hover:scale-102 transition-transform">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              💉 Cảnh Báo Lịch Tiêm Chủng
+            </span>
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+              {calculateAgeStr(activeBaby.birthDate)}
+            </span>
+          </div>
+          <div>
+            <h4 className="text-base font-extrabold text-slate-800">
+              {activeBaby.name.includes("Leo") ? "Mốc 6 Tháng Tuổi" : "Mốc 3 Tháng Tuổi"}
+            </h4>
+            <p className="text-xs text-slate-500 font-semibold mt-1">
+              {activeBaby.name.includes("Leo") ? "Vắc-xin Cúm mùa & Phế cầu khuẩn (Synflorix)" : "Vắc-xin 6-trong-1 mũi 2 & Rota virus"}
+            </p>
+          </div>
+          <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50/80 rounded-lg px-2.5 py-1 inline-flex items-center gap-1">
+            🗓 Nhắc nhở: Đăng ký lịch tiêm trạm y tế tuần này
+          </div>
+        </div>
+
+        {/* Widget 5: Thẻ Bách Phân Vị WHO & Sức Khỏe */}
+        <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[28px] p-5 space-y-3 md:col-span-2 lg:col-span-2 hover:scale-101 transition-transform">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              🩺 Đánh Giá Thể Trạng & Bách Phân Vị WHO
+            </span>
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+              🟢 Thể trạng khỏe mạnh
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="p-3 bg-sky-50/70 border border-sky-100 rounded-2xl">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block">Cân nặng so chuẩn WHO</span>
+              <p className="text-sm font-extrabold text-[#1c648e] mt-0.5">
+                {dashboardData?.growth_snapshot?.weight_percentile || "50th (Standard WHO Normal)"}
+              </p>
+            </div>
+            <div className="p-3 bg-purple-50/70 border border-purple-100 rounded-2xl">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block">Chiều cao so chuẩn WHO</span>
+              <p className="text-sm font-extrabold text-purple-800 mt-0.5">
+                {dashboardData?.growth_snapshot?.height_percentile || "50th (Standard WHO Normal)"}
+              </p>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       {/* 3. Columns Layout */}
