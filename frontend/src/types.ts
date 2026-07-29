@@ -13,7 +13,7 @@ export interface BabyProfile {
   isActive: boolean;
   bloodType?: string;
   pediatricianName?: string;
-  allergies?: string[];
+  allergies: string[];
 }
 
 export interface NutritionRecommendationItem {
@@ -126,25 +126,19 @@ export interface Guardian {
 export interface FeedLog {
   id: string;
   babyId: string;
-  type: "Formula" | "Breast" | "Solids" | "formula" | "breast" | "solids";
-  details?: string;
-  amount?: number;
-  amountMl?: number;
-  time?: string;
-  date?: string;
-  loggedAt?: string;
-  note?: string;
+  type: "Formula" | "Breast" | "Solids";
+  details: string; // e.g. "Sweet Potato Purée"
+  amount: number; // ml for formula/breast, or meals count for solids
+  time: string;
+  date: string;
 }
 
 export interface IngredientLog {
   id: string;
   babyId: string;
   name: string;
-  category?: string;
-  amountG?: number;
-  reaction?: "Loved it" | "Spat out" | "Neutral" | "Allergic Reaction";
-  date?: string;
-  loggedAt?: string;
+  reaction: "Loved it" | "Spat out" | "Neutral" | "Allergic Reaction";
+  date: string;
 }
 
 export interface SmartExtraction {
@@ -161,18 +155,6 @@ export interface Citation {
   uri: string;
 }
 
-export interface ToolStep {
-  id?: string;
-  tool_name: string;
-  display_name: string;
-  args?: Record<string, any>;
-  status: "running" | "completed" | "failed";
-  result_summary: string;
-  start_time?: string;
-  end_time?: string;
-  duration_ms?: number;
-}
-
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -182,16 +164,14 @@ export interface ChatMessage {
   citations?: Citation[];
   isVoice?: boolean;
   voiceDuration?: string;
-  tool_steps?: ToolStep[];
 }
 
 export interface NotificationItem {
   id: string;
   title: string;
   message: string;
-  type: "medication" | "safety" | "feeding" | "system" | "health_check";
+  type: "medication" | "safety" | "feeding" | "system";
   created_at: string;
   read: boolean;
   action_url?: string;
-  incident_id?: string;
 }

@@ -9,10 +9,13 @@ from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.schemas import UserRecord
 from app.modules.nutrition.schemas import SolidFoodLogCreate, SolidFoodLogResponse
 from app.modules.nutrition.service import SolidFoodService
+from app.modules.nutrition.ai_recommender import NutritionRecommenderService, WeeklyMealPlanService
 from app.shared.schemas import Message
 
 router = APIRouter(prefix="/babies", tags=["Solid Food Tracking"])
 solid_food_service = SolidFoodService()
+nutrition_recommender_service = NutritionRecommenderService()
+weekly_meal_plan_service = WeeklyMealPlanService()
 
 @router.post("/{baby_id}/nutrition/solid", response_model=SolidFoodLogResponse, status_code=status.HTTP_201_CREATED)
 async def add_solid_food_log(
@@ -49,11 +52,11 @@ async def delete_solid_food_log(
 
 
 # Router mới cho Feeds & Ingredients theo giao diện Frontend
-from pydantic import BaseModel
 from typing import List, Optional
 from google.cloud.firestore import FieldFilter
 from app.infrastructure.database import get_firestore_db
 import uuid
+from pydantic import BaseModel
 from app.modules.nutrition.schemas import (
     FeedCreate,
     FeedResponse,
@@ -62,24 +65,18 @@ from app.modules.nutrition.schemas import (
     IngredientResponse,
     IngredientCreateResponse,
     SuccessResponse,
+    NutritionRecommendationResponse,
+    WeeklyMealPlanResponse,
+    GenerateWeeklyMealPlanRequest,
     FoodSafetyItemResponse,
     AllergenAlertResponse,
     NutritionSafetyResponse,
     SafetyHandbookSection,
-    SafetyHandbookResponse,
-    NutritionRecommendationResponse,
-    WeeklyMealPlanResponse,
-    GenerateWeeklyMealPlanRequest
-)
-from app.modules.nutrition.ai_recommender import (
-    NutritionRecommenderService,
-    WeeklyMealPlanService
+    SafetyHandbookResponse
 )
 
+from fastapi import APIRouter
 feeds_router = APIRouter(prefix="/nutrition", tags=["Nutrition & Solid Food AI"])
-nutrition_recommender_service = NutritionRecommenderService()
-weekly_meal_plan_service = WeeklyMealPlanService()
-
 
 @feeds_router.get("/feeds", response_model=List[FeedResponse])
 async def get_nutrition_feeds(
@@ -94,9 +91,9 @@ async def get_nutrition_feeds(
     solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
     
     db = get_firestore_db()
-    query = db.collection("nutrition_feeds").where(filter=FieldFilter("baby_id", "==", baby_id))
+    query = db.collection("nutrition_feeds").where("baby_id", "==", baby_id)
     if date and date != "Today":
-        query = query.where(filter=FieldFilter("date", "==", date))
+        query = query.where("date", "==", date)
         
     docs = query.stream()
     results = []
@@ -107,7 +104,8 @@ async def get_nutrition_feeds(
             type=d.get("type", ""),
             details=d.get("details", ""),
             amount=d.get("amount", 0.0),
-            time=d.get("time", "")
+            time=d.get("time", ""),
+            date=d.get("date", "")
         ))
     
     # Sắp xếp theo time (đơn giản hoá thành chuỗi thời gian) hoặc theo ngày tạo
@@ -171,7 +169,7 @@ async def get_ingredients(
     solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
     
     db = get_firestore_db()
-    docs = db.collection("nutrition_ingredients").where(filter=FieldFilter("baby_id", "==", baby_id)).stream()
+    docs = db.collection("nutrition_ingredients").where("baby_id", "==", baby_id).stream()
     results = []
     for doc in docs:
         d = doc.to_dict()
@@ -222,137 +220,9 @@ async def delete_ingredient(
         
     ing_data = doc.to_dict()
     solid_food_service.baby_service.get_baby_by_id(ing_data.get("baby_id"), current_user.uid)
-    
+
     doc_ref.delete()
     return SuccessResponse(success=True)
-
-@feeds_router.get("/safety-guidelines", response_model=NutritionSafetyResponse)
-async def get_nutrition_safety_guidelines(
-    baby_id: str,
-    current_user: UserRecord = Depends(get_current_user)
-):
-    """
-    Lấy hướng dẫn an toàn dinh dưỡng & cảnh báo dị ứng cá nhân hóa cho bé.
-    """
-    baby = solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
-    
-    age_months = 6
-    if baby and baby.birth_date:
-        try:
-            from datetime import date
-            birth = date.fromisoformat(baby.birth_date[:10])
-            today = date.today()
-            age_months = (today.year - birth.year) * 12 + today.month - birth.month
-        except Exception:
-            pass
-
-    foods_to_avoid = []
-    if age_months < 12:
-        foods_to_avoid = [
-            FoodSafetyItemResponse(
-                name="Mật ong",
-                reason="Nguy cơ ngộ độc Clostridium Botulinum ở trẻ dưới 12 tháng, một bệnh nhiễm độc đường tiêu hóa rất nghiêm trọng.",
-                category="under_1_year",
-                min_age_months=12
-            ),
-            FoodSafetyItemResponse(
-                name="Muối gia vị",
-                reason="Thận của trẻ dưới 1 tuổi chưa đủ phát triển để lọc và xử lý lượng muối bổ sung.",
-                category="under_1_year",
-                min_age_months=12
-            ),
-            FoodSafetyItemResponse(
-                name="Đường gia vị",
-                reason="Có thể gây sâu răng sớm, hình thành thói quen ăn ngọt có hại cho sức khỏe và thiếu giá trị dinh dưỡng.",
-                category="under_1_year",
-                min_age_months=12
-            ),
-            FoodSafetyItemResponse(
-                name="Sữa tươi nguyên kem",
-                reason="Khó tiêu hóa đối với dạ dày trẻ dưới 12 tháng và thiếu hàm lượng sắt cần thiết.",
-                category="under_1_year",
-                min_age_months=12
-            ),
-            FoodSafetyItemResponse(
-                name="Hạt nguyên hạt",
-                reason="Nguy cơ hóc dị vật đường thở cao đối với trẻ nhỏ chưa nhai thành thục.",
-                category="choking_hazard",
-                min_age_months=36
-            )
-        ]
-    else:
-        foods_to_avoid = [
-            FoodSafetyItemResponse(
-                name="Hạt nguyên hạt",
-                reason="Nguy cơ hóc dị vật đường thở cao đối với trẻ nhỏ chưa nhai thành thục.",
-                category="choking_hazard",
-                min_age_months=36
-            )
-        ]
-
-    db = get_firestore_db()
-    docs = db.collection("nutrition_ingredients").where(filter=FieldFilter("baby_id", "==", baby_id)).stream()
-    
-    allergic_ingredients = []
-    for doc in docs:
-        d = doc.to_dict()
-        if d.get("reaction") == "Allergic Reaction":
-            allergic_ingredients.append(d.get("name", ""))
-
-    has_alert = len(allergic_ingredients) > 0
-    if has_alert:
-        names_str = ", ".join(allergic_ingredients)
-        warning_msg = f"Bé {baby.name} từng có phản ứng dị ứng khi dùng: {names_str}. Tránh tái sử dụng và tham khảo ý kiến bác sĩ."
-    else:
-        allergic_ingredients = ["🥛 Nhạy cảm sữa bò", "🥜 Đề phòng Đậu phộng"]
-        warning_msg = f"Bé {baby.name} chưa ghi nhận dị ứng nghiêm trọng. Cần cẩn trọng thử nguyên liệu mới."
-
-    allergen_alerts = AllergenAlertResponse(
-        allergens=allergic_ingredients,
-        warning_message=warning_msg,
-        has_alert=has_alert
-    )
-
-    return NutritionSafetyResponse(
-        foods_to_avoid=foods_to_avoid,
-        allergen_alerts=allergen_alerts
-    )
-
-@feeds_router.get("/safety-handbook", response_model=SafetyHandbookResponse)
-async def get_safety_handbook(
-    current_user: UserRecord = Depends(get_current_user)
-):
-    """
-    Lấy nội dung Cẩm nang An toàn Dinh dưỡng Y khoa (chuẩn WHO/AAP).
-    """
-    sections = [
-        SafetyHandbookSection(
-            title="📌 Quy tắc 3 ngày thử món mới (Rule of 3)",
-            description="Khi cho bé thử nguyên liệu ăn dặm mới (ví dụ: bơ, trứng, cá), cho bé ăn liên tục 3 ngày để dễ dàng xác định chính xác thực phẩm gây dị ứng nếu có phản ứng.",
-            level="info"
-        ),
-        SafetyHandbookSection(
-            title="🚨 Dấu hiệu dị ứng cần đi cấp cứu ngay",
-            description="Cần đưa trẻ đến cơ sở y tế ngay nếu xuất hiện các triệu chứng sau khi ăn:",
-            items=[
-                "Khó thở, thở khò khè hoặc sưng môi, lưỡi, mắt.",
-                "Nổi mẩn đỏ toàn thân, ngứa ngáy nhiều.",
-                "Nôn mửa nhiều lần hoặc tiêu chảy cấp."
-            ],
-            level="danger"
-        ),
-        SafetyHandbookSection(
-            title="⚠️ Phòng ngừa hóc dị vật (Choking Hazards)",
-            description="Cắt đôi hoặc bổ 4 các loại quả tròn nhỏ (nho, cà chua bi, cherry). Tránh cho trẻ dưới 3 tuổi ăn hạt nguyên hạt, kẹo cứng, popcorn.",
-            level="warning"
-        ),
-        SafetyHandbookSection(
-            title="🥛 An toàn hâm sữa & Bảo quản",
-            description="Sữa mẹ/Sữa công thức đã pha chỉ dùng trong 2 giờ ở nhiệt độ phòng. Hâm sữa bằng nước ấm dưới 40°C, không hâm bằng lò vi sóng.",
-            level="success"
-        )
-    ]
-    return SafetyHandbookResponse(title="Cẩm nang An toàn Dinh dưỡng (WHO/AAP)", sections=sections)
 
 
 # Gợi ý dinh dưỡng AI (RAG, cá nhân hoá theo dị ứng/bệnh lý của bé)
@@ -424,3 +294,133 @@ async def accept_weekly_meal_plan(
     """
     return weekly_meal_plan_service.accept_weekly_plan(req.baby_id, current_user.uid)
 
+
+# Hướng dẫn an toàn dinh dưỡng & cẩm nang y khoa (không dùng RAG - dữ liệu tĩnh + Firestore)
+@feeds_router.get("/safety-guidelines", response_model=NutritionSafetyResponse)
+async def get_nutrition_safety_guidelines(
+    baby_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Lấy hướng dẫn an toàn dinh dưỡng & cảnh báo dị ứng cá nhân hóa cho bé.
+    """
+    baby = solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
+
+    age_months = 6
+    if baby and baby.birth_date:
+        try:
+            from datetime import date
+            birth = date.fromisoformat(baby.birth_date[:10])
+            today = date.today()
+            age_months = (today.year - birth.year) * 12 + today.month - birth.month
+        except Exception:
+            pass
+
+    foods_to_avoid = []
+    if age_months < 12:
+        foods_to_avoid = [
+            FoodSafetyItemResponse(
+                name="Mật ong",
+                reason="Nguy cơ ngộ độc Clostridium Botulinum ở trẻ dưới 12 tháng, một bệnh nhiễm độc đường tiêu hóa rất nghiêm trọng.",
+                category="under_1_year",
+                min_age_months=12
+            ),
+            FoodSafetyItemResponse(
+                name="Muối gia vị",
+                reason="Thận của trẻ dưới 1 tuổi chưa đủ phát triển để lọc và xử lý lượng muối bổ sung.",
+                category="under_1_year",
+                min_age_months=12
+            ),
+            FoodSafetyItemResponse(
+                name="Đường gia vị",
+                reason="Có thể gây sâu răng sớm, hình thành thói quen ăn ngọt có hại cho sức khỏe và thiếu giá trị dinh dưỡng.",
+                category="under_1_year",
+                min_age_months=12
+            ),
+            FoodSafetyItemResponse(
+                name="Sữa tươi nguyên kem",
+                reason="Khó tiêu hóa đối với dạ dày trẻ dưới 12 tháng và thiếu hàm lượng sắt cần thiết.",
+                category="under_1_year",
+                min_age_months=12
+            ),
+            FoodSafetyItemResponse(
+                name="Hạt nguyên hạt",
+                reason="Nguy cơ hóc dị vật đường thở cao đối với trẻ nhỏ chưa nhai thành thục.",
+                category="choking_hazard",
+                min_age_months=36
+            )
+        ]
+    else:
+        foods_to_avoid = [
+            FoodSafetyItemResponse(
+                name="Hạt nguyên hạt",
+                reason="Nguy cơ hóc dị vật đường thở cao đối với trẻ nhỏ chưa nhai thành thục.",
+                category="choking_hazard",
+                min_age_months=36
+            )
+        ]
+
+    db = get_firestore_db()
+    docs = db.collection("nutrition_ingredients").where(filter=FieldFilter("baby_id", "==", baby_id)).stream()
+
+    allergic_ingredients = []
+    for doc in docs:
+        d = doc.to_dict()
+        if d.get("reaction") == "Allergic Reaction":
+            allergic_ingredients.append(d.get("name", ""))
+
+    has_alert = len(allergic_ingredients) > 0
+    if has_alert:
+        names_str = ", ".join(allergic_ingredients)
+        warning_msg = f"Bé {baby.name} từng có phản ứng dị ứng khi dùng: {names_str}. Tránh tái sử dụng và tham khảo ý kiến bác sĩ."
+    else:
+        allergic_ingredients = ["🥛 Nhạy cảm sữa bò", "🥜 Đề phòng Đậu phộng"]
+        warning_msg = f"Bé {baby.name} chưa ghi nhận dị ứng nghiêm trọng. Cần cẩn trọng thử nguyên liệu mới."
+
+    allergen_alerts = AllergenAlertResponse(
+        allergens=allergic_ingredients,
+        warning_message=warning_msg,
+        has_alert=has_alert
+    )
+
+    return NutritionSafetyResponse(
+        foods_to_avoid=foods_to_avoid,
+        allergen_alerts=allergen_alerts
+    )
+
+
+@feeds_router.get("/safety-handbook", response_model=SafetyHandbookResponse)
+async def get_safety_handbook(
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Lấy nội dung Cẩm nang An toàn Dinh dưỡng Y khoa (chuẩn WHO/AAP).
+    """
+    sections = [
+        SafetyHandbookSection(
+            title="📌 Quy tắc 3 ngày thử món mới (Rule of 3)",
+            description="Khi cho bé thử nguyên liệu ăn dặm mới (ví dụ: bơ, trứng, cá), cho bé ăn liên tục 3 ngày để dễ dàng xác định chính xác thực phẩm gây dị ứng nếu có phản ứng.",
+            level="info"
+        ),
+        SafetyHandbookSection(
+            title="🚨 Dấu hiệu dị ứng cần đi cấp cứu ngay",
+            description="Cần đưa trẻ đến cơ sở y tế ngay nếu xuất hiện các triệu chứng sau khi ăn:",
+            items=[
+                "Khó thở, thở khò khè hoặc sưng môi, lưỡi, mắt.",
+                "Nổi mẩn đỏ toàn thân, ngứa ngáy nhiều.",
+                "Nôn mửa nhiều lần hoặc tiêu chảy cấp."
+            ],
+            level="danger"
+        ),
+        SafetyHandbookSection(
+            title="⚠️ Phòng ngừa hóc dị vật (Choking Hazards)",
+            description="Cắt đôi hoặc bổ 4 các loại quả tròn nhỏ (nho, cà chua bi, cherry). Tránh cho trẻ dưới 3 tuổi ăn hạt nguyên hạt, kẹo cứng, popcorn.",
+            level="warning"
+        ),
+        SafetyHandbookSection(
+            title="🥛 An toàn hâm sữa & Bảo quản",
+            description="Sữa mẹ/Sữa công thức đã pha chỉ dùng trong 2 giờ ở nhiệt độ phòng. Hâm sữa bằng nước ấm dưới 40°C, không hâm bằng lò vi sóng.",
+            level="success"
+        )
+    ]
+    return SafetyHandbookResponse(title="Cẩm nang An toàn Dinh dưỡng (WHO/AAP)", sections=sections)

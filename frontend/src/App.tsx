@@ -44,7 +44,7 @@ import GrowthView from "./components/GrowthView";
 import AiHubView from "./components/AiHubView";
 import ProfileView from "./components/ProfileView";
 import NutritionView from "./components/NutritionView";
-import LogsView from "./components/LogsView";
+import FeedingLogView from "./components/FeedingLogView";
 import HealthView from "./components/HealthView";
 
 export default function App() {
@@ -71,7 +71,6 @@ export default function App() {
   const [isAcceptingWeeklyPlan, setIsAcceptingWeeklyPlan] = useState(false);
   const [threads, setThreads] = useState<Array<{ id: string; title: string }>>([]);
   const [activeThreadId, setActiveThreadId] = useState<string>("thread_default");
-  const threadCacheRef = useRef<Record<string, ChatMessage[]>>({});
   const [nutritionSafety, setNutritionSafety] = useState<NutritionSafety | null>(null);
   const [safetyHandbook, setSafetyHandbook] = useState<SafetyHandbook | null>(null);
   const [isLoadingSafetyHandbook, setIsLoadingSafetyHandbook] = useState(false);
@@ -311,32 +310,22 @@ export default function App() {
 
   // Fetch messages inside the selected thread
   const loadThreadMessages = async (threadId: string) => {
-    // Instant UI update if thread messages are cached in memory
-    if (threadCacheRef.current[threadId]) {
-      setChats(threadCacheRef.current[threadId]);
-    }
-
     try {
       const res = await apiFetch(`/api/v1/ai/threads/${threadId}/messages`);
       if (res.ok) {
         const data = await res.json();
-        const mapped = data.map((c: any) => ({
+        setChats(data.map((c: any) => ({
           id: c.id,
           role: c.role,
           content: c.content,
-          timestamp: c.timestamp.includes("T") ? c.timestamp.slice(11, 16) : c.timestamp,
-          tool_steps: c.tool_steps || []
-        }));
-        threadCacheRef.current[threadId] = mapped;
-        setChats(mapped);
-      } else if (!threadCacheRef.current[threadId]) {
+          timestamp: c.timestamp.includes("T") ? c.timestamp.slice(11, 16) : c.timestamp
+        })));
+      } else {
         setChats([]);
       }
     } catch (e) {
       console.error("Failed to load thread messages:", e);
-      if (!threadCacheRef.current[threadId]) {
-        setChats([]);
-      }
+      setChats([]);
     }
   };
 
@@ -379,15 +368,7 @@ export default function App() {
       }
     };
     loadInitialBabies();
-    loadThreads();
   }, []);
-
-  // Automatically fetch thread messages whenever activeThreadId changes
-  useEffect(() => {
-    if (activeThreadId) {
-      loadThreadMessages(activeThreadId);
-    }
-  }, [activeThreadId]);
 
   // Check URL query parameters for invitation acceptance link
   useEffect(() => {
@@ -894,8 +875,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content: userMsg.content,
-          type: "text",
-          baby_id: activeBaby?.id
+          type: "text"
         })
       });
 
@@ -925,21 +905,17 @@ export default function App() {
         };
       }
 
-      const aiMsgObj: ChatMessage = {
-        id: `ai_${Date.now()}`,
-        role: "assistant",
-        content: aiContent,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        extraction,
-        citations,
-        tool_steps: data.tool_steps || []
-      };
-
-      setChats((prev) => {
-        const next = [...prev, aiMsgObj];
-        threadCacheRef.current[activeThreadId] = next;
-        return next;
-      });
+      setChats((prev) => [
+        ...prev,
+        {
+          id: `ai_${Date.now()}`,
+          role: "assistant",
+          content: aiContent,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          extraction,
+          citations
+        }
+      ]);
     } catch (error) {
       console.error("Failed to message Gemini API:", error);
       // Fallback
@@ -978,9 +954,6 @@ export default function App() {
 
   const handleSelectThread = (threadId: string) => {
     setActiveThreadId(threadId);
-    if (threadCacheRef.current[threadId]) {
-      setChats(threadCacheRef.current[threadId]);
-    }
   };
 
   const handleConfirmExtraction = (ext: SmartExtraction) => {
@@ -1303,8 +1276,6 @@ export default function App() {
               {activeTab === "dashboard" && (
                 <DashboardView
                   activeBaby={activeBaby}
-                  babies={babies}
-                  onSelectBaby={handleSelectBaby}
                   medications={medications.filter((m) => m.babyId === activeBaby.id)}
                   feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
                   measurements={measurements.filter((m) => m.babyId === activeBaby.id)}
@@ -1346,8 +1317,6 @@ export default function App() {
               {activeTab === "ai" && (
                 <AiHubView
                   activeBaby={activeBaby}
-                  babies={babies}
-                  onSelectBaby={handleSelectBaby}
                   chats={chats}
                   onSendMessage={handleSendMessage}
                   onConfirmExtraction={handleConfirmExtraction}
@@ -1376,22 +1345,8 @@ export default function App() {
                 />
               )}
 
-              {((activeTab as string) === "log" || (activeTab as string) === "logs") && (
-                <LogsView
-                  activeBaby={activeBaby}
-                  feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
-                  medications={medications.filter((m) => m.babyId === activeBaby.id)}
-                  measurements={measurements.filter((m) => m.babyId === activeBaby.id)}
-                  onAddFeed={handleAddFeed}
-                  onDeleteFeed={handleDeleteFeed}
-                  onAddMedication={handleAddMedication}
-                  onDeleteMedication={handleDeleteMedication}
-                  onAddMeasurement={handleAddMeasurement}
-                />
-              )}
-
-              {activeTab === "nutrition" && (
-                <NutritionView
+              {activeTab === "log" && (
+                <FeedingLogView
                   activeBaby={activeBaby}
                   feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
                   ingredients={ingredients.filter((i) => i.babyId === activeBaby.id)}
@@ -1399,6 +1354,12 @@ export default function App() {
                   onDeleteFeed={handleDeleteFeed}
                   onAddIngredient={handleAddIngredient}
                   onDeleteIngredient={handleDeleteIngredient}
+                />
+              )}
+
+              {activeTab === "nutrition" && (
+                <NutritionView
+                  activeBaby={activeBaby}
                   recommendation={nutritionRecommendation}
                   isGeneratingRecommendation={isGeneratingRecommendation}
                   onGenerateRecommendation={handleGenerateNutritionRecommendation}
