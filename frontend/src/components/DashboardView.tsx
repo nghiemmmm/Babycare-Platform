@@ -927,11 +927,10 @@ export default function DashboardView({
       </div>
 
       {/* 2. Real-time Status Card Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[
           { title: "LẦN BÚ CUỐI", value: lastFeedStr, subtitle: lastFeedDetail.replace("Formula Milk", "Sữa công thức").replace("Breastmilk", "Sữa mẹ"), icon: Droplet, time: "🍼 " + (lastFeed ? lastFeed.time : "01:00 PM"), color: "text-accent-blue bg-accent-blue/10 border-accent-blue/20" },
-          { title: "TỔNG GIỜ NGỦ", value: isNapTimerRunning ? "Đang tính..." : "12.5 giờ", subtitle: "Mục tiêu: 14 giờ", icon: Moon, time: "💤 4 giấc hôm nay", color: "text-accent-purple bg-accent-purple/10 border-accent-purple/20" },
-          { title: "NHIỆT ĐỘ", value: `${currentTemp}°C`, subtitle: "Ngưỡng tối ưu", icon: Activity, time: "🌡️ Đo lúc 9:0 SA", color: "text-[#1c648e] bg-[#b2e2f2]/20 border-[#b2e2f2]/30" }
+          { title: "TỔNG GIỜ NGỦ", value: isNapTimerRunning ? "Đang tính..." : "12.5 giờ", subtitle: "Mục tiêu: 14 giờ", icon: Moon, time: "💤 4 giấc hôm nay", color: "text-accent-purple bg-accent-purple/10 border-accent-purple/20" }
         ].map((card, idx) => {
           const Icon = card.icon;
           return (
