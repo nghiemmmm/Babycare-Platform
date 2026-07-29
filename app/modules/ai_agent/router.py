@@ -160,24 +160,27 @@ async def get_thread_messages(
         return final_messages
 
     # 3. Fallback: Đọc từ LangGraph Firestore Checkpointer
-    orchestrator = AgentOrchestrator()
-    config = {"configurable": {"thread_id": thread_id, "user_id": current_user.uid}}
-    state = await orchestrator.graph.aget_state(config)
-    messages = state.values.get("messages", [])
+    messages = []
+    try:
+        orchestrator = AgentOrchestrator()
+        state_dict = await orchestrator.get_state(thread_id, current_user.uid)
+        messages = state_dict.get("values", {}).get("messages", [])
+    except Exception as e:
+        messages = []
     
     result = []
     for msg in messages:
-        role = "user" if msg.type == "human" else "assistant"
+        role = "user" if getattr(msg, "type", "") == "human" else "assistant"
         msg_id = getattr(msg, "id", None) or f"msg_{uuid.uuid4().hex[:8]}"
         
-        ts = getattr(msg, "response_metadata", {}).get("created_at")
+        ts = getattr(msg, "response_metadata", {}).get("created_at") if hasattr(msg, "response_metadata") else None
         if not ts:
             ts = datetime.now(timezone.utc).isoformat()
             
         result.append(ChatMessageResponse(
             id=msg_id,
             role=role,
-            content=msg.content,
+            content=getattr(msg, "content", str(msg)),
             timestamp=ts
         ))
         
@@ -189,6 +192,7 @@ async def get_thread_messages(
         await run_in_threadpool(cache_redis.set_json, cache_key, serializable, 1800)
 
     return final_messages
+
 
 @ai_agent_router.post("/threads/{thread_id}/messages", response_model=MessageCreateResponse)
 async def create_thread_message(

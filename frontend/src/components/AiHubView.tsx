@@ -83,8 +83,9 @@ export default function AiHubView({
   };
 
   const uniqueBabies = Array.from(
-    new Map(babies.map((b) => [b.name.trim().toLowerCase(), b])).values()
+    new Map((babies || []).map((b) => [b.name ? b.name.trim().toLowerCase() : "", b])).values()
   );
+
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploadingChatFile, setIsUploadingChatFile] = useState(false);
