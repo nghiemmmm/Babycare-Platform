@@ -28,7 +28,8 @@ import {
   Ruler,
   Upload,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  Coffee
 } from "lucide-react";
 import {
   ResponsiveContainer,
