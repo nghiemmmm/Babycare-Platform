@@ -1,3 +1,6 @@
+import time
+import uuid
+from datetime import datetime, timezone, date
 from langgraph.graph import StateGraph, START, END
 from app.AI_agents.orchestrator.state_manager import OverallState
 from app.AI_agents.core.reasoner import AIReasoner
@@ -19,6 +22,7 @@ class ChatGraph:
     async def chat_node(self, state: OverallState) -> dict:
         baby_id = state.get("baby_id")
         user_id = state.get("current_user_id")
+        tool_steps = list(state.get("tool_steps", []))
         
         baby_name = "Bé"
         baby_gender = "chưa rõ"
@@ -27,21 +31,23 @@ class ChatGraph:
         growth_info = "chưa có dữ liệu"
 
         if baby_id and user_id:
+            t0 = time.time()
             try:
                 baby = self.baby_service.get_baby_by_id(baby_id, user_id)
                 baby_name = baby.name
                 baby_gender = baby.gender
                 baby_birth_date = baby.birth_date
                 
-                from datetime import date
-                birth = date.fromisoformat(baby.birth_date[:10])
-                today = date.today()
-                age_months = (today.year - birth.year) * 12 + today.month - birth.month
-                baby_age = str(age_months)
+                if baby.birth_date:
+                    birth = date.fromisoformat(baby.birth_date[:10])
+                    today = date.today()
+                    age_months = (today.year - birth.year) * 12 + today.month - birth.month
+                    baby_age = str(age_months)
                 
                 history = self.growth_service.get_growth_history(baby_id, user_id)
                 if history:
                     latest = history[0]
+                    growth_info = f"Chiều cao: {latest.height}cm, Cân nặng: {latest.weight}kg"
                 t1 = time.time()
                 summary_str = f"Đã nạp hồ sơ bé {baby_name} ({baby_age} tháng tuổi, {growth_info})"
                 tool_steps.append({
@@ -56,6 +62,7 @@ class ChatGraph:
                 })
             except Exception:
                 pass
+
 
         system_instruction = SYSTEM_PROMPT_TEMPLATE.format(
             baby_name=baby_name,
