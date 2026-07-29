@@ -49,6 +49,7 @@ async def delete_solid_food_log(
 
 
 # Router mới cho Feeds & Ingredients theo giao diện Frontend
+from pydantic import BaseModel
 from typing import List, Optional
 from google.cloud.firestore import FieldFilter
 from app.infrastructure.database import get_firestore_db
@@ -65,11 +66,20 @@ from app.modules.nutrition.schemas import (
     AllergenAlertResponse,
     NutritionSafetyResponse,
     SafetyHandbookSection,
-    SafetyHandbookResponse
+    SafetyHandbookResponse,
+    NutritionRecommendationResponse,
+    WeeklyMealPlanResponse,
+    GenerateWeeklyMealPlanRequest
+)
+from app.modules.nutrition.ai_recommender import (
+    NutritionRecommenderService,
+    WeeklyMealPlanService
 )
 
-from fastapi import APIRouter
 feeds_router = APIRouter(prefix="/nutrition", tags=["Nutrition & Solid Food AI"])
+nutrition_recommender_service = NutritionRecommenderService()
+weekly_meal_plan_service = WeeklyMealPlanService()
+
 
 @feeds_router.get("/feeds", response_model=List[FeedResponse])
 async def get_nutrition_feeds(
@@ -343,3 +353,74 @@ async def get_safety_handbook(
         )
     ]
     return SafetyHandbookResponse(title="Cẩm nang An toàn Dinh dưỡng (WHO/AAP)", sections=sections)
+
+
+# Gợi ý dinh dưỡng AI (RAG, cá nhân hoá theo dị ứng/bệnh lý của bé)
+class GenerateRecommendationRequest(BaseModel):
+    baby_id: str
+
+
+@feeds_router.get("/recommendation", response_model=Optional[NutritionRecommendationResponse])
+async def get_nutrition_recommendation(
+    baby_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Lấy gợi ý dinh dưỡng AI đã sinh gần nhất cho bé (nếu có). Trả về null nếu chưa từng tạo,
+    không phải lỗi - frontend hiển thị trạng thái "chưa có gợi ý" trong trường hợp này.
+    """
+    return nutrition_recommender_service.get_cached(baby_id, current_user.uid)
+
+
+@feeds_router.post("/recommendation/generate", response_model=NutritionRecommendationResponse, status_code=status.HTTP_201_CREATED)
+async def generate_nutrition_recommendation(
+    req: GenerateRecommendationRequest,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Sinh mới gợi ý dinh dưỡng AI cho bé (luôn gọi lại LLM + RAG), ghi đè gợi ý đã lưu trước đó.
+    """
+    return await nutrition_recommender_service.generate_recommendation(req.baby_id, current_user.uid)
+
+
+# Thực đơn ăn dặm 7 ngày AI (RAG, trạng thái pending/accepted, khoá tạo mới 7 ngày sau khi chấp nhận)
+class AcceptWeeklyMealPlanRequest(BaseModel):
+    baby_id: str
+
+
+@feeds_router.get("/meal-plan/weekly", response_model=Optional[WeeklyMealPlanResponse])
+async def get_weekly_meal_plan(
+    baby_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Lấy thực đơn 7 ngày đã sinh gần nhất cho bé (nếu có). Trả về null nếu chưa từng tạo,
+    không phải lỗi - frontend hiển thị trạng thái "chưa có thực đơn" trong trường hợp này.
+    """
+    return weekly_meal_plan_service.get_cached_weekly_plan(baby_id, current_user.uid)
+
+
+@feeds_router.post("/meal-plan/weekly/generate", response_model=WeeklyMealPlanResponse, status_code=status.HTTP_201_CREATED)
+async def generate_weekly_meal_plan(
+    req: GenerateWeeklyMealPlanRequest,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Sinh thực đơn 7 ngày mới cho bé (luôn gọi lại LLM + RAG), bắt đầu từ hôm nay. Nếu thực đơn
+    hiện tại đã được chấp nhận và chưa hết hạn 7 ngày, backend trả 409 (MealPlanLockedError) -
+    chỉ được ghi đè khi thực đơn hiện tại còn đang pending hoặc đã hết hạn.
+    """
+    return await weekly_meal_plan_service.generate_weekly_plan(req.baby_id, current_user.uid, req.feedback)
+
+
+@feeds_router.post("/meal-plan/weekly/accept", response_model=WeeklyMealPlanResponse)
+async def accept_weekly_meal_plan(
+    req: AcceptWeeklyMealPlanRequest,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Chấp nhận thực đơn 7 ngày đang ở trạng thái pending - chuyển sang accepted, bắt đầu khoá
+    7 ngày cho tới khi được tạo thực đơn mới.
+    """
+    return weekly_meal_plan_service.accept_weekly_plan(req.baby_id, current_user.uid)
+
