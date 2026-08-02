@@ -12,6 +12,7 @@ Hiện tại sử dụng Gemini TTS hoặc trả về URL tĩnh làm placeholder
 """
 from typing import Optional
 from app.core.config import settings
+from app.infrastructure.storage.cloudinary_service import resolve_asset_url
 
 
 VOICE_PROFILES = {
@@ -44,7 +45,7 @@ class VoiceSynthesizer:
         return {
             "voice_profile": self.voice_profile,
             "text": text,
-            "audio_url": f"/static/voices/mom/{self.voice_profile}_tts.mp3",
+            "audio_url": resolve_asset_url(f"/static/voices/mom/{self.voice_profile}_tts.mp3"),
             "status": "simulated"
         }
 
@@ -68,6 +69,6 @@ class VoiceSynthesizer:
         track = LULLABY_TRACKS.get(reason, "classic_lullaby.mp3")
         return {
             "track": track,
-            "audio_url": f"/static/sounds/lullabies/{track}",
+            "audio_url": resolve_asset_url(f"/static/sounds/lullabies/{track}"),
             "reason": reason
         }

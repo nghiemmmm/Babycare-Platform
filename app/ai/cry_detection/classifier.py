@@ -8,6 +8,7 @@ import tempfile
 import logging
 import torchaudio
 from app.ai.cry_detection.sound_mapper import AST_LABEL_MAPPING, SOUND_MAPPING
+from app.infrastructure.storage.cloudinary_service import resolve_asset_url
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,6 @@ class CryClassifier:
         Returns:
             Tên track âm thanh hoặc URL tài nguyên âm thanh.
         """
-        return SOUND_MAPPING.get(prediction, "classic_lullaby")
+        return resolve_asset_url(SOUND_MAPPING.get(prediction, "/static/sounds/lullabies/classic_lullaby.mp3"))
 
 

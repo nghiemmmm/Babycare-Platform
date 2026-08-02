@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
 
+    # Cloudinary (tùy chọn - nếu bỏ trống, ảnh đại diện bé và file ghi âm tiếng khóc
+    # fail-open sang lưu trên đĩa local app/static/, giống nguyên tắc SMTP/Redis)
+    CLOUDINARY_CLOUD_NAME: Optional[str] = None
+    CLOUDINARY_API_KEY: Optional[str] = None
+    CLOUDINARY_API_SECRET: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

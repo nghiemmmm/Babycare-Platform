@@ -10,6 +10,7 @@ from typing import Optional
 from app.modules.baby.schemas import BabyCreate, BabyUpdate, BabyResponse
 from app.modules.baby.repository import BabyRepository
 from app.shared.exceptions import EntityNotFoundError, PermissionDeniedError
+from app.infrastructure.storage.cloudinary_service import upload_bytes
 
 # Import trễ (bên trong hàm, không phải ở đầu file) để tránh circular import: module
 # guardian (permissions.py) và guardian.router đều import BabyService, nên nếu import thẳng ở
@@ -28,10 +29,16 @@ class BabyService:
 
     def save_avatar(self, contents: bytes, ext: str) -> str:
         """
-        Lưu file ảnh đại diện (đã được router validate content-type + kích thước) vào thư mục
-        tĩnh với tên ngẫu nhiên (uuid4) - không dùng tên file gốc người dùng gửi lên để tránh
-        path traversal / ghi đè file. Trả về URL public để dùng làm avatar_url khi tạo/sửa bé.
+        Lưu file ảnh đại diện (đã được router validate content-type + kích thước). Ưu tiên
+        upload lên Cloudinary; nếu chưa cấu hình hoặc upload lỗi, fail-open sang lưu vào thư
+        mục tĩnh local với tên ngẫu nhiên (uuid4) - không dùng tên file gốc người dùng gửi lên
+        để tránh path traversal / ghi đè file. Trả về URL public để dùng làm avatar_url khi
+        tạo/sửa bé.
         """
+        cloud_url = upload_bytes(contents, folder="babycare/avatars", resource_type="image")
+        if cloud_url:
+            return cloud_url
+
         AVATAR_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         filename = f"{uuid.uuid4().hex}.{ext}"
         (AVATAR_UPLOAD_DIR / filename).write_bytes(contents)

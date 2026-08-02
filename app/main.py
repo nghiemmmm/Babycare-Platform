@@ -18,7 +18,7 @@ from app.modules.auth import auth_router
 from app.modules.baby import baby_router
 from app.modules.guardian import guardian_router
 from app.modules.notification import notification_router
-from app.modules.dashboard import dashboard_router
+from app.modules.dashboard.router import router as dashboard_router
 from app.modules.growth_tracking import growth_router
 from app.modules.growth_tracking.router import measurements_router
 from app.modules.health_records import health_records_router

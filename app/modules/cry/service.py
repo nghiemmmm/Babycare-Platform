@@ -13,6 +13,7 @@ from app.modules.baby.service import BabyService
 from app.modules.guardian.permissions import ADMIN, GUARDIAN, require_role
 from app.ai import CryClassifier
 from app.shared.exceptions import EntityNotFoundError
+from app.infrastructure.storage.cloudinary_service import upload_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,22 @@ class CryService:
                 except Exception: pass
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Lỗi phân loại tiếng khóc: {str(e)}")
 
-        audio_url = f"/static/cry/{saved_filename}"
+        # Ưu tiên upload lên Cloudinary; nếu chưa cấu hình hoặc upload lỗi, fail-open giữ
+        # nguyên file local đã lưu ở trên và dùng URL /static/cry/ như trước.
+        cloud_url = upload_bytes(
+            content,
+            folder="babycare/cry_recordings",
+            resource_type="video",
+            public_id=os.path.splitext(saved_filename)[0],
+        )
+        if cloud_url:
+            audio_url = cloud_url
+            try:
+                os.remove(audio_file_path)
+            except Exception:
+                pass
+        else:
+            audio_url = f"/static/cry/{saved_filename}"
 
         sound_conditioned = True
         sound_played = classifier.get_soothing_sound(prediction)
