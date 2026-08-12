@@ -82,8 +82,9 @@ export default function AiHubView({
     return /^bé\b/i.test(trimmed) ? trimmed : `Bé ${trimmed}`;
   };
 
+  const rawList = babies && babies.length > 0 ? babies : activeBaby ? [activeBaby] : [];
   const uniqueBabies = Array.from(
-    new Map((babies || []).map((b) => [b.name ? b.name.trim().toLowerCase() : "", b])).values()
+    new Map(rawList.map((b) => [b.id, b])).values()
   );
 
 
@@ -349,6 +350,14 @@ export default function AiHubView({
                 >
                   {msg.role === "assistant" ? (
                     <div>
+                      {/* Live Progress Badge khi đang chạy tác vụ phức tạp */}
+                      {msg.activeStepName && (!msg.content || isAiLoading) && (
+                        <div className="flex items-center gap-2 text-xs font-bold text-[#1c648e] bg-[#e0f2fe]/80 border border-[#1c648e]/20 px-3 py-2 rounded-2xl animate-pulse mb-2 shadow-2xs">
+                          <Loader2 className="w-4 h-4 animate-spin text-[#1c648e]" />
+                          <span>{msg.activeStepName}</span>
+                        </div>
+                      )}
+
                       <div className="prose prose-sm max-w-none text-slate-700 leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-1 [&_strong]:font-semibold [&_strong]:text-slate-900 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-slate-800 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {msg.content}
@@ -356,20 +365,21 @@ export default function AiHubView({
                       </div>
 
                       {/* Mục "Đã làm gì" (Tool Steps Timeline Accordion) */}
-                      {msg.tool_steps && msg.tool_steps.length > 0 && (
+                      {((msg.toolSteps && msg.toolSteps.length > 0) || (msg.tool_steps && msg.tool_steps.length > 0)) && (
                         <div className="mt-3 pt-2.5 border-t border-slate-100/80">
                           <button
                             onClick={() => toggleToolTimeline(msg.id)}
                             className="flex items-center gap-1.5 text-[11px] font-bold text-[#1c648e] hover:text-[#154c6d] bg-[#e0f2fe]/70 hover:bg-[#e0f2fe] px-3 py-1.5 rounded-xl transition-all cursor-pointer select-none shadow-2xs"
                           >
                             <Wrench className="w-3.5 h-3.5" />
-                            <span>Đã làm gì ({msg.tool_steps.length} bước)</span>
+                            <span>Đã làm gì ({(msg.toolSteps || msg.tool_steps || []).length} bước)</span>
                             {openToolTimelines[msg.id] ? (
                               <ChevronDown className="w-3.5 h-3.5 ml-0.5" />
                             ) : (
                               <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
                             )}
                           </button>
+
 
                           <AnimatePresence>
                             {openToolTimelines[msg.id] && (
@@ -387,7 +397,7 @@ export default function AiHubView({
                                   <span className="text-[9px] text-slate-400 font-semibold">Chỉ hiển thị các lượt gọi tool thực tế</span>
                                 </div>
 
-                                {msg.tool_steps.map((step: ToolStep, idx: number) => (
+                                {(msg.toolSteps || msg.tool_steps || []).map((step: ToolStep, idx: number) => (
                                   <div key={step.id || idx} className="bg-white p-3 rounded-xl border border-slate-200/70 shadow-2xs space-y-1.5">
                                     <div className="flex items-center justify-between font-bold">
                                       <div className="flex items-center gap-1.5 text-slate-800">

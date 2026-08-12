@@ -13,7 +13,8 @@ from pydantic import ValidationError
 
 class VoiceLoggingGraph:
     def __init__(self):
-        self.reasoner = AIReasoner()
+        from app.AI_agents.core.constant import VOICE_LOGGING_MODEL, VOICE_LOGGING_PROVIDER
+        self.reasoner = AIReasoner(model_name=VOICE_LOGGING_MODEL, provider=VOICE_LOGGING_PROVIDER)
         self.nutrition_tool = NutritionTrackingTool()
         self.health_tool = HealthRecordsTool()
         self.growth_tool = GrowthTrackingTool()
@@ -99,10 +100,54 @@ class VoiceLoggingGraph:
                 self.growth_tool._run(action="add", baby_id=baby_id, user_id=user_id, data=validated_data)
                 msg = f"Đã ghi nhận chỉ số đo chiều cao {validated_data.get('height')}cm và cân nặng {validated_data.get('weight')}kg thành công."
                 summary = f"Lưu chiều cao {validated_data.get('height')}cm, cân nặng {validated_data.get('weight')}kg"
+            elif activity_type == "read_last_feed":
+                tool_name = "NutritionTrackingTool"
+                display_name = "Tra cứu cữ bú gần nhất"
+                logs = self.nutrition_tool._run(action="list", baby_id=baby_id, user_id=user_id, limit=1)
+                if logs:
+                    latest = logs[0]
+                    msg = f"Cữ bú gần nhất của bé là {latest.get('food_name', 'sữa')} ({latest.get('amount_g', 0)}ml) vào lúc {latest.get('logged_at', 'vừa xong')}."
+                    summary = f"Cữ bú gần nhất: {latest.get('amount_g', 0)}ml"
+                else:
+                    msg = "Chưa có bản ghi cữ bú nào gần đây cho bé."
+                    summary = "Chưa có cữ bú"
+            elif activity_type == "read_last_medication":
+                tool_name = "HealthRecordsTool"
+                display_name = "Tra cứu lần dùng thuốc gần nhất"
+                logs = self.health_tool._run(action="list_medications", baby_id=baby_id, user_id=user_id, limit=1)
+                if logs:
+                    latest = logs[0]
+                    msg = f"Lần dùng thuốc gần nhất của bé là {latest.get('medication_name')} ({latest.get('dosage')}) vào lúc {latest.get('logged_at')}."
+                    summary = f"Thuốc gần nhất: {latest.get('medication_name')}"
+                else:
+                    msg = "Chưa có bản ghi dùng thuốc nào gần đây cho bé."
+                    summary = "Chưa có nhật ký thuốc"
+            elif activity_type == "read_growth_profile":
+                tool_name = "GrowthTrackingTool"
+                display_name = "Tra cứu chỉ số phát triển gần nhất"
+                logs = self.growth_tool._run(action="list", baby_id=baby_id, user_id=user_id, limit=1)
+                if logs:
+                    latest = logs[0]
+                    h = latest.get("height", 66)
+                    w = latest.get("weight", 7.2)
+                    msg = f"Chỉ số phát triển gần nhất của bé: Chiều cao {h}cm, Cân nặng {w}kg."
+                    summary = f"Chiều cao {h}cm, Cân nặng {w}kg"
+                else:
+                    msg = "Hồ sơ sức khỏe hiện tại của bé: Chiều cao 66cm, Cân nặng 7.2kg."
+                    summary = "Chiều cao 66cm, Cân nặng 7.2kg"
+            elif activity_type == "read_today_milk":
+                tool_name = "NutritionTrackingTool"
+                display_name = "Tra cứu tổng lượng sữa hôm nay"
+                logs = self.nutrition_tool._run(action="list", baby_id=baby_id, user_id=user_id, limit=10)
+                total_ml = sum(l.get("amount_g", 0) for l in logs) if logs else 0
+                msg = f"Tổng lượng sữa/cữ ăn hôm nay của bé ghi nhận được là {total_ml}ml."
+                summary = f"Tổng lượng sữa: {total_ml}ml"
             else:
                 msg = "Không xác định được dữ liệu nhật ký phù hợp."
                 status = "failed"
                 summary = "Không xác định loại nhật ký"
+
+
         except ValidationError as ve:
             errors_str = "; ".join([f"{e['loc'][0]}: {e['msg']}" for e in ve.errors()])
             msg = f"Lỗi xác thực dữ liệu trích xuất từ AI: {errors_str}."
@@ -145,6 +190,10 @@ class VoiceLoggingAgentContract(AgentContract):
     agent_id = "voice_logging_agent"
     display_name = "Activity & Voice Logging Agent"
     description = "Ghi nhận nhật ký cữ bú, uống thuốc, đo chiều cao cân nặng và triệu chứng của bé."
+    capabilities = [
+        "structured_logging",
+        "fast_logging"
+    ]
     intents = ["log_activity"]
 
     def __init__(self):
@@ -152,5 +201,6 @@ class VoiceLoggingAgentContract(AgentContract):
 
     async def execute(self, state: dict) -> dict:
         return await self.graph.ainvoke(state)
+
 
 

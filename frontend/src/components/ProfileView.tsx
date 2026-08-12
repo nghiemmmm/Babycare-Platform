@@ -400,6 +400,44 @@ export default function ProfileView({
                 </div>
               </div>
 
+              {/* ⚙️ APP CUSTOMIZATION & MODULE PREFERENCES CARD */}
+              <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-white/20 pb-2">
+                  <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
+                    <Shield className="w-4.5 h-4.5 text-primary" />
+                    Cấu Hình Mô-đun Theo Dõi
+                  </h3>
+                  <span className="px-2 py-0.5 bg-sky-50 text-[#1c648e] rounded-md text-[9px] font-bold">
+                    Cài đặt ứng dụng
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-500 font-medium">
+                  Bố mẹ có thể cho phép AI tự động tùy biến theo độ tuổi bé hoặc chủ động bật/tắt các mô-đun theo dõi theo thói quen gia đình:
+                </p>
+
+                <div className="space-y-3 pt-1">
+                  {[
+                    { title: "🤖 AI Adaptive Autopilot", desc: "Tự động điều chỉnh giao diện theo tuổi và sức khỏe của bé", defaultOn: true },
+                    { title: "🍼 Theo Dõi Cữ Bú & Ăn Dặm", desc: "Hiển thị đếm cữ bú, lượng sữa và tiến độ ăn dặm", defaultOn: true },
+                    { title: "💤 Theo Dõi Giấc Ngủ", desc: "Bật đồng hồ Nap Timer và đếm tổng giờ ngủ", defaultOn: true },
+                    { title: "💊 Theo Dõi Thuốc Uống & An Toàn", desc: "Đếm ngược khoảng cách 4-6 tiếng khi bé sốt", defaultOn: true },
+                    { title: "📈 Theo Dõi Tăng Trưởng WHO", desc: "So sánh bách phân vị chiều cao & cân nặng", defaultOn: true }
+                  ].map((setting, idx) => (
+                    <div key={idx} className="p-3 bg-white/40 border border-white/20 rounded-2xl flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-800">{setting.title}</h4>
+                        <p className="text-[10px] text-slate-400 font-medium">{setting.desc}</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" defaultChecked={setting.defaultOn} className="sr-only peer" />
+                        <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1c648e]"></div>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
             </div>
 
           </motion.div>

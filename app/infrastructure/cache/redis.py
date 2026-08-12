@@ -87,3 +87,33 @@ def delete(key: str) -> None:
         client.delete(key)
     except Exception as e:
         logger.warning(f"Lỗi xóa cache Redis cho key '{key}': {e}")
+
+
+def invalidate_baby_cache(baby_id: str, user_id: Optional[str] = None) -> None:
+    """
+    Xóa toàn bộ các Redis cache keys liên quan đến em bé khi có dữ liệu mới phát sinh
+    (Dashboard, cữ bú, uống thuốc, chỉ số tăng trưởng, thông báo).
+    """
+    client = _get_client()
+    if client is None or not baby_id:
+        return
+    try:
+        keys_to_delete = [
+            f"baby_profile:{baby_id}",
+            f"growth_history:{baby_id}",
+            f"dashboard:{baby_id}",
+            f"dashboard_summary:{baby_id}",
+            f"feeds:{baby_id}",
+            f"medications:{baby_id}",
+            f"growth:{baby_id}",
+            f"notifications:{baby_id}"
+        ]
+        if user_id:
+            keys_to_delete.append(f"chat_messages:*:{user_id}")
+        
+        for k in keys_to_delete:
+            client.delete(k)
+        logger.info(f"[Redis Cache] Đã xóa cache rác cho baby_id '{baby_id}'.")
+    except Exception as e:
+        logger.warning(f"Lỗi khi xóa baby cache cho '{baby_id}': {e}")
+

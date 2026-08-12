@@ -5,7 +5,8 @@ class CryAnalysisTool(BaseTool):
     name = "cry_analysis_tool"
     description = "Analyze cry patterns and retrieve recommendations or soothing sound instructions."
 
-    def _run(self, baby_id: str, audio_file: str, user_id: str):
+    def _run(self, baby_id: str, audio_file: str, user_id: str = None, **kwargs):
+
         classifier = CryClassifier()
         prediction, confidence, reason_scores = classifier.predict(audio_file)
         sound = classifier.get_soothing_sound(prediction)

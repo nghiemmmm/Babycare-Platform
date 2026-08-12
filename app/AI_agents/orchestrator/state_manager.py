@@ -165,7 +165,8 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
             )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        return self.get_tuple(config)
+        from app.shared.concurrency import run_in_threadpool
+        return await run_in_threadpool(self.get_tuple, config)
 
     async def aput(
         self,
@@ -174,7 +175,9 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        return self.put(config, checkpoint, metadata, new_versions)
+        from app.shared.concurrency import run_in_threadpool
+        return await run_in_threadpool(self.put, config, checkpoint, metadata, new_versions)
+
 
     def put_writes(
         self,

@@ -10,6 +10,13 @@
 
 **BabyCare AI** là nền tảng chăm sóc trẻ sơ sinh toàn diện, kết hợp trí tuệ nhân tạo (AI), đồ thị tác tử đa tác nhân (Multi-Agent LangGraph) và mô hình phân loại tiếng khóc sâu (PyTorch AST) giúp cha mẹ chăm sóc bé thông minh hơn, chính xác hơn.
 
+<p align="center">
+  <img src="img/dangnhap.jpg" width="48%" alt="Màn Hình Đăng Nhập BabyCare AI" />
+  <img src="img/dangky2.jpg" width="48%" alt="Màn Hình Đăng Ký BabyCare AI" />
+  <br>
+  <em>Giao diện Đăng nhập & Đăng ký tài khoản dành cho Phụ huynh</em>
+</p>
+
 ---
 
 ## ✨ Tính Năng Nổi Bật
@@ -27,9 +34,33 @@
 | 👨‍👩‍👧 **Đồng Bộ Gia Đình** | Mời và phân quyền chia sẻ dữ liệu bé giữa cha, mẹ và người giám hộ |
 | ⏱️ **Bấm Giờ Giấc Ngủ** | Đo lường và lưu trữ nhật ký giấc ngủ tự động |
 
+### 🎨 Giao Diện Ứng Dụng (Application UI Showcase)
+
+<p align="center">
+  <img src="img/tongquan1.jpg" width="100%" alt="Giao diện Trang Tổng Quan - Sinh hiệu Real-time & Phân Tích Tiếng Khóc AI" />
+  <br>
+  <em>Giao diện Dashboard: Các thẻ sinh hiệu thời gian thực & Khối AI phân tích tiếng khóc nhi khoa</em>
+</p>
+
+<br>
+
+<p align="center">
+  <img src="img/tomgquan2.jpg" width="100%" alt="Giao diện Trang Tổng Quan - Biểu Đồ WHO & AI Insights" />
+  <br>
+  <em>Giao diện Dashboard: Tiến trình đường cong tăng trưởng chuẩn WHO & Đánh giá AI Insights</em>
+</p>
+
 ---
 
 ## 🏗️ Kiến Trúc Hệ Thống
+
+<p align="center">
+  <img src="img/system-architecture (2).png" width="100%" alt="Sơ Đồ Kiến Trúc Hệ Thống BabyCare AI Platform" />
+  <br>
+  <em>Sơ đồ Kiến trúc Tổng thể Hệ thống BabyCare AI Platform (Frontend React, Backend FastAPI, LangGraph & PyTorch AST)</em>
+</p>
+
+<br>
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -212,15 +243,37 @@ npm run dev
 
 ---
 
-## 🧪 Kiểm Thử Tự Động
+## 🧪 Kiểm Thử Tự Động & Đánh Giá AI (Evaluation Benchmark)
+
+### 1. Unit Tests Hệ Thống
 
 ```bash
 # Chạy toàn bộ 21 unit test tự động (AI Core, Memory, Tools)
 .\venv\Scripts\python.exe -m pytest tests/unit/test_ai_core.py -v
 
-# Kết quả kỳ vọng:
-# 21 passed, 27 warnings
+# Kết quả: 21 passed (100% thành công)
 ```
+
+### 2. Chỉ Số Đánh Giá Bộ Truy Xuất RAG Y Khoa (MedicalRetriever Evaluation)
+
+Báo cáo kiểm định chất lượng tự động của **MedicalRetriever (FAISS + BAAI/bge-m3)** trên tập dữ liệu chuẩn Golden Dataset (`tests/evaluation/local_retriever_report.md`):
+
+| Chỉ số Đánh Giá | Giá trị Trung bình | Mô tả Chi tiết |
+| :--- | :---: | :--- |
+| 🎯 **Mean Hit@3** | **`1.00` (100%)** | Tỷ lệ tìm thấy tài liệu y tế chuẩn trong Top 3 kết quả |
+| 🎯 **Mean Hit@5** | **`1.00` (100%)** | Tỷ lệ tìm thấy tài liệu y tế chuẩn trong Top 5 kết quả |
+| 🏆 **MRR (Mean Reciprocal Rank)** | **`0.92` (92%)** | Thứ hạng vị trí đúng trung bình trong kết quả tìm kiếm |
+| 🥇 **Mean Hit@1** | **`0.83` (83%)** | Tỷ lệ tìm thấy đúng ngay vị trí đầu tiên (#1) |
+
+#### 📝 Kết Quả Kiểm Thử Thực Tế Theo Các Kịch Bản Nhi Khoa Tiêu Biểu
+
+| STT | Kịch Bản Y Tế Phụ Huynh Hỏi | Từ Khóa Y Khoa Mong Đợi | Hit@1 | Hit@3 | Hit@5 | MRR |
+| :---: | :--- | :--- | :---: | :---: | :---: | :---: |
+| 1 | *Lời khuyên rèn bé sơ sinh tự ngủ* | `['quấy khóc', 'tự ngủ', 'buồn ngủ']` | **1.00** | **1.00** | **1.00** | **1.00** |
+| 2 | *Bé mấy tháng tuổi tập ngồi được* | `['phát triển', 'tháng', 'tập ngồi']` | **1.00** | **1.00** | **1.00** | **1.00** |
+| 3 | *Bé sốt nóng đầu 38.8 độ C làm sao* | `['sốt', 'Hapacol', 'nhiệt độ', 'Paracetamol']` | **1.00** | **1.00** | **1.00** | **1.00** |
+| 4 | *Uống Hapacol 150mg 8h, 11h sốt lại có uống tiếp được không* | `['Hapacol', 'Paracetamol', 'liều', 'tiếng']` | **1.00** | **1.00** | **1.00** | **1.00** |
+| 5 | *Thực đơn ăn dặm tuần đầu tiên* | `['ăn dặm', 'cháo rây', 'thực đơn', 'nhóm']` | **1.00** | **1.00** | **1.00** | **1.00** |
 
 ---
 
@@ -245,6 +298,14 @@ npm run dev
 ---
 
 ## 🤖 Kiến Trúc AI Agent — Phân Tích Chi Tiết (LangGraph)
+
+<p align="center">
+  <img src="img/multi-agent-system-architecture.png" width="100%" alt="Sơ Đồ Kiến Trúc Multi-Agent LangGraph" />
+  <br>
+  <em>Sơ đồ Đồ Thị Tác Nhân Đa Agent Multi-Agent LangGraph Orchestrator & Các Subgraph Chuyên Biệt</em>
+</p>
+
+<br>
 
 ### Orchestrator — Điều Phối Trung Tâm
 
@@ -339,6 +400,14 @@ Hệ thống RAG (Retrieval-Augmented Generation) gồm **2 giai đoạn chính*
 
 #### 📥 Giai Đoạn 1: Ingestion — Xây Dựng Cơ Sở Tri Thức
 
+<p align="center">
+  <img src="img/ingestion.png" width="100%" alt="Sơ Đồ Giai Đoạn 1 - RAG Ingestion Pipeline" />
+  <br>
+  <em>Sơ đồ Quy trình Nạp & Xây dựng Chỉ mục Tri thức (Ingestion Pipeline)</em>
+</p>
+
+<br>
+
 ```
 Tài liệu nguồn (PDF, JSONL, MD, TXT)
          │
@@ -385,6 +454,14 @@ Tài liệu nguồn (PDF, JSONL, MD, TXT)
 ---
 
 #### 🔍 Giai Đoạn 2: Retrieval — Truy Xuất Khi Có Câu Hỏi
+
+<p align="center">
+  <img src="img/retrival.png" width="100%" alt="Sơ Đồ Giai Đoạn 2 - RAG Hybrid Retrieval & Reranking Pipeline" />
+  <br>
+  <em>Sơ đồ Quy trình Truy xuất Hybrid Search (Dense + Sparse) & Re-ranking (Retrieval Pipeline)</em>
+</p>
+
+<br>
 
 ```
 Câu hỏi người dùng

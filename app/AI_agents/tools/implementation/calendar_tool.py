@@ -4,7 +4,8 @@ class VaccinationCalendarTool(BaseTool):
     name = "vaccination_calendar_tool"
     description = "Retrieve the baby's recommended vaccination and medical checkup schedule."
 
-    def _run(self, baby_birth_date: str):
+    def _run(self, baby_birth_date: str = None, **kwargs):
+
         return [
             {"milestone": "2 tháng tuổi", "vaccines": ["6 trong 1 (Lần 1)", "Phế cầu (Lần 1)", "Bại liệt (Lần 1)"]},
             {"milestone": "3 tháng tuổi", "vaccines": ["6 trong 1 (Lần 2)", "Phế cầu (Lần 2)", "Bại liệt (Lần 2)"]},

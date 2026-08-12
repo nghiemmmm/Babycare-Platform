@@ -1,15 +1,36 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from typing import Optional, List, Any
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.schemas import UserRecord
 from app.AI_agents.orchestrator.agent_orchestrator import AgentOrchestrator
+from app.AI_agents.core.response_formatter import ResponseFormatter
 from google.cloud.firestore import FieldFilter
 from app.infrastructure.database import get_firestore_db
 from app.modules.baby.service import BabyService
 from datetime import datetime, timezone, timedelta
 from app.shared.concurrency import run_in_threadpool
+from app.shared.jobs import JobManager, JobStatus
+from app.shared.schemas import AsyncJobCreatedResponse
+import logging
 import uuid
 import os
+import asyncio
+
+logger = logging.getLogger(__name__)
+
+
+
+
+def get_orchestrator(request: Request) -> AgentOrchestrator:
+    """
+    Lấy AgentOrchestrator singleton từ app.state.
+    Fallback: tạo mới nếu chưa được khởi tạo trong lifespan (dev / testing).
+    """
+    orchestrator = getattr(request.app.state, "orchestrator", None)
+    if orchestrator is None:
+        orchestrator = AgentOrchestrator()
+    return orchestrator
 
 from app.modules.ai_agent.schemas import (
     ChatRequest,
@@ -19,6 +40,7 @@ from app.modules.ai_agent.schemas import (
     MessageCreateRequest,
     Citation,
     ExtractedLog,
+    ToolStep,
     MessageResponseDetails,
     MessageCreateResponse,
     SleepTimerRequest,
@@ -34,9 +56,10 @@ baby_service = BabyService()
 @ai_agent_router.post("/chat", response_model=ChatResponse)
 async def chat_with_agent(
     req: ChatRequest,
+    request: Request,
     current_user: UserRecord = Depends(get_current_user)
 ):
-    orchestrator = AgentOrchestrator()
+    orchestrator = get_orchestrator(request)
     result = await orchestrator.run_agent(
         message=req.message,
         thread_id=req.thread_id,
@@ -120,6 +143,7 @@ from app.infrastructure.cache import redis as cache_redis
 @ai_agent_router.get("/threads/{thread_id}/messages", response_model=List[ChatMessageResponse])
 async def get_thread_messages(
     thread_id: str,
+    request: Request,
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
@@ -162,7 +186,7 @@ async def get_thread_messages(
     # 3. Fallback: Đọc từ LangGraph Firestore Checkpointer
     messages = []
     try:
-        orchestrator = AgentOrchestrator()
+        orchestrator = get_orchestrator(request)
         state_dict = await orchestrator.get_state(thread_id, current_user.uid)
         messages = state_dict.get("values", {}).get("messages", [])
     except Exception as e:
@@ -198,12 +222,19 @@ async def get_thread_messages(
 async def create_thread_message(
     thread_id: str,
     req: MessageCreateRequest,
+    request: Request,
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
     Gửi tin nhắn vào phiên chat hiện tại và nhận phản hồi từ AI Agent cùng kết quả trích xuất nhật ký.
+    Sử dụng ResponseFormatter để chuẩn hóa câu trả lời, bóc tách Citations thật và kiểm tra Grounding/Cache.
     """
-    # 1. Tìm hoặc gán mặc định active baby
+    # 1. Kiểm tra Cache Policy cho các câu hỏi tra cứu chung
+    cached_response = await ResponseFormatter.get_cached_response(req.content)
+    if cached_response:
+        return MessageCreateResponse(**cached_response)
+
+    # 2. Tìm hoặc gán mặc định active baby
     db = get_firestore_db()
     baby_id = req.baby_id
     if not baby_id:
@@ -212,8 +243,8 @@ async def create_thread_message(
             active_b = next((b for b in babies if b.is_active), babies[0])
             baby_id = active_b.id
         
-    # 2. Gọi AgentOrchestrator chạy LangGraph
-    orchestrator = AgentOrchestrator()
+    # 3. Gọi AgentOrchestrator chạy LangGraph
+    orchestrator = get_orchestrator(request)
     result = await orchestrator.run_agent(
         message=req.content,
         thread_id=thread_id,
@@ -221,20 +252,28 @@ async def create_thread_message(
         user_id=current_user.uid
     )
     
-    last_msg_obj = result["messages"][-1] if result.get("messages") else "Tôi đã ghi nhận thông tin đó!"
-    last_message = last_msg_obj.content if hasattr(last_msg_obj, "content") else str(last_msg_obj)
+    last_message = result["messages"][-1].content
     next_step = result.get("next_step")
     extracted_data = result.get("extracted_data")
     raw_tool_steps = result.get("tool_steps", [])
-    tool_steps_models = [ToolStep(**ts) if isinstance(ts, dict) else ts for ts in raw_tool_steps]
-    tool_steps_dicts = [m.model_dump() for m in tool_steps_models]
+    rag_context = result.get("rag_context")
     
-    # 3. Lưu bản ghi tin nhắn Human & AI vào Firestore subcollection
+    # 4. Sử dụng ResponseFormatter chuẩn hóa response & citations
+    formatted_response = ResponseFormatter.format_unified_response(
+        raw_message=last_message,
+        rag_context=rag_context,
+        extracted_data=extracted_data,
+        next_step=next_step,
+        raw_tool_steps=raw_tool_steps
+    )
+    
+    # 5. Lưu bản ghi tin nhắn Human & AI vào Firestore subcollection
     now_iso = datetime.now(timezone.utc).isoformat()
     msgs_col = db.collection("chat_threads").document(thread_id).collection("messages")
     user_msg_id = f"msg_{uuid.uuid4().hex[:8]}"
     ai_msg_id = f"msg_{uuid.uuid4().hex[:8]}"
     
+    tool_steps_dicts = [m.model_dump() for m in formatted_response.tool_steps]
     msgs_col.document(user_msg_id).set({
         "role": "user",
         "content": req.content,
@@ -242,16 +281,16 @@ async def create_thread_message(
     })
     msgs_col.document(ai_msg_id).set({
         "role": "assistant",
-        "content": last_message,
+        "content": formatted_response.ai_response.content,
         "timestamp": now_iso,
         "tool_steps": tool_steps_dicts
     })
 
-    # Xóa cache Redis của thread_id để lượt GET tiếp theo tự làm mới tin nhắn mới
-    cache_key = f"chat_messages:{thread_id}:{current_user.uid}"
-    await run_in_threadpool(cache_redis.delete, cache_key)
+    # Xóa toàn bộ Redis cache rác của em bé (Dashboard, cữ bú, thuốc, chỉ số) để các tab khác tự làm mới
+    await run_in_threadpool(cache_redis.invalidate_baby_cache, baby_id, current_user.uid)
+
     
-    # 4. Cập nhật thời gian hoạt động và tiêu đề của thread
+    # 6. Cập nhật thời gian hoạt động và tiêu đề của thread
     thread_ref = db.collection("chat_threads").document(thread_id)
     if thread_ref.get().exists:
         update_fields = {"last_updated": now_iso}
@@ -266,56 +305,131 @@ async def create_thread_message(
             "last_updated": now_iso,
             "created_at": now_iso
         })
-        
-    # 5. Trích xuất nhật ký thực tế nếu LangGraph nhận dạng được
-    extracted_logs = []
-    if extracted_data and next_step in ["feeding", "medication", "symptom", "growth"]:
-        time_str = datetime.now(timezone.utc).strftime("%I:%M %p")
-        if next_step == "feeding":
-            food = extracted_data.get("food_name", "Formula")
-            amount = extracted_data.get("amount_g", 150)
-            extracted_logs.append(ExtractedLog(
-                type="feeding",
-                title="Feeding Log",
-                detail=f"{amount}ml {food}",
-                value=f"{amount}ml",
-                time=time_str
-            ))
-        elif next_step == "medication":
-            med = extracted_data.get("medication_name", "Paracetamol")
-            dose = extracted_data.get("dosage", "150mg")
-            extracted_logs.append(ExtractedLog(
-                type="medication",
-                title="Medication Log",
-                detail=f"{med} {dose}",
-                value=dose,
-                time=time_str
-            ))
-        elif next_step == "growth":
-            h = extracted_data.get("height", 65)
-            w = extracted_data.get("weight", 7.0)
-            extracted_logs.append(ExtractedLog(
-                type="growth",
-                title="Growth Log",
-                detail=f"Height: {h}cm, Weight: {w}kg",
-                value=f"{h}cm",
-                time=time_str
-            ))
-            
-    # Default citations
-    citations = [
-        Citation(title="WHO Infant Nutrition Guidelines", uri="https://who.int/nutrition"),
-        Citation(title="AAP Guidelines on Pediatric Antipyretics", uri="https://publications.aap.org")
-    ]
+
+    # 7. Lưu cache nếu câu hỏi là tra cứu chung (Cache Policy)
+    await ResponseFormatter.set_cached_response(req.content, formatted_response.model_dump())
     
-    return MessageCreateResponse(
-        ai_response=MessageResponseDetails(
-            content=last_message,
-            citations=citations
-        ),
-        extracted_logs=extracted_logs,
-        tool_steps=tool_steps_models
+    return formatted_response
+
+
+@ai_agent_router.post("/threads/{thread_id}/stream")
+async def stream_thread_message(
+    thread_id: str,
+    req: MessageCreateRequest,
+    request: Request,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Endpoint trả dữ liệu phản hồi dạng W3C SSE Streaming liên tục (text/event-stream).
+    Hỗ trợ Idempotency-Key, Run ID, Token delta streaming và disconnect detection.
+    """
+    idempotency_key = request.headers.get("Idempotency-Key") or request.headers.get("X-Request-ID")
+    if idempotency_key:
+        cache_key = f"idempotency_stream:{thread_id}:{idempotency_key}"
+        if cache_redis.get_json(cache_key):
+            logger.info(f"[StreamRoute] Idempotency hit cho key {idempotency_key} - Bỏ qua duplicate execution.")
+
+    db = get_firestore_db()
+    baby_id = req.baby_id
+    if not baby_id:
+        from app.shared.concurrency import run_in_threadpool
+        babies = await run_in_threadpool(baby_service.get_my_babies, current_user.uid)
+        if babies:
+            active_b = next((b for b in babies if b.is_active), babies[0])
+            baby_id = active_b.id
+
+    orchestrator = get_orchestrator(request)
+
+    async def generate_sse():
+        from app.shared.context import get_current_trace_id
+        trace_id = get_current_trace_id()
+        collected_tokens = []
+        final_tool_steps = []
+        is_completed = False
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        async for sse_chunk in orchestrator.stream_agent(
+            message=req.content,
+            thread_id=thread_id,
+            baby_id=baby_id,
+            user_id=current_user.uid
+        ):
+            if await request.is_disconnected():
+                wasted_text = "".join(collected_tokens)
+                wasted_tokens = int(len(wasted_text.split()) * 1.3)
+                wasted_cost_usd = round((wasted_tokens / 1_000_000.0) * 0.40, 7)
+                logger.warning(
+                    f"[{trace_id}] ⚠️ Client disconnected mid-stream for thread {thread_id}! "
+                    f"Wasted Tokens: {wasted_tokens} | Estimated Wasted Cost: ${wasted_cost_usd} USD"
+                )
+                break
+
+            yield sse_chunk
+
+            # Parse W3C SSE event data for history tracking
+            try:
+                lines = sse_chunk.split("\n")
+                event_name = ""
+                data_str = ""
+                for l in lines:
+                    if l.startswith("event: "):
+                        event_name = l.replace("event: ", "").strip()
+                    elif l.startswith("data: "):
+                        data_str = l.replace("data: ", "").strip()
+
+                if data_str:
+                    payload = json.loads(data_str) if data_str.startswith("{") else data_str
+                    if isinstance(payload, dict):
+                        if event_name == "response.token" or payload.get("delta"):
+                            collected_tokens.append(payload.get("delta", ""))
+                        elif event_name == "response.completed" or payload.get("status") == "completed":
+                            is_completed = True
+                            if payload.get("tool_steps"):
+                                final_tool_steps = payload.get("tool_steps", [])
+            except Exception:
+                pass
+
+        full_ai_content = "".join(collected_tokens).strip() or "Tôi đã ghi nhận thông tin từ mẹ."
+        stream_status = "completed" if is_completed else "interrupted"
+
+        async def _save_chat_history_background():
+            try:
+                from app.shared.concurrency import run_in_threadpool
+                def _sync_save():
+                    msgs_col = db.collection("chat_threads").document(thread_id).collection("messages")
+                    user_msg_id = f"msg_{uuid.uuid4().hex[:8]}"
+                    ai_msg_id = f"msg_{uuid.uuid4().hex[:8]}"
+
+                    msgs_col.document(user_msg_id).set({
+                        "role": "user",
+                        "content": req.content,
+                        "timestamp": now_iso
+                    })
+                    msgs_col.document(ai_msg_id).set({
+                        "role": "assistant",
+                        "content": full_ai_content,
+                        "status": stream_status,
+                        "timestamp": now_iso,
+                        "tool_steps": final_tool_steps
+                    })
+                await run_in_threadpool(_sync_save)
+
+                if baby_id:
+                    await run_in_threadpool(cache_redis.invalidate_baby_cache, baby_id, current_user.uid)
+
+                if idempotency_key:
+                    cache_redis.set_json(f"idempotency_stream:{thread_id}:{idempotency_key}", {"status": stream_status}, 300)
+            except Exception as ex:
+                logger.warning(f"[StreamRoute] Could not save thread history: {ex}")
+
+        asyncio.create_task(_save_chat_history_background())
+
+    return StreamingResponse(
+        generate_sse(),
+        media_type="text/event-stream"
     )
+
+
 
 @ai_agent_router.post("/sleep/timer", response_model=SleepTimerResponse)
 async def handle_sleep_timer(
@@ -416,6 +530,7 @@ async def delete_thread_messages(
 @ai_agent_router.post("/voice-extract", response_model=VoiceExtractResponse)
 async def extract_from_voice(
     req: VoiceExtractRequest,
+    request: Request,
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
@@ -488,7 +603,7 @@ async def extract_from_voice(
     # 2. LLM Fallback nếu chưa nhận diện được bằng Fast Parser
     if not extracted_data:
         try:
-            orchestrator = AgentOrchestrator()
+            orchestrator = get_orchestrator(request)
             temp_thread_id = f"voice_{uuid.uuid4().hex[:8]}"
             result = await asyncio.wait_for(
                 orchestrator.run_agent(
@@ -510,39 +625,59 @@ async def extract_from_voice(
         confidence_message="Bóc tách dữ liệu từ giọng nói thành công."
     )
 
-@ai_agent_router.post("/reports/generate")
+async def _bg_generate_baby_report(job_id: str, baby_id: str, user_id: str):
+    JobManager.update_job(job_id, JobStatus.PROCESSING, progress=20)
+    try:
+        from app.AI_agents.workflows.report_graph import ReportGraph, generate_pdf_report
+        graph = ReportGraph().compile()
+
+        initial_state = {
+            "messages": [],
+            "baby_id": baby_id,
+            "current_user_id": user_id,
+            "extracted_data": {}
+        }
+
+        res = await graph.ainvoke(initial_state)
+        JobManager.update_job(job_id, JobStatus.PROCESSING, progress=70)
+
+        extracted = res.get("extracted_data", {})
+        summary = extracted.get("report_text_summary", "Chưa có dữ liệu báo cáo.")
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        pdf_filename = f"report_{baby_id}_{timestamp}.pdf"
+        pdf_path = os.path.join("app", "static", "reports", pdf_filename)
+
+        os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
+        generate_pdf_report(pdf_path, "Báo Cáo Tăng Trưởng & Y Khoa Cho Bé", summary)
+
+        pdf_url = f"/static/reports/{pdf_filename}"
+        result_payload = {
+            "success": True,
+            "summary": summary,
+            "pdf_url": pdf_url,
+            "message": "Nhật ký theo dõi sức khỏe cho bé đã được xuất thành công."
+        }
+        JobManager.update_job(job_id, JobStatus.COMPLETED, progress=100, result=result_payload)
+    except Exception as e:
+        logger.error(f"Lỗi tạo báo cáo PDF y khoa trong background (Job {job_id}): {e}")
+        JobManager.update_job(job_id, JobStatus.FAILED, error=str(e))
+
+
+@ai_agent_router.post("/reports/generate", response_model=AsyncJobCreatedResponse, status_code=status.HTTP_202_ACCEPTED)
 async def generate_baby_report(
     baby_id: str,
+    background_tasks: BackgroundTasks,
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
-    Kích hoạt AI tổng hợp dữ liệu và xuất bản tệp PDF Báo cáo Tăng trưởng & Y khoa.
+    Kích hoạt AI tổng hợp dữ liệu và xuất bản tệp PDF Báo cáo Tăng trưởng & Y khoa dạng Async Background Job.
     """
-    from app.AI_agents.workflows.report_graph import ReportGraph, generate_pdf_report
-    graph = ReportGraph().compile()
-    
-    initial_state = {
-        "messages": [],
-        "baby_id": baby_id,
-        "current_user_id": current_user.uid,
-        "extracted_data": {}
-    }
-    
-    res = await graph.ainvoke(initial_state)
-    extracted = res.get("extracted_data", {})
-    summary = extracted.get("report_text_summary", "Chưa có dữ liệu báo cáo.")
-    
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    pdf_filename = f"report_{baby_id}_{timestamp}.pdf"
-    pdf_path = os.path.join("app", "static", "reports", pdf_filename)
-    
-    os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
-    generate_pdf_report(pdf_path, "Báo Cáo Tăng Trưởng & Y Khoa Cho Bé", summary)
-    
-    pdf_url = f"/static/reports/{pdf_filename}"
-    return {
-        "success": True,
-        "summary": summary,
-        "pdf_url": pdf_url,
-        "message": "Đã tạo báo cáo PDF thành công."
-    }
+    job_id = JobManager.create_job("report_generation", current_user.uid, {"baby_id": baby_id})
+    background_tasks.add_task(_bg_generate_baby_report, job_id, baby_id, current_user.uid)
+
+    return AsyncJobCreatedResponse(
+        job_id=job_id,
+        status="PENDING",
+        message="Nhắc nhở tổng hợp báo cáo sức khỏe cho bé đang được xử lý trong nền..."
+    )

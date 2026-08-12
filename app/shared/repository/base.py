@@ -1,5 +1,5 @@
 from typing import TypeVar, Generic, Optional, Any
-from google.cloud.firestore import Client
+from google.cloud.firestore import Client, Query
 from pydantic import BaseModel
 from app.infrastructure.database import get_firestore_db
 
@@ -77,14 +77,19 @@ class BaseRepository(Generic[ModelType]):
         doc_ref.delete()
         return True
 
-    def list(self, limit: int = 100) -> list[ModelType]:
+    def list(self, limit: int = 100, order_by: Optional[str] = None, descending: bool = True) -> list[ModelType]:
         """
-        Lấy danh sách các tài liệu trong collection kèm giới hạn số lượng.
+        Lấy danh sách các tài liệu trong collection kèm giới hạn số lượng và sắp xếp từ Firestore Server.
         """
-        docs = self.db.collection(self.collection_name).limit(limit).stream()
+        query = self.db.collection(self.collection_name)
+        if order_by:
+            direction = Query.DESCENDING if descending else Query.ASCENDING
+            query = query.order_by(order_by, direction=direction)
+        docs = query.limit(limit).stream()
         results = []
         for doc in docs:
             data = doc.to_dict()
             data["id"] = doc.id
             results.append(self.model_class(**data))
         return results
+

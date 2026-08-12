@@ -155,6 +155,17 @@ export interface Citation {
   uri: string;
 }
 
+export interface ToolStep {
+  id?: string;
+  tool_name: string;
+  display_name: string;
+  args?: any;
+  status: string;
+  result_summary?: string;
+  start_time?: string;
+  duration_ms?: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -162,6 +173,8 @@ export interface ChatMessage {
   timestamp: string;
   extraction?: SmartExtraction | null;
   citations?: Citation[];
+  toolSteps?: ToolStep[];
+  activeStepName?: string;
   isVoice?: boolean;
   voiceDuration?: string;
 }

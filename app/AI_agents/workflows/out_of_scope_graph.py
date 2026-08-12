@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import AIMessage
@@ -24,8 +25,9 @@ class OutOfScopeGraph:
     """
 
     def __init__(self):
+        from app.AI_agents.core.constant import OUT_OF_SCOPE_MODEL, OUT_OF_SCOPE_PROVIDER
         self.web_search_tool = WebSearchTool()
-        self.reasoner = AIReasoner(model_name="gemini-flash-latest")
+        self.reasoner = AIReasoner(model_name=OUT_OF_SCOPE_MODEL, provider=OUT_OF_SCOPE_PROVIDER)
 
     async def web_search_node(self, state: OverallState) -> dict:
         """
@@ -166,6 +168,10 @@ class OutOfScopeAgentContract(AgentContract):
     agent_id = "out_of_scope_agent"
     display_name = "Web Search & General Out-Of-Scope Agent"
     description = "Tìm kiếm thông tin tổng hợp trên mạng cho các câu hỏi nằm ngoài phạm vi nhi khoa."
+    capabilities = [
+        "out_of_scope_handling",
+        "web_search"
+    ]
     intents = ["out_of_scope"]
 
     def __init__(self, checkpointer=None):
@@ -173,3 +179,4 @@ class OutOfScopeAgentContract(AgentContract):
 
     async def execute(self, state: dict) -> dict:
         return await self.graph.ainvoke(state)
+

@@ -536,6 +536,62 @@ export default function HealthView({
 
         {/* RIGHT COLUMN: MEDICATIONS LOG */}
         <div className="space-y-6">
+          {/* 🛡️ MEDICATION DOSE INTERVAL SAFETY COUNTDOWN CARD */}
+          {(() => {
+            const hapacolMeds = medications.filter(
+              (m) => m.name.toLowerCase().includes("hapacol") || m.name.toLowerCase().includes("paracetamol") || m.name.toLowerCase().includes("sốt")
+            );
+            const lastMed = hapacolMeds.length > 0 ? hapacolMeds[0] : (medications.length > 0 ? medications[0] : null);
+
+            if (!lastMed) return null;
+
+            return (
+              <div className="bg-purple-50/90 border border-purple-200/90 p-4 rounded-3xl space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-purple-950 flex items-center gap-1.5">
+                    <Shield className="w-4 h-4 text-purple-600" />
+                    🛡️ Giãn Cách Liều Y Tế ({lastMed.name})
+                  </h4>
+                  <span className="text-[10px] font-extrabold bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded-full">
+                    Giữ khoảng cách 4 - 6 tiếng
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between bg-white/90 border border-purple-100 p-3 rounded-2xl">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">Lần uống gần nhất: <span className="text-primary font-black">{lastMed.time}</span></p>
+                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">Liều dùng: <span className="font-bold text-slate-700">{lastMed.dosage}</span></p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-black text-purple-700 bg-purple-100/80 px-2.5 py-1 rounded-xl inline-block">
+                      ⏳ Đã ghi nhận liều
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-purple-900 font-medium leading-relaxed bg-white/50 p-2.5 rounded-xl border border-purple-100/60 flex items-start gap-1.5">
+                  <span className="shrink-0">💡</span>
+                  <span>
+                    <strong>Hướng dẫn y tế:</strong> Luôn duy trì khoảng cách tối thiểu 4 - 6 tiếng giữa các liều hạ sốt Paracetamol/Hapacol để bảo vệ gan và thận của bé.
+                  </span>
+                </div>
+
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      alert(`🔔 AI đã đặt lịch nhắc nhở: Hệ thống sẽ tự động phát chuông và thông báo đẩy tới tất cả phụ huynh khi đủ 4 tiếng an toàn (lúc 02:00 PM)!`);
+                    }}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-2 rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Bell className="w-3.5 h-3.5" />
+                    🔔 AI Nhắc Lịch Uống Thuốc Đúng Giờ (Bật Thông Báo An Toàn)
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">

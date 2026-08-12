@@ -5,8 +5,8 @@ import json
 
 class TaskPlanner:
     def __init__(self):
-        # Giữ reasoner để tương thích nếu cần, nhưng định tuyến sẽ dùng API miễn phí Pollinations
-        self.reasoner = AIReasoner(model_name="gemini-flash-latest")
+        from app.AI_agents.core.constant import TASK_PLANNER_MODEL
+        self.reasoner = AIReasoner(model_name=TASK_PLANNER_MODEL)
 
     def _call_pollinations(self, prompt: str) -> str:
         import urllib.request

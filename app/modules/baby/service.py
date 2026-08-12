@@ -9,6 +9,8 @@ from typing import Optional
 from app.modules.baby.schemas import BabyCreate, BabyUpdate, BabyResponse
 from app.modules.baby.repository import BabyRepository
 from app.shared.exceptions import EntityNotFoundError, PermissionDeniedError
+from app.infrastructure.cache.redis import get_json, set_json, invalidate_baby_cache
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +59,16 @@ class BabyService:
             EntityNotFoundError: Nếu không tìm thấy bé.
             PermissionDeniedError: Nếu người dùng không có quyền giám hộ bé này.
         """
-        baby = self.repository.get(baby_id)
-        if not baby:
-            raise EntityNotFoundError("Không tìm thấy hồ sơ của bé")
-        
+        cache_key = f"baby_profile:{baby_id}"
+        cached_data = get_json(cache_key)
+        if cached_data:
+            baby = BabyResponse(**cached_data)
+        else:
+            baby = self.repository.get(baby_id)
+            if not baby:
+                raise EntityNotFoundError("Không tìm thấy hồ sơ của bé")
+            set_json(cache_key, baby.model_dump(), ttl_seconds=settings.BABY_CACHE_TTL_SECONDS)
+
         if user_id not in baby.guardians:
             import os
             app_env = os.getenv("APP_ENV", "local")
@@ -111,7 +119,8 @@ class BabyService:
         updated_baby = self.repository.update(baby_id, data)
         if not updated_baby:
             raise EntityNotFoundError("Cập nhật hồ sơ thất bại")
-            
+
+        invalidate_baby_cache(baby_id, user_id)
         return updated_baby
 
     def delete_baby(self, baby_id: str, user_id: str) -> bool:
@@ -127,4 +136,7 @@ class BabyService:
         """
         # Kiểm tra quyền trước khi xóa
         self.get_baby_by_id(baby_id, user_id)
-        return self.repository.delete(baby_id)
+        res = self.repository.delete(baby_id)
+        if res:
+            invalidate_baby_cache(baby_id, user_id)
+        return res

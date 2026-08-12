@@ -10,6 +10,7 @@ class KnowledgeRetrievalTool(BaseTool):
     name = "knowledge_retrieval_tool"
     description = "Query GraphRAG database for verified medical parenting guidelines."
 
-    def _run(self, query: str):
+    def _run(self, query: str, **kwargs):
         retriever = MedicalRetriever()
         return retriever.retrieve_context(query)
+

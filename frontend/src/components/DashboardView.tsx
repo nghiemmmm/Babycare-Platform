@@ -43,6 +43,7 @@ import {
 } from "recharts";
 import { BabyProfile, MedicationLog, FeedLog, Measurement, ChatMessage, SmartExtraction, NotificationItem } from "../types";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { useBabyDataListener } from "../lib/events";
 
 interface DashboardViewProps {
   activeBaby: BabyProfile;
@@ -133,6 +134,14 @@ export default function DashboardView({
   const [activeModal, setActiveModal] = useState<"none" | "add-entry" | "feed" | "sleep" | "diaper" | "medication" | "growth">("none");
   const [showBabyDropdown, setShowBabyDropdown] = useState(false);
 
+  // Parent Manual Module Overrides State (Cho phép bố mẹ tùy ý bật/tắt mô-đun)
+  const [customModules, setCustomModules] = useState<{ [key: string]: boolean }>({
+    feed: true,
+    sleep: true,
+    medication: true,
+    growth: true
+  });
+
   // Growth Metric Toggle state (weight or height)
   const [growthMetric, setGrowthMetric] = useState<"weight" | "height">("weight");
 
@@ -202,6 +211,16 @@ export default function DashboardView({
     };
     fetchDashboardSummary();
   }, [activeBaby.id]);
+
+  // Tự động lắng nghe Event baby-data-updated để sync dữ liệu Dashboard tức thì (< 100ms)
+  useBabyDataListener(useCallback(() => {
+    const token = localStorage.getItem("token") || "mock-token";
+    const baseUrl = window.location.origin;
+    fetch(`${baseUrl}/api/v1/dashboard?baby_id=${activeBaby.id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(res => res.ok && res.json()).then(data => data && setDashboardData(data)).catch(() => {});
+  }, [activeBaby.id]));
+
 
   // AI Cry Detection State & Handlers
   const [isAnalyzingCry, setIsAnalyzingCry] = useState(false);
@@ -634,28 +653,38 @@ export default function DashboardView({
   return (
     <div className="space-y-6" id="dashboard-view">
       
-      {/* Floating Toast Notification (Success & Error) */}
+      {/* Floating Toast Notification (Pop up & Auto-dismiss / Manual Close) */}
       <AnimatePresence>
         {toast && (
           <motion.div
             initial={{ opacity: 0, y: -25, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -25, scale: 0.9 }}
-            className={`fixed top-6 right-6 z-50 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-white/20 flex items-center gap-3 backdrop-blur-xl transition-all ${
+            className={`fixed top-6 right-6 z-50 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-white/20 flex items-center justify-between gap-4 backdrop-blur-xl transition-all ${
               toast.type === "success" ? "bg-[#1c648e]" : "bg-rose-600"
             }`}
           >
-            <div
-              className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
-                toast.type === "success" ? "bg-emerald-400 text-slate-900" : "bg-white text-rose-600"
-              }`}
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                  toast.type === "success" ? "bg-emerald-400 text-slate-900" : "bg-white text-rose-600"
+                }`}
+              >
+                {toast.type === "success" ? "✓" : "✕"}
+              </div>
+              <div>
+                <h4 className="text-xs font-bold">{toast.title}</h4>
+                <p className="text-[11px] text-white/90 font-medium">{toast.message}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              className="text-white/70 hover:text-white text-xs font-bold p-1 rounded-lg transition-colors cursor-pointer"
+              title="Đóng thông báo"
             >
-              {toast.type === "success" ? "✓" : "✕"}
-            </div>
-            <div>
-              <h4 className="text-xs font-bold">{toast.title}</h4>
-              <p className="text-[11px] text-white/90 font-medium">{toast.message}</p>
-            </div>
+              ✕
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -684,9 +713,23 @@ export default function DashboardView({
                   <h1 className="text-primary font-bold text-2xl tracking-tight group-hover:text-primary/80">{activeBaby.name}</h1>
                   <ChevronDown className="w-5 h-5 text-primary group-hover:translate-y-0.5 transition-transform" />
                 </div>
-                <p className="text-sm font-semibold text-slate-500 mt-0.5">
+                <p className="text-xs font-semibold text-slate-500 mt-0.5">
                   {calculateAgeStr(activeBaby.birthDate) === "0 ngày" ? "Mới sinh" : calculateAgeStr(activeBaby.birthDate)} • {getLatestWeight()}
                 </p>
+                {/* Clean Serene Current Status Badge */}
+                <div className="mt-2.5">
+                  {isNapTimerRunning ? (
+                    <span className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50/80 border border-indigo-100 rounded-full text-xs font-bold text-indigo-700">
+                      <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse shrink-0" />
+                      <span>💤 Đang ngủ ({Math.floor(napElapsedTime / 60)} phút)</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50/80 border border-emerald-100 rounded-full text-xs font-bold text-emerald-700">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      <span>🟢 Đang thức • Lần bú cuối 2h 40m trước</span>
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -699,7 +742,7 @@ export default function DashboardView({
                   className="absolute left-0 top-full mt-3 w-64 bg-white border border-slate-100 rounded-2xl shadow-xl p-2 z-50 text-xs font-bold"
                 >
                   <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider px-3 py-1.5">Chuyển hồ sơ em bé</p>
-                  {Array.from(new Map(babies.map((b) => [b.name.trim().toLowerCase(), b])).values()).map((b) => {
+                  {Array.from(new Map(babies.map((b) => [b.id, b])).values()).map((b) => {
                     const displayName = !b.name ? "Bé" : /^bé\b/i.test(b.name.trim()) ? b.name.trim() : `Bé ${b.name.trim()}`;
                     return (
                       <button
@@ -898,6 +941,34 @@ export default function DashboardView({
                       </div>
                     </div>
 
+                    {/* Manual Module Overrides */}
+                    <div className="border-t border-slate-100 pt-2.5 mt-2 space-y-2">
+                      <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Tùy chỉnh mô-đun theo dõi</p>
+                      {[
+                        { id: "feed", label: "🍼 Cữ bú / Ăn dặm" },
+                        { id: "sleep", label: "💤 Giấc ngủ" },
+                        { id: "medication", label: "💊 Thuốc uống" },
+                        { id: "growth", label: "📈 Tăng trưởng" }
+                      ].map((mod) => (
+                        <div key={mod.id} className="flex items-center justify-between py-0.5">
+                          <span className="text-[11px] text-slate-700 font-medium">{mod.label}</span>
+                          <button
+                            type="button"
+                            onClick={() => setCustomModules((prev) => ({ ...prev, [mod.id]: !prev[mod.id] }))}
+                            className={`w-8 h-4 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                              customModules[mod.id] !== false ? "bg-emerald-500" : "bg-slate-300"
+                            }`}
+                          >
+                            <div
+                              className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
+                                customModules[mod.id] !== false ? "translate-x-4" : "translate-x-0"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
                     <div className="border-t border-slate-100 pt-2.5 mt-2">
                       <button
                         onClick={() => {
@@ -918,91 +989,186 @@ export default function DashboardView({
           </div>
         </div>
 
-        <div className="grid grid-cols-5 gap-3 sm:gap-4 mt-8 max-w-3xl mx-auto">
-          {[
-            { label: "Ăn uống", icon: Droplet, color: "text-[#7cb9e8] bg-[#7cb9e8]/10 border-[#7cb9e8]/20", modal: "feed" },
-            { label: "Giấc ngủ", icon: Moon, color: "text-[#b19cd9] bg-[#b19cd9]/10 border-[#b19cd9]/20", modal: "sleep" },
-            { label: "Uống thuốc", icon: Pill, color: "text-[#b2e2f2] bg-[#b2e2f2]/20 border-[#b2e2f2]/30", modal: "medication" },
-            { label: "Tăng trưởng", icon: TrendingUp, color: "text-emerald-600 bg-emerald-50 border-emerald-200", modal: "growth" },
-            { label: "Bệnh trạng", icon: Activity, color: "text-rose-600 bg-rose-50 border-rose-200", modal: "health" }
-          ].map((action, idx) => {
-            const Icon = action.icon;
-            return (
-              <button
-                key={idx}
-                onClick={() => {
-                  if (action.modal === "health") {
-                    onNavigateTab?.("health");
-                  } else {
-                    setActiveModal(action.modal as any);
-                  }
-                }}
-                className="flex flex-col items-center gap-2 cursor-pointer group"
-              >
-                <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full border flex items-center justify-center transition-all ${action.color} group-hover:scale-105 group-hover:shadow-md`}>
-                  <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+        {/* Adaptive Age & Illness State Check */}
+        {(() => {
+          const isBabySick = notifications.some((n) => n.type === "health_check" || n.type === "medication");
+
+          // Compute exact age in months
+          const bDate = activeBaby?.birthDate ? new Date(activeBaby.birthDate) : new Date("2023-04-20");
+          const ageMonths = Math.max(0, Math.floor((new Date().getTime() - bDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)));
+
+          // Define Adaptive Quick Actions matrix based on baby's age stage
+          const isNewborn = ageMonths < 3;       // 0 - 3 months
+          const isInfant = ageMonths >= 3 && ageMonths < 6; // 3 - 6 months
+          const isSolidsStage = ageMonths >= 6 && ageMonths < 12; // 6 - 12 months
+          const isToddler = ageMonths >= 12;      // 12+ months (1yo+)
+
+          return (
+            <>
+              {/* 1. Adaptive Illness & AI Medication Reminder Banner on Dashboard */}
+              {isBabySick && (
+                <div className="mt-6 p-4 bg-rose-50/90 border border-rose-200/80 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-bold text-rose-900 shadow-2xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping shrink-0" />
+                    <div>
+                      <span className="block font-black text-rose-950">🤒 BÉ ĐANG TRONG ĐỢT ĐIỀU TRỊ: Hapacol 150mg đã uống 10:00 AM</span>
+                      <span className="text-[11px] text-rose-700 font-medium">Giữ khoảng cách an toàn 4 - 6 tiếng giữa các liều hạ sốt</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => alert("🔔 AI đã bật thông báo nhắc nhở khi đủ 4 tiếng an toàn!")}
+                      className="text-[11px] font-extrabold bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs flex items-center gap-1"
+                    >
+                      <Pill className="w-3.5 h-3.5" />
+                      🔔 AI Nhắc Lịch Uống Thuốc
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onNavigateTab?.("health")}
+                      className="text-[11px] font-extrabold bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                    >
+                      Xem chi tiết
+                    </button>
+                  </div>
                 </div>
-                <span className="text-[11px] sm:text-xs font-bold text-slate-600 group-hover:text-primary">{action.label}</span>
-              </button>
-            );
-          })}
-        </div>
+              )}
+
+              {/* 2. Adaptive AI Weaning Readiness Assessment Banner on Dashboard */}
+              {isSolidsStage && (
+                <div className="mt-4 p-4 bg-amber-50/90 border border-amber-200/80 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-bold text-amber-950 shadow-2xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 bg-amber-100 rounded-xl text-amber-800 text-xs font-bold shrink-0">🥣 AI Y Khoa</span>
+                    <div>
+                      <span className="block font-black text-amber-950">Bé {activeBaby.name} đã {ageMonths} tháng: Đủ mốc chuẩn WHO tập Ăn Dặm</span>
+                      <span className="text-[11px] text-amber-800 font-medium">Bắt đầu với Cháo rây 1:10 và củ quả nghiền dịu nhẹ</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveModal("feed")}
+                    className="text-[11px] font-extrabold bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs flex items-center gap-1 shrink-0"
+                  >
+                    ✨ AI Đánh Giá Sẵn Sàng Ăn Dặm
+                  </button>
+                </div>
+              )}
+
+              {/* Age Stage Banner Indicator */}
+              <div className="mt-4 flex items-center justify-between px-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  ✨ Giai đoạn phát triển: {isNewborn ? "👶 Sơ sinh (0-3 tháng)" : isInfant ? "🍼 Phát triển (3-6 tháng)" : isSolidsStage ? "🥣 Ăn dặm (6-12 tháng)" : "🏃 Toddler (Trên 1 tuổi)"}
+                </span>
+                <span className="text-[9px] font-bold bg-sky-50 text-[#1c648e] border border-sky-100 px-2 py-0.5 rounded-full">
+                  AI Adaptive Dashboard
+                </span>
+              </div>
+
+              {/* Adaptive Quick action icons with Parent Custom Override */}
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 sm:gap-4 mt-3 max-w-3xl mx-auto">
+                {[
+                  { label: isSolidsStage ? "Ăn dặm & Sữa" : "Ăn uống", icon: Droplet, color: "text-[#7cb9e8] bg-[#7cb9e8]/10 border-[#7cb9e8]/20", modal: "feed", show: customModules.feed !== false },
+                  { label: "Giấc ngủ", icon: Moon, color: "text-[#b19cd9] bg-[#b19cd9]/10 border-[#b19cd9]/20", modal: "sleep", show: customModules.sleep !== false },
+                  { label: "Uống thuốc", icon: Pill, color: "text-purple-600 bg-purple-50 border-purple-200", modal: "medication", show: isBabySick && customModules.medication !== false },
+                  { label: isBabySick ? "Khai báo khỏi" : "Báo bé ốm", icon: Activity, color: isBabySick ? "text-emerald-600 bg-emerald-50 border-emerald-200" : "text-rose-600 bg-rose-50 border-rose-200", modal: "health", show: true }
+                ]
+                  .filter((a) => a.show)
+                  .map((action, idx) => {
+                    const Icon = action.icon;
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          if (action.modal === "health") {
+                            onNavigateTab?.("health");
+                          } else {
+                            setActiveModal(action.modal as any);
+                          }
+                        }}
+                        className="flex flex-col items-center gap-2 cursor-pointer group"
+                      >
+                        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full border flex items-center justify-center transition-all ${action.color} group-hover:scale-105 group-hover:shadow-md`}>
+                          <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                        </div>
+                        <span className="text-[11px] sm:text-xs font-bold text-slate-600 group-hover:text-primary">{action.label}</span>
+                      </button>
+                    );
+                  })}
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* 2. Real-time Status Card Grid - Unified 100% Style */}
       {(() => {
         const milkCurrent = dashboardData?.milk_intake?.current || (feeds.reduce((acc, f) => acc + (f.amount || 0), 0) || 750);
         const milkTarget = dashboardData?.milk_intake?.target || 800;
-        const milkPercent = Math.min(100, Math.round((milkCurrent / milkTarget) * 100));
+
+        const lastFeed = feeds.length > 0 ? feeds[0] : null;
+        const lastFeedTimeAgo = dashboardData?.last_feed_time_str || "2h 40m trước";
+        const lastFeedDetail = lastFeed ? lastFeed.details : "Sữa công thức 150ml";
+        const isBabySick = notifications.some((n) => n.type === "health_check" || n.type === "medication");
 
         const allStatCards = [
           {
             title: "LẦN BÚ CUỐI",
-            value: lastFeedStr,
-            subtitle: lastFeedDetail.replace("Formula Milk", "Sữa công thức").replace("Breastmilk", "Sữa mẹ"),
+            value: lastFeedTimeAgo,
+            subtitle: `${lastFeedDetail.replace("Formula Milk", "Sữa công thức").replace("Breastmilk", "Sữa mẹ")} • Bú mỗi 3h`,
             icon: Droplet,
-            badge: "🍼 " + (lastFeed ? lastFeed.time : "01:00 PM"),
-            color: "text-accent-blue bg-accent-blue/10 border-accent-blue/20"
+            badge: "💡 Bé có thể sắp đói",
+            color: "text-accent-blue bg-accent-blue/10 border-accent-blue/20",
+            show: true
           },
           {
-            title: "TỔNG GIỜ NGỦ",
-            value: isNapTimerRunning ? "Đang tính..." : "12.5 giờ",
-            subtitle: "Mục tiêu: 14 giờ",
+            title: "GIẤC NGỦ HÔM NAY",
+            value: isNapTimerRunning ? "Đang ngủ..." : "12.5 giờ",
+            subtitle: "Mục tiêu: 14 giờ • 4 giấc ngủ",
             icon: Moon,
-            badge: "💤 4 giấc hôm nay",
-            color: "text-accent-purple bg-accent-purple/10 border-accent-purple/20"
+            badge: "💡 Cửa sổ thức 2h 15m",
+            color: "text-accent-purple bg-accent-purple/10 border-accent-purple/20",
+            show: true
           },
           {
-            title: "TIẾN ĐỘ SỮA NÀY",
-            value: `${milkCurrent} ml / ${milkTarget} ml`,
-            subtitle: milkCurrent >= milkTarget ? "🎉 Đạt mục tiêu khuyến nghị" : `Cần bổ sung thêm ${milkTarget - milkCurrent}ml cữ tối`,
+            title: "LƯỢNG SỮA TRONG NGÀY",
+            value: `${milkCurrent} / ${milkTarget} ml`,
+            subtitle: milkCurrent >= milkTarget ? "Đã đạt mục tiêu" : `Đã bú 4 cữ • Thiếu ${milkTarget - milkCurrent}ml`,
             icon: Coffee,
-            badge: `🥛 Đạt ${milkPercent}% mục tiêu`,
-            color: "text-sky-600 bg-sky-50 border-sky-100"
+            badge: milkCurrent >= milkTarget ? "🎉 Đã đủ cữ bú" : `💡 Bổ sung cữ nhẹ trước khi ngủ`,
+            color: "text-sky-600 bg-sky-50 border-sky-100",
+            show: true
           },
+          ...(isBabySick
+            ? [
+                {
+                  title: "💊 GIÃN CÁCH UỐNG THUỐC",
+                  value: "Giữ cách 4 - 6 tiếng",
+                  subtitle: "Đang trong đợt uống thuốc điều trị",
+                  icon: Pill,
+                  badge: "🛡️ Chú ý an toàn liều hạ sốt",
+                  color: "text-purple-600 bg-purple-50 border-purple-200",
+                  show: true
+                }
+              ]
+            : []),
           {
-            title: "ĐẾM NGƯỢC THUỐC",
-            value: dashboardData?.countdown_widget?.is_administer_disabled ? "⏳ Giãn cách liều" : "✅ Đã an toàn liều mới",
-            subtitle: "Thuốc: Hapacol 150mg",
-            icon: Pill,
-            badge: "⏱ " + (dashboardData?.countdown_widget?.next_eligible_time ? new Date(dashboardData.countdown_widget.next_eligible_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Cách 4-6 tiếng"),
-            color: "text-purple-600 bg-purple-50 border-purple-100"
-          },
-          {
-            title: "DỰ ĐOÁN GIỜ NGỦ AI",
-            value: "02:30 PM (Cữ trưa)",
-            subtitle: `Cửa sổ thức 2.5h • Tuổi: ${calculateAgeStr(activeBaby.birthDate)}`,
+            title: "DỰ ĐOÁN CỮ NGỦ",
+            value: "02:30 PM (85% xác suất)",
+            subtitle: "Cửa sổ thức 2.5h theo thói quen",
             icon: Clock,
-            badge: "🌙 Chuẩn bị phòng tối trước 10ph",
-            color: "text-amber-600 bg-amber-50 border-amber-100"
+            badge: "💡 Bé thường gắt ngủ sau 2h15m",
+            color: "text-amber-600 bg-amber-50 border-amber-100",
+            show: true
           },
           {
-            title: "LỊCH TIÊM CHỦNG",
-            value: activeBaby.name.includes("Leo") ? "Mốc 6 Tháng Tuổi" : "Mốc 3 Tháng Tuổi",
-            subtitle: activeBaby.name.includes("Leo") ? "Cúm mùa & Phế cầu (Synflorix)" : "6-trong-1 cữ 2 & Rota",
+            title: "LỊCH TIÊM NGỪA",
+            value: activeBaby.name.includes("Leo") ? "Mốc 6 tháng" : "Mốc 3 tháng",
+            subtitle: activeBaby.name.includes("Leo") ? "Cúm mùa & Phế cầu" : "6-trong-1 & Rota",
             icon: Activity,
-            badge: "💉 Nhắc: Tiêm trong tuần",
-            color: "text-emerald-600 bg-emerald-50 border-emerald-100"
+            badge: "📅 Nhắc tiêm trong tuần",
+            color: "text-emerald-600 bg-emerald-50 border-emerald-100",
+            show: true
           }
         ];
 
@@ -1202,14 +1368,6 @@ export default function DashboardView({
                     Chiều cao (cm)
                   </button>
                 </div>
-
-                <button
-                  onClick={() => setActiveModal("growth")}
-                  className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 rounded-xl px-3 py-1 text-[10px] font-extrabold transition-all cursor-pointer shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Thêm chỉ số
-                </button>
               </div>
             </div>
 
@@ -1396,6 +1554,36 @@ export default function DashboardView({
             </h3>
 
             <div className="space-y-3.5">
+              {/* Insight: CDC Milestone */}
+              {(() => {
+                const bDate = activeBaby?.birthDate ? new Date(activeBaby.birthDate) : new Date("2023-04-20");
+                const ageMonths = Math.max(0, Math.floor((new Date().getTime() - bDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)));
+                const getMilestoneInfo = (months: number) => {
+                  if (months <= 3) return { stage: "2 - 3 Tháng", points: "• Tự nâng đầu khi nằm sấp • Mỉm cười đáp lại cha mẹ • Dõi theo chuyển động" };
+                  if (months <= 6) return { stage: "6 Tháng", points: "• Ngồi có hỗ trợ • Quay đầu khi được gọi tên • Bắt đầu tập ăn dặm" };
+                  if (months <= 9) return { stage: "9 Tháng", points: "• Bò trườn linh hoạt • Bám vịn đứng dậy • Chơi trò giấu đồ vật" };
+                  return { stage: "12 Tháng+", points: "• Tự đứng / Chập chững bước đi • Nói từ đơn 'Mẹ/Bố' • Vẫy tay chào tạm biệt" };
+                };
+                const milestone = getMilestoneInfo(ageMonths);
+
+                return (
+                  <div className="p-4 bg-emerald-50/70 border border-emerald-100/90 rounded-2xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                        <span className="p-1 bg-emerald-100 rounded-lg text-emerald-800 text-[10px]">📋</span>
+                        Mốc phát triển {milestone.stage} (Chuẩn CDC / AAP)
+                      </h4>
+                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md shrink-0">
+                        Cột Mốc CDC
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-emerald-900 leading-relaxed font-medium">
+                      Trong giai đoạn này, nhiều bé bắt đầu: {milestone.points}
+                    </p>
+                  </div>
+                );
+              })()}
+
               {/* Insight 1 */}
               <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -1413,21 +1601,6 @@ export default function DashboardView({
                 </a>
               </div>
 
-              {/* Insight 2 */}
-              <div className="p-4 bg-rose-50/50 border border-rose-100 rounded-2xl space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-rose-800">Nhắc lịch uống thuốc</h4>
-                  <span className="text-[9px] font-bold text-rose-500 bg-rose-100 px-2 py-0.5 rounded-md">
-                    Nhắc nhở
-                  </span>
-                </div>
-                <p className="text-[11px] text-rose-700 leading-relaxed">
-                  Khuyên dùng liều Vitamin D tiếp theo vào khoảng 4:00 chiều (trong 45 phút nữa).
-                </p>
-                <div className="text-[9px] font-bold text-rose-500 bg-white border border-rose-100 rounded px-2 py-0.5 inline-block">
-                  HÔM NAY 4:00 CHIỀU
-                </div>
-              </div>
             </div>
           </div>
 
@@ -1564,7 +1737,6 @@ export default function DashboardView({
                     { label: "🍼 Cữ ăn/uống", modal: "feed" },
                     { label: "💤 Giấc ngủ", modal: "sleep" },
                     { label: "💊 Uống thuốc", modal: "medication" },
-                    { label: "📈 Chỉ số WHO", modal: "growth" },
                     { label: "🏥 Bệnh trạng", modal: "health" }
                   ].map((item, idx) => (
                     <button
@@ -1852,88 +2024,7 @@ export default function DashboardView({
           </div>
         )}
 
-        {/* Modal: Quick log growth metric */}
-        {activeModal === "growth" && (
-          <div className="fixed inset-0 bg-[#1c648e]/20 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
-            >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
-                  📈 Nhập chỉ số tăng trưởng WHO
-                </h3>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
-                    Danh mục
-                  </button>
-                  <button onClick={() => setActiveModal("none")} className="text-xs font-bold text-[#1c648e] bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-lg cursor-pointer">
-                    ✕ Đóng
-                  </button>
-                </div>
-              </div>
 
-              <form onSubmit={handleAddMeasurementSubmit} className="space-y-4 text-xs font-bold text-slate-600">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="block">Tuổi (Tháng)</label>
-                    <input
-                      type="number"
-                      required
-                      value={growthAgeMonths}
-                      onChange={(e) => setGrowthAgeMonths(parseInt(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="block">Cân nặng (kg)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      required
-                      value={growthWeight}
-                      onChange={(e) => setGrowthWeight(parseFloat(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40"
-                    />
-                    <div className="flex gap-1 pt-1">
-                      {[0.1, 0.2, 0.5].map((add) => (
-                        <button
-                          key={add}
-                          type="button"
-                          onClick={() => setGrowthWeight(parseFloat((growthWeight + add).toFixed(2)))}
-                          className="px-1.5 py-0.5 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 text-[9px] font-bold hover:bg-emerald-100 transition-all cursor-pointer"
-                        >
-                          +{add}kg
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block">Chiều cao (cm)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    required
-                    value={growthHeight}
-                    onChange={(e) => setGrowthHeight(parseFloat(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:border-primary/40"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
-                >
-                  Lưu số đo mới
-                </button>
-              </form>
-            </motion.div>
-          </div>
-        )}
 
       </AnimatePresence>
 

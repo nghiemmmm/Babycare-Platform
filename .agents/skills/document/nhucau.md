@@ -92,3 +92,45 @@ Sleep Forecast miễn phí
 Hỏi AI dựa trên dữ liệu của chính bé
 Đồng bộ nhiều người chăm sóc
 Import dữ liệu từ Huckleberry hoặc Napper
+
+
+Pain Point lớn nhất : Phụ huynh không cần một app nhiều tính năng, họ cần một app giúp ghi lại thông tin nhanh nhất.
+
+2. Người dùng chỉ theo dõi nhiều trong giai đoạn đầu
+0-3 tháng
+✓ Feeding
+✓ Sleep
+✓ Diaper
+✓ Medicine
+
+↓
+
+3-6 tháng
+✓ Feeding
+✓ Sleep
+
+↓
+
+6-12 tháng
+✓ Sleep
+
+↓
+
+1 tuổi+
+✓ Medicine
+✓ Growth
+
+3. Sleep là tính năng được dùng lâu nhất 
+
+4. AI chỉ đáng tiền nếu thật sự hữu ích -> AI cần giải quyết một bài toán cụ thể.
+5. Người dùng ghét nhập liệu
+
+6. Shared Care là nhu cầu thật
+7. Privacy bắt đầu được quan tâm
+8. Milestone không cần AI
+AI cần giải quyết một bài toán cụ thể.
+
+Milestone không cần AI phức tạp, mà cần nội dung chuẩn y khoa và nhắc nhở đúng thời điểm.
+
+Best baby tracking app
+Feed tracking
