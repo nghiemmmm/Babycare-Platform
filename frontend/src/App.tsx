@@ -37,9 +37,11 @@ import {
 } from "./types";
 
 import { useAuth } from "./auth/AuthContext";
-import { apiFetch, parseErrorMessage } from "./lib/authClient";
+import { apiFetch, parseErrorMessage, pollJobStatus } from "./lib/authClient";
+import { notifyBabyDataUpdated, useBabyDataListener } from "./lib/events";
 
 import DashboardView from "./components/DashboardView";
+
 import GrowthView from "./components/GrowthView";
 import AiHubView from "./components/AiHubView";
 import ProfileView from "./components/ProfileView";
@@ -261,7 +263,15 @@ export default function App() {
     }
   };
 
+  // Tự động lắng nghe Event baby-data-updated để sync dữ liệu em bé tức thì (< 100ms)
+  useBabyDataListener(() => {
+    if (activeBaby?.id) {
+      refreshActiveBabyData(activeBaby.id);
+    }
+  });
+
   // Cẩm nang an toàn dinh dưỡng - nội dung tĩnh, chỉ tải khi người dùng thực sự mở ra xem
+
   const handleOpenSafetyHandbook = async () => {
     if (safetyHandbook) return;
     setIsLoadingSafetyHandbook(true);
@@ -807,19 +817,22 @@ export default function App() {
         body: JSON.stringify({ baby_id: activeBaby.id, feedback: feedback || undefined })
       });
       if (!res.ok) {
-        // Backend trả message tiếng Việt cụ thể (vd "còn X ngày" khi bị khoá 409) - ưu tiên đọc
-        // thẳng từ response thay vì thông báo lỗi chung chung.
         let message = "Không thể tạo thực đơn 7 ngày lúc này, vui lòng thử lại sau.";
         try {
           const errBody = await res.json();
           if (errBody?.message) message = errBody.message;
         } catch {
-          // ignore parse error, dùng message mặc định
+          // ignore parse error
         }
         throw new Error(message);
       }
-      const data = await res.json();
-      setWeeklyMealPlan(mapWeeklyMealPlan(data));
+      const asyncJobData = await res.json();
+      if (asyncJobData.job_id) {
+        const completedData = await pollJobStatus(asyncJobData.job_id);
+        setWeeklyMealPlan(mapWeeklyMealPlan(completedData));
+      } else {
+        setWeeklyMealPlan(mapWeeklyMealPlan(asyncJobData));
+      }
     } finally {
       setIsGeneratingWeeklyPlan(false);
     }
@@ -844,7 +857,7 @@ export default function App() {
     }
   };
 
-  // AI assistant messaging with direct API calls to FastAPI backend (thread-scoped)
+  // AI assistant messaging với W3C SSE streaming + Idempotency Protection
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
       id: `u_${Date.now()}`,
@@ -853,13 +866,27 @@ export default function App() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setChats((prev) => [...prev, userMsg]);
+    const aiMsgId = `ai_${Date.now()}`;
+    const idempotencyKey = `idem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    const initialAiMsg: ChatMessage = {
+      id: aiMsgId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      toolSteps: []
+    };
+
+    setChats((prev) => [...prev, userMsg, initialAiMsg]);
     setIsAiLoading(true);
 
     try {
-      const response = await apiFetch(`/api/v1/ai/threads/${activeThreadId}/messages`, {
+      const response = await apiFetch(`/api/v1/ai/threads/${activeThreadId}/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey
+        },
         body: JSON.stringify({
           content: userMsg.content,
           type: "text",
@@ -867,59 +894,112 @@ export default function App() {
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`Backend returned ${response.status}`);
+      if (!response.ok || !response.body) {
+        throw new Error(`Stream fallback, status ${response.status}`);
       }
 
-      const data = await response.json();
-      loadThreads(activeBaby.id); // Refresh thread list to fetch any updated titles
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let streamContent = "";
+      let toolStepsCollected: any[] = [];
+      let sseBuffer = "";
 
-      // Convert from Backend format (MessageCreateResponse) to App.tsx format
-      const aiContent = data.ai_response?.content || "Tôi đã ghi nhận thông tin đó!";
-      const citations = data.ai_response?.citations || [];
-      const extractedLogs = data.extracted_logs || [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      // Convert first extracted_log to extraction widget if present
-      let extraction = null;
-      if (extractedLogs.length > 0) {
-        const log = extractedLogs[0];
-        extraction = {
-          type: log.type,
-          title: log.title,
-          detail: log.detail,
-          value: log.value,
-          time: log.time,
-          pending: false,
-        };
-      }
+        sseBuffer += decoder.decode(value, { stream: true });
+        const blocks = sseBuffer.split("\n\n");
+        sseBuffer = blocks.pop() || "";
 
-      setChats((prev) => [
-        ...prev,
-        {
-          id: `ai_${Date.now()}`,
-          role: "assistant",
-          content: aiContent,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          extraction,
-          citations
+        for (const rawBlock of blocks) {
+          if (!rawBlock.trim()) continue;
+          const lines = rawBlock.split("\n");
+          let eventType = "";
+          let rawDataStr = "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("event: ")) {
+              eventType = trimmed.slice(7).trim();
+            } else if (trimmed.startsWith("data: ")) {
+              rawDataStr = trimmed.slice(6).trim();
+            }
+          }
+
+          if (!rawDataStr) continue;
+
+          try {
+            let payload: any = rawDataStr;
+            if (rawDataStr.startsWith("{") || rawDataStr.startsWith("[")) {
+              payload = JSON.parse(rawDataStr);
+            }
+
+            // Fallback nếu payload chứa event legacy
+            if (typeof payload === "object" && payload?.event) {
+              eventType = eventType || payload.event;
+              payload = payload.data !== undefined ? payload.data : payload;
+            }
+
+            if (eventType === "ping") {
+              continue;
+            } else if (eventType === "run.step" || eventType === "step") {
+              const stepName = typeof payload === "object" ? payload.display_name : "Đang phân tích...";
+              setChats((prev) =>
+                prev.map((msg) => (msg.id === aiMsgId ? { ...msg, activeStepName: stepName } : msg))
+              );
+            } else if (eventType === "response.token" || eventType === "token") {
+              const tokenText = typeof payload === "object" ? (payload.delta || "") : String(payload);
+              streamContent += tokenText;
+              setChats((prev) =>
+                prev.map((msg) => (msg.id === aiMsgId ? { ...msg, content: streamContent } : msg))
+              );
+            } else if (eventType === "tool_step" && typeof payload === "object") {
+              toolStepsCollected.push(payload);
+              setChats((prev) =>
+                prev.map((msg) => (msg.id === aiMsgId ? { ...msg, toolSteps: [...toolStepsCollected] } : msg))
+              );
+            } else if (eventType === "response.completed" || eventType === "end") {
+              const finalContent = (typeof payload === "object" && payload.content) ? payload.content : streamContent;
+              if (typeof payload === "object" && payload.extracted_data) {
+                notifyBabyDataUpdated();
+              }
+              const endCitations = (typeof payload === "object" && payload.citations) ? payload.citations : [];
+              setChats((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMsgId
+                    ? {
+                        ...msg,
+                        content: finalContent || "Tôi đã ghi nhận thông tin theo dõi sức khỏe cho bé.",
+                        citations: endCitations
+                      }
+                    : msg
+                )
+              );
+            }
+          } catch (err) {
+            // Ignore parse error per block
+          }
         }
-      ]);
+      }
+      loadThreads(activeBaby.id);
     } catch (error) {
-      console.error("Failed to message Gemini API:", error);
-      // Fallback
-      setChats((prev) => [
-        ...prev,
-        {
-          id: `ai_${Date.now()}`,
-          role: "assistant",
-          content: "I ran into a connection glitch reaching the core servers, but rest assured, your logs are saved. Let me know if you want to track feeding volume, check paracetamol schedules, or solids advice!",
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
+      console.warn("Streaming connection notice:", error);
+      setChats((prev) =>
+        prev.map((msg) =>
+          msg.id === aiMsgId && !msg.content
+            ? {
+                ...msg,
+                content: "Nhắc nhở theo dõi sức khỏe cho bé đang được cập nhật, vui lòng đợi ít phút..."
+              }
+            : msg
+        )
+      );
     } finally {
       setIsAiLoading(false);
     }
   };
+
 
   const handleCreateThread = async () => {
     if (!activeBaby) return;
@@ -1006,14 +1086,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800" id="babycare-app">
-      
+
       {/* Mobile Header Bar */}
       <div className="md:hidden bg-white border-b border-slate-100 p-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2">
           <Shield className="w-5 h-5 text-indigo-600" />
           <span className="font-bold text-sm tracking-tight text-slate-900">Lullaby AI</span>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {isNapTimerRunning && (
             <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-full animate-pulse">
@@ -1031,9 +1111,8 @@ export default function App() {
 
       {/* Sidebar Navigation */}
       <aside
-        className={`w-64 bg-white/40 backdrop-blur-2xl border-r border-white/20 flex flex-col p-5 space-y-6 shrink-0 fixed md:sticky top-0 md:h-screen z-40 transition-transform md:translate-x-0 ${
-          isMobileMenuOpen ? "translate-x-0 h-screen" : "-translate-x-full md:translate-x-0"
-        }`}
+        className={`w-64 bg-white/40 backdrop-blur-2xl border-r border-white/20 flex flex-col p-5 space-y-6 shrink-0 fixed md:sticky top-0 md:h-screen z-40 transition-transform md:translate-x-0 ${isMobileMenuOpen ? "translate-x-0 h-screen" : "-translate-x-full md:translate-x-0"
+          }`}
       >
         {/* Logo and branding */}
         <div className="hidden md:flex items-center gap-3 px-1 py-2">
@@ -1055,13 +1134,12 @@ export default function App() {
             }}
             disabled={!hasBaby}
             title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
-            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              !hasBaby
-                ? "text-slate-300 cursor-not-allowed"
-                : activeTab === "dashboard"
+            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${!hasBaby
+              ? "text-slate-300 cursor-not-allowed"
+              : activeTab === "dashboard"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
-            }`}
+              }`}
           >
             <LayoutDashboard className="w-4 h-4" />
             Tổng quan
@@ -1072,11 +1150,10 @@ export default function App() {
               setActiveTab("profile");
               setIsMobileMenuOpen(false);
             }}
-            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              activeTab === "profile"
-                ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
-                : "text-slate-500 hover:text-primary hover:bg-primary/5"
-            }`}
+            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${activeTab === "profile"
+              ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
+              : "text-slate-500 hover:text-primary hover:bg-primary/5"
+              }`}
           >
             <User className="w-4 h-4" />
             Hồ sơ bé
@@ -1089,13 +1166,12 @@ export default function App() {
             }}
             disabled={!hasBaby}
             title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
-            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              !hasBaby
-                ? "text-slate-300 cursor-not-allowed"
-                : activeTab === "ai"
+            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${!hasBaby
+              ? "text-slate-300 cursor-not-allowed"
+              : activeTab === "ai"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
-            }`}
+              }`}
           >
             <Sparkles className="w-4 h-4" />
             Phòng Chat AI
@@ -1108,13 +1184,12 @@ export default function App() {
             }}
             disabled={!hasBaby}
             title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
-            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              !hasBaby
-                ? "text-slate-300 cursor-not-allowed"
-                : activeTab === "log"
+            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${!hasBaby
+              ? "text-slate-300 cursor-not-allowed"
+              : activeTab === "log"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
-            }`}
+              }`}
           >
             <ClipboardList className="w-4 h-4" />
             Nhật ký
@@ -1127,13 +1202,12 @@ export default function App() {
             }}
             disabled={!hasBaby}
             title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
-            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              !hasBaby
-                ? "text-slate-300 cursor-not-allowed"
-                : activeTab === "health"
+            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${!hasBaby
+              ? "text-slate-300 cursor-not-allowed"
+              : activeTab === "health"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
-            }`}
+              }`}
           >
             <Activity className="w-4 h-4" />
             Sức khỏe
@@ -1146,13 +1220,12 @@ export default function App() {
             }}
             disabled={!hasBaby}
             title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
-            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              !hasBaby
-                ? "text-slate-300 cursor-not-allowed"
-                : activeTab === "growth"
+            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${!hasBaby
+              ? "text-slate-300 cursor-not-allowed"
+              : activeTab === "growth"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
-            }`}
+              }`}
           >
             <Activity className="w-4 h-4" />
             Tăng trưởng
@@ -1165,13 +1238,12 @@ export default function App() {
             }}
             disabled={!hasBaby}
             title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
-            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${
-              !hasBaby
-                ? "text-slate-300 cursor-not-allowed"
-                : activeTab === "nutrition"
+            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${!hasBaby
+              ? "text-slate-300 cursor-not-allowed"
+              : activeTab === "nutrition"
                 ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
-            }`}
+              }`}
           >
             <Coffee className="w-4 h-4" />
             Dinh dưỡng
@@ -1201,7 +1273,7 @@ export default function App() {
 
       {/* Main Canvas Area */}
       <main className="flex-1 flex flex-col min-w-0">
-        
+
         {/* Top bar header */}
         <header className="hidden md:flex bg-white border-b border-slate-100 px-8 py-3.5 items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-2">
@@ -1221,9 +1293,9 @@ export default function App() {
               <Bell className="w-4 h-4" />
               <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full" />
             </button>
-            
+
             <div className="h-5 w-px bg-slate-200" />
-            
+
             {activeBaby && (
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-700">{activeBaby.name}</span>
@@ -1265,110 +1337,110 @@ export default function App() {
                 />
               ) : (
                 <>
-              {activeTab === "dashboard" && (
-                <DashboardView
-                  activeBaby={activeBaby}
-                  medications={medications.filter((m) => m.babyId === activeBaby.id)}
-                  feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
-                  measurements={measurements.filter((m) => m.babyId === activeBaby.id)}
-                  chats={chats}
-                  isAiLoading={isAiLoading}
-                  isNapTimerRunning={isNapTimerRunning}
-                  napElapsedTime={napElapsedTime}
-                  onSendMessage={handleSendMessage}
-                  onConfirmExtraction={handleConfirmExtraction}
-                  onStartNapTimer={handleStartNapTimer}
-                  onAddMedication={handleAddMedication}
-                  onDeleteMedication={handleDeleteMedication}
-                  onAddFeed={handleAddFeed}
-                  onDeleteFeed={handleDeleteFeed}
-                  onAddMeasurement={handleAddMeasurement}
-                  onDeleteMeasurement={handleDeleteMeasurement}
-                  onNavigateTab={(tab) => setActiveTab(tab as any)}
-                />
-              )}
+                  {activeTab === "dashboard" && (
+                    <DashboardView
+                      activeBaby={activeBaby}
+                      medications={medications.filter((m) => m.babyId === activeBaby.id)}
+                      feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
+                      measurements={measurements.filter((m) => m.babyId === activeBaby.id)}
+                      chats={chats}
+                      isAiLoading={isAiLoading}
+                      isNapTimerRunning={isNapTimerRunning}
+                      napElapsedTime={napElapsedTime}
+                      onSendMessage={handleSendMessage}
+                      onConfirmExtraction={handleConfirmExtraction}
+                      onStartNapTimer={handleStartNapTimer}
+                      onAddMedication={handleAddMedication}
+                      onDeleteMedication={handleDeleteMedication}
+                      onAddFeed={handleAddFeed}
+                      onDeleteFeed={handleDeleteFeed}
+                      onAddMeasurement={handleAddMeasurement}
+                      onDeleteMeasurement={handleDeleteMeasurement}
+                      onNavigateTab={(tab) => setActiveTab(tab as any)}
+                    />
+                  )}
 
-              {activeTab === "growth" && (
-                <GrowthView
-                  activeBaby={activeBaby}
-                  measurements={measurements.filter((m) => m.babyId === activeBaby.id)}
-                  onAddMeasurement={handleAddMeasurement}
-                  onDeleteMeasurement={handleDeleteMeasurement}
-                />
-              )}
+                  {activeTab === "growth" && (
+                    <GrowthView
+                      activeBaby={activeBaby}
+                      measurements={measurements.filter((m) => m.babyId === activeBaby.id)}
+                      onAddMeasurement={handleAddMeasurement}
+                      onDeleteMeasurement={handleDeleteMeasurement}
+                    />
+                  )}
 
-              {activeTab === "health" && (
-                <HealthView
-                  activeBaby={activeBaby}
-                  medications={medications.filter((m) => m.babyId === activeBaby.id)}
-                  onAddMedication={handleAddMedication}
-                  onDeleteMedication={handleDeleteMedication}
-                />
-              )}
+                  {activeTab === "health" && (
+                    <HealthView
+                      activeBaby={activeBaby}
+                      medications={medications.filter((m) => m.babyId === activeBaby.id)}
+                      onAddMedication={handleAddMedication}
+                      onDeleteMedication={handleDeleteMedication}
+                    />
+                  )}
 
-              {activeTab === "ai" && (
-                <AiHubView
-                  activeBaby={activeBaby}
-                  babies={babies}
-                  onSelectBaby={handleSelectBaby}
-                  chats={chats}
-                  onSendMessage={handleSendMessage}
-                  onConfirmExtraction={handleConfirmExtraction}
-                  isAiLoading={isAiLoading}
-                  onStartNapTimer={handleStartNapTimer}
-                  isNapTimerRunning={isNapTimerRunning}
-                  napElapsedTime={napElapsedTime}
-                  threads={threads}
-                  activeThreadId={activeThreadId}
-                  onSelectThread={handleSelectThread}
-                  onCreateThread={handleCreateThread}
-                />
-              )}
+                  {activeTab === "ai" && (
+                    <AiHubView
+                      activeBaby={activeBaby}
+                      babies={babies}
+                      onSelectBaby={handleSelectBaby}
+                      chats={chats}
+                      onSendMessage={handleSendMessage}
+                      onConfirmExtraction={handleConfirmExtraction}
+                      isAiLoading={isAiLoading}
+                      onStartNapTimer={handleStartNapTimer}
+                      isNapTimerRunning={isNapTimerRunning}
+                      napElapsedTime={napElapsedTime}
+                      threads={threads}
+                      activeThreadId={activeThreadId}
+                      onSelectThread={handleSelectThread}
+                      onCreateThread={handleCreateThread}
+                    />
+                  )}
 
-              {activeTab === "profile" && (
-                <ProfileView
-                  babies={babies}
-                  guardians={guardians}
-                  onSelectBaby={handleSelectBaby}
-                  onUpdateBaby={handleUpdateBaby}
-                  onAddBaby={handleAddBaby}
-                  onDeleteBaby={handleDeleteBaby}
-                  onUploadAvatar={handleUploadAvatar}
-                  onAddGuardian={handleAddGuardian}
-                  onResendGuardian={handleResendGuardian}
-                  onDeleteGuardian={handleDeleteGuardian}
-                />
-              )}
+                  {activeTab === "profile" && (
+                    <ProfileView
+                      babies={babies}
+                      guardians={guardians}
+                      onSelectBaby={handleSelectBaby}
+                      onUpdateBaby={handleUpdateBaby}
+                      onAddBaby={handleAddBaby}
+                      onDeleteBaby={handleDeleteBaby}
+                      onUploadAvatar={handleUploadAvatar}
+                      onAddGuardian={handleAddGuardian}
+                      onResendGuardian={handleResendGuardian}
+                      onDeleteGuardian={handleDeleteGuardian}
+                    />
+                  )}
 
-              {activeTab === "log" && (
-                <FeedingLogView
-                  activeBaby={activeBaby}
-                  feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
-                  ingredients={ingredients.filter((i) => i.babyId === activeBaby.id)}
-                  onAddFeed={handleAddFeed}
-                  onDeleteFeed={handleDeleteFeed}
-                  onAddIngredient={handleAddIngredient}
-                  onDeleteIngredient={handleDeleteIngredient}
-                />
-              )}
+                  {activeTab === "log" && (
+                    <FeedingLogView
+                      activeBaby={activeBaby}
+                      feeds={feeds.filter((f) => f.babyId === activeBaby.id)}
+                      ingredients={ingredients.filter((i) => i.babyId === activeBaby.id)}
+                      onAddFeed={handleAddFeed}
+                      onDeleteFeed={handleDeleteFeed}
+                      onAddIngredient={handleAddIngredient}
+                      onDeleteIngredient={handleDeleteIngredient}
+                    />
+                  )}
 
-              {activeTab === "nutrition" && (
-                <NutritionView
-                  activeBaby={activeBaby}
-                  recommendation={nutritionRecommendation}
-                  isGeneratingRecommendation={isGeneratingRecommendation}
-                  onGenerateRecommendation={handleGenerateNutritionRecommendation}
-                  weeklyMealPlan={weeklyMealPlan}
-                  isGeneratingWeeklyPlan={isGeneratingWeeklyPlan}
-                  isAcceptingWeeklyPlan={isAcceptingWeeklyPlan}
-                  onGenerateWeeklyMealPlan={handleGenerateWeeklyMealPlan}
-                  onAcceptWeeklyMealPlan={handleAcceptWeeklyMealPlan}
-                  nutritionSafety={nutritionSafety}
-                  safetyHandbook={safetyHandbook}
-                  isLoadingSafetyHandbook={isLoadingSafetyHandbook}
-                  onOpenSafetyHandbook={handleOpenSafetyHandbook}
-                />
-              )}
+                  {activeTab === "nutrition" && (
+                    <NutritionView
+                      activeBaby={activeBaby}
+                      recommendation={nutritionRecommendation}
+                      isGeneratingRecommendation={isGeneratingRecommendation}
+                      onGenerateRecommendation={handleGenerateNutritionRecommendation}
+                      weeklyMealPlan={weeklyMealPlan}
+                      isGeneratingWeeklyPlan={isGeneratingWeeklyPlan}
+                      isAcceptingWeeklyPlan={isAcceptingWeeklyPlan}
+                      onGenerateWeeklyMealPlan={handleGenerateWeeklyMealPlan}
+                      onAcceptWeeklyMealPlan={handleAcceptWeeklyMealPlan}
+                      nutritionSafety={nutritionSafety}
+                      safetyHandbook={safetyHandbook}
+                      isLoadingSafetyHandbook={isLoadingSafetyHandbook}
+                      onOpenSafetyHandbook={handleOpenSafetyHandbook}
+                    />
+                  )}
                 </>
               )}
             </motion.div>

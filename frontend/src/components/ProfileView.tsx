@@ -200,7 +200,7 @@ export default function ProfileView({
 
   const handleInviteGuardian = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail || !inviteName) return;
+    if (!inviteEmail || !inviteName || isInviting) return;
 
     setInviteError(null);
     setIsInviting(true);
@@ -216,7 +216,7 @@ export default function ProfileView({
       setInviteName("");
       setShowInviteModal(false);
       setShowInviteSuccess(true);
-      setTimeout(() => setShowInviteSuccess(false), 3000);
+      setTimeout(() => setShowInviteSuccess(false), 3500);
     } catch (err) {
       setInviteError(err instanceof Error ? err.message : "Gửi lời mời thất bại, vui lòng thử lại.");
     } finally {
@@ -241,7 +241,7 @@ export default function ProfileView({
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - birth.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     const years = Math.floor(diffDays / 365);
     const remainingDays = diffDays % 365;
     const months = Math.floor(remainingDays / 30.4);
@@ -255,7 +255,7 @@ export default function ProfileView({
 
   return (
     <div className="space-y-6" id="profile-view">
-      
+
       {/* Horizontal Baby Profile Tabs */}
       <div className="flex flex-wrap items-center justify-between border-b border-white/20 pb-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -276,7 +276,7 @@ export default function ProfileView({
               {baby.name} {baby.isActive && !isCreating && "• Đang chọn"}
             </button>
           ))}
-          
+
           <button
             onClick={handleStartCreation}
             className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
@@ -318,10 +318,10 @@ export default function ProfileView({
             exit={{ opacity: 0, y: -5 }}
             className="grid grid-cols-1 lg:grid-cols-12 gap-8"
           >
-            
+
             {/* Left side: Main Profile Panel & Activity Stream (Cột 7/12) */}
             <div className="lg:col-span-7 space-y-6">
-              
+
               {/* Main Profile Panel */}
               <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-6">
                 <div className="flex flex-col sm:flex-row items-center gap-6">
@@ -444,7 +444,7 @@ export default function ProfileView({
 
             {/* Right side: Caregivers family circle panel (Cột 5/12) */}
             <div className="lg:col-span-5 space-y-6">
-              
+
               {/* Caregivers panel */}
               <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
                 <div className="flex items-center justify-between border-b border-white/20 pb-2">
@@ -538,7 +538,7 @@ export default function ProfileView({
 
           </motion.div>
         ) : (
-          
+
           // VIEW 2: Edit or Create Baby Profile view
           <motion.div
             key="edit-view"
@@ -558,7 +558,7 @@ export default function ProfileView({
             )}
 
             <form onSubmit={handleSaveBaby} className="space-y-6 text-xs font-bold text-slate-600">
-              
+
               {/* Avatar upload: bấm để chọn file hoặc kéo thả trực tiếp vào ảnh - thay cho
                   dán URL thủ công (nguồn gốc lỗi ảnh vỡ khi người dùng lỡ dán đường dẫn ổ đĩa
                   cục bộ dạng file:/// mà trình duyệt không đọc được). */}
@@ -864,9 +864,16 @@ export default function ProfileView({
                 <button
                   type="submit"
                   disabled={isInviting}
-                  className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer disabled:opacity-60"
+                  className="w-full bg-primary hover:bg-primary/95 disabled:bg-slate-300 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
                 >
-                  {isInviting ? "Đang gửi..." : "Gửi lời mời"}
+                  {isInviting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Đang gửi email...</span>
+                    </>
+                  ) : (
+                    <span>Gửi lời mời qua Email</span>
+                  )}
                 </button>
               </form>
             </motion.div>

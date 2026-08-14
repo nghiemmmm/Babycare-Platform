@@ -98,26 +98,105 @@ def load_label(label_csv):
     return labels
 
 
-def inference(audio_path, label_csv=None, checkpoint_path=None):
-    if label_csv is None:
-        label_csv = os.path.join(BASE_DIR, 'data', 'esc_class_labels_indices.csv')
-    if checkpoint_path is None:
-        checkpoint_path = os.path.join(BASE_DIR, 'weights', 'best_audio_model.pth')
+# ---------------------------------------------------------------------------
+# Module-level AST Model Singleton
+# ---------------------------------------------------------------------------
 
+class _ASTModelSingleton:
+    """Giữ AST model đã load sẵn trong bộ nhớ, tránh torch.load() mỗi request."""
+
+    def __init__(self):
+        self.model = None
+        self.labels = None
+        self.device = None
+        self._loaded = False
+
+    def load(self, label_csv=None, checkpoint_path=None):
+        """Load model và labels từ disk. Chỉ gọi 1 lần khi startup."""
+        if self._loaded:
+            return
+
+        if label_csv is None:
+            label_csv = os.path.join(BASE_DIR, 'data', 'esc_class_labels_indices.csv')
+        if checkpoint_path is None:
+            checkpoint_path = os.path.join(BASE_DIR, 'weights', 'best_audio_model.pth')
+
+        if not os.path.exists(label_csv):
+            raise FileNotFoundError(f"Label file not found: {label_csv}")
+        if not os.path.exists(checkpoint_path):
+            raise FileNotFoundError(f"Model checkpoint file not found: {checkpoint_path}")
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.labels = load_label(label_csv)
+        n_class = len(self.labels)
+
+        ast_mdl = ASTModel(
+            label_dim=n_class,
+            input_fdim=128,
+            input_tdim=704,
+            fstride=10,
+            tstride=10,
+            imagenet_pretrain=False,
+            audioset_pretrain=False,
+            verbose=False
+        ).to(self.device)
+
+        ckpt = torch.load(checkpoint_path, map_location=self.device)
+        new_state = {k[7:] if k.startswith("module.") else k: v for k, v in ckpt.items()}
+        ast_mdl.load_state_dict(new_state)
+        ast_mdl.eval()
+
+        self.model = ast_mdl
+        self._loaded = True
+
+    def clear(self):
+        """Giải phóng model khỏi RAM/VRAM khi shutdown."""
+        self.model = None
+        self.labels = None
+        self._loaded = False
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._loaded
+
+
+# Singleton instance — được load 1 lần trong lifespan startup
+_ast_singleton = _ASTModelSingleton()
+
+
+def get_ast_model() -> _ASTModelSingleton:
+    """Trả về singleton AST model. Tự load nếu chưa được load (fallback cho CLI)."""
+    if not _ast_singleton.is_loaded:
+        _ast_singleton.load()
+    return _ast_singleton
+
+
+def inference(audio_path, label_csv=None, checkpoint_path=None, _model_singleton=None):
+    """
+    Chạy inference phân loại tiếng khóc.
+
+    Khi chạy trong FastAPI: _model_singleton được inject từ singleton đã load sẵn.
+    Khi chạy từ CLI (if __name__ == '__main__'): tự load model lần đầu.
+
+    Args:
+        audio_path: Đường dẫn file audio.
+        label_csv: Đường dẫn file label CSV (tùy chọn, mặc định tự tìm).
+        checkpoint_path: Đường dẫn file weights .pth (tùy chọn, mặc định tự tìm).
+        _model_singleton: Instance _ASTModelSingleton đã load. Nếu None, tự lấy singleton.
+
+    Returns:
+        dict với keys: label, confidence, scores, duration, model_version.
+    """
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
-    if not os.path.exists(label_csv):
-        raise FileNotFoundError(f"Label file not found: {label_csv}")
-    if not os.path.exists(checkpoint_path):
-        raise FileNotFoundError(f"Model checkpoint file not found: {checkpoint_path}")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Lấy singleton (hoặc load nếu chạy từ CLI)
+    singleton = _model_singleton or get_ast_model()
+    device = singleton.device
+    labels = singleton.labels
+    ast_mdl = singleton.model
 
-    # Load labels
-    labels = load_label(label_csv)
-    n_class = len(labels)
-
-    # Load audio and calculate duration
+    # Load audio và calculate duration
     waveform, sr = load_audio(audio_path)
     duration = round(waveform.shape[1] / sr, 2)
 
@@ -125,33 +204,14 @@ def inference(audio_path, label_csv=None, checkpoint_path=None):
     feats = make_features(audio_path, mel_bins=128, target_length=704)
     feats = feats.unsqueeze(0).to(device)
 
-
-    # Load AST model
-    ast_mdl = ASTModel(
-        label_dim=n_class,
-        input_fdim=128,
-        input_tdim=704,
-        fstride=10,
-        tstride=10,
-        imagenet_pretrain=False,
-        audioset_pretrain=False,
-        verbose=False
-    ).to(device)
-
-    # Load trained weights checkpoint
-    ckpt = torch.load(checkpoint_path, map_location=device)
-    new_state = {k[7:] if k.startswith("module.") else k: v for k, v in ckpt.items()}
-    ast_mdl.load_state_dict(new_state)
-    ast_mdl.eval()
-
-    # Model Inference
+    # Model Inference — không load lại model
     with torch.no_grad():
         output = torch.sigmoid(ast_mdl(feats))
 
     result = output.cpu().numpy()[0]
     sorted_idx = np.argsort(result)[::-1]
 
-    scores = {labels[i]: round(float(result[i]), 4) for i in range(n_class)}
+    scores = {labels[i]: round(float(result[i]), 4) for i in range(len(labels))}
     top_label = labels[sorted_idx[0]]
     confidence = round(float(result[sorted_idx[0]]), 4)
 
@@ -162,6 +222,7 @@ def inference(audio_path, label_csv=None, checkpoint_path=None):
         "duration": duration,
         "model_version": "AST base384 (Infant Cry Fine-tuned)"
     }
+
 
 
 if __name__ == '__main__':

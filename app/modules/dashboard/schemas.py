@@ -62,6 +62,15 @@ class GrowthSnapshot(BaseModel):
     height_percentile: Optional[str] = None
 
 
+# ─── CDC Milestone ─────────────────────────────────────────────────────────────
+
+class MilestoneSnapshot(BaseModel):
+    age_months: float
+    milestone_stage: str          # "Mốc 6 Tháng (Chuẩn CDC/AAP)"
+    key_developments: List[str]   # ["Ngồi có hỗ trợ", "Quay đầu khi gọi tên", "Tập ăn dặm"]
+    guideline_source: str         # "CDC / American Academy of Pediatrics"
+
+
 # ─── AI Tip ───────────────────────────────────────────────────────────────────
 
 class AiTipWidget(BaseModel):

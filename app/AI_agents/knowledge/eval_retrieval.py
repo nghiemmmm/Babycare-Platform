@@ -1,3 +1,9 @@
+import sys
+
+# Force UTF-8 encoding for Windows stdout logging
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 """
 RAG Retrieval Evaluation Script
 

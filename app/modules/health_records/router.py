@@ -6,7 +6,7 @@ Defines HTTP API endpoints for managing baby medical history and symptoms.
 from fastapi import APIRouter, Depends, status
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.schemas import UserRecord
-from app.modules.health_records.schemas import HealthRecordCreate, HealthRecordResponse
+from app.modules.health_records.schemas import HealthRecordCreate, HealthRecordResponse, HealthRecordUpdate
 from app.modules.health_records.service import HealthRecordService
 from app.shared.schemas import Message
 
@@ -34,6 +34,20 @@ async def get_baby_health_history(
     """
     return health_service.get_history(baby_id, user_id=current_user.uid)
 
+@router.patch("/{baby_id}/health-records/{record_id}", response_model=HealthRecordResponse)
+async def update_baby_health_record(
+    baby_id: str,
+    record_id: str,
+    update_in: HealthRecordUpdate,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Cập nhật trạng thái hoặc thông tin bệnh án của bé.
+    """
+    update_data = {k: v for k, v in update_in.model_dump().items() if v is not None}
+    return health_service.update_record(baby_id, record_id, update_data, user_id=current_user.uid)
+
+
 @router.delete("/{baby_id}/health-records/{record_id}", response_model=Message)
 async def delete_baby_health_record(
     baby_id: str,
@@ -45,3 +59,4 @@ async def delete_baby_health_record(
     """
     health_service.delete_record(baby_id, record_id, user_id=current_user.uid)
     return Message(message="Xóa bản ghi bệnh án thành công")
+

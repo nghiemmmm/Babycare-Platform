@@ -108,3 +108,5 @@ Tài liệu này chi tiết hóa các công việc cần thực hiện, các t�
 - [x] Viết FastAPI Router tiếp nhận payload: `{"message": "...", "baby_id": "...", "thread_id": "..."}`.
 - [x] Gọi `agent_orchestrator.py` để invoke Router Graph của LangGraph.
 - [x] Hỗ trợ cả hai cơ chế trả về: Streaming câu trả lời (Server-Sent Events) hoặc trả về JSON đầy đủ sau khi Agent hoàn thành.
+
+Không dùng LLM cho mọi request. Chỉ dùng model mạnh khi thực sự cần reasoning

@@ -96,7 +96,7 @@ async def get_nutrition_feeds(
     if date and date != "Today":
         query = query.where("date", "==", date)
         
-    docs = query.stream()
+    docs = query.limit(50).stream()
     results = []
     for doc in docs:
         d = doc.to_dict()
@@ -172,7 +172,8 @@ async def get_ingredients(
     solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
     
     db = get_firestore_db()
-    docs = db.collection("nutrition_ingredients").where("baby_id", "==", baby_id).stream()
+    docs = db.collection("nutrition_ingredients").where("baby_id", "==", baby_id).limit(50).stream()
+
     results = []
     for doc in docs:
         d = doc.to_dict()
@@ -275,17 +276,53 @@ async def get_weekly_meal_plan(
     return weekly_meal_plan_service.get_cached_weekly_plan(baby_id, current_user.uid)
 
 
-@feeds_router.post("/meal-plan/weekly/generate", response_model=WeeklyMealPlanResponse, status_code=status.HTTP_201_CREATED)
+import logging
+from fastapi import BackgroundTasks
+from app.shared.jobs import JobManager, JobStatus
+from app.shared.schemas import AsyncJobCreatedResponse, Message
+from app.shared.exceptions import MealPlanLockedError
+
+logger = logging.getLogger(__name__)
+
+
+async def _bg_generate_weekly_meal_plan(job_id: str, baby_id: str, user_id: str, feedback: Optional[str]):
+    JobManager.update_job(job_id, JobStatus.PROCESSING, progress=25)
+    try:
+        plan = await weekly_meal_plan_service.generate_weekly_plan(baby_id, user_id, feedback)
+        JobManager.update_job(job_id, JobStatus.COMPLETED, progress=100, result=plan.model_dump())
+    except Exception as e:
+        logger.error(f"Lỗi tạo thực đơn tuần trong background (Job {job_id}): {e}")
+        JobManager.update_job(job_id, JobStatus.FAILED, error=str(e))
+
+
+@feeds_router.post("/meal-plan/weekly/generate", response_model=AsyncJobCreatedResponse, status_code=status.HTTP_202_ACCEPTED)
 async def generate_weekly_meal_plan(
     req: GenerateWeeklyMealPlanRequest,
+    background_tasks: BackgroundTasks,
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
-    Sinh thực đơn 7 ngày mới cho bé (luôn gọi lại LLM + RAG), bắt đầu từ hôm nay. Nếu thực đơn
-    hiện tại đã được chấp nhận và chưa hết hạn 7 ngày, backend trả 409 (MealPlanLockedError) -
-    chỉ được ghi đè khi thực đơn hiện tại còn đang pending hoặc đã hết hạn.
+    Sinh thực đơn 7 ngày mới cho bé dưới dạng Async Background Job (trả về HTTP 202 ngay lập tức kèm job_id).
+    Nếu thực đơn hiện tại đã được chấp nhận và chưa hết hạn 7 ngày, backend trả 409 (MealPlanLockedError).
     """
-    return await weekly_meal_plan_service.generate_weekly_plan(req.baby_id, current_user.uid, req.feedback)
+    cached = weekly_meal_plan_service.get_cached_weekly_plan(req.baby_id, current_user.uid)
+    if cached and cached.status == "accepted":
+        from datetime import date
+        try:
+            end_d = date.fromisoformat(cached.end_date)
+            if date.today() <= end_d:
+                raise MealPlanLockedError(f"Thực đơn 7 ngày hiện tại của bé đang được áp dụng tới hết ngày {cached.end_date}.")
+        except (ValueError, TypeError):
+            pass
+
+    job_id = JobManager.create_job("weekly_meal_plan", current_user.uid, {"baby_id": req.baby_id})
+    background_tasks.add_task(_bg_generate_weekly_meal_plan, job_id, req.baby_id, current_user.uid, req.feedback)
+
+    return AsyncJobCreatedResponse(
+        job_id=job_id,
+        status="PENDING",
+        message="Gợi ý thực đơn 7 ngày ấm áp cho bé đang được khởi tạo trong nền..."
+    )
 
 
 @feeds_router.post("/meal-plan/weekly/accept", response_model=WeeklyMealPlanResponse)

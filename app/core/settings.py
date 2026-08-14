@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     REDIS_URL: Optional[str] = None
     BABY_CACHE_TTL_SECONDS: int = 60
 
-    # Timeout tối đa (giây) cho các call đồng bộ (Firebase/Firestore) chạy trong threadpool
-    THREADPOOL_TIMEOUT_SECONDS: int = 10
+    # Timeout tối đa (giây) cho các call đồng bộ (Firebase/Firestore/RAG) chạy trong threadpool
+    THREADPOOL_TIMEOUT_SECONDS: int = 30
 
     # URL gốc của frontend, dùng để tạo action link khi cần (vd. reset password)
     FRONTEND_URL: str = "http://localhost:5173"
@@ -36,9 +36,15 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM_EMAIL: Optional[str] = None
 
-    # AI API Keys
+    # AI API Keys & LLM Provider Settings
     GEMINI_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
+    OPENROUTER_API_KEY: Optional[str] = None
+    LLM_PROVIDER: str = "openrouter"  # "openrouter", "gemini", "openai"
+    OPENROUTER_MODEL: str = "google/gemini-3.5-flash-001"
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    LLM_TIMEOUT_SECONDS: float = 60.0
+    LLM_MAX_RETRIES: int = 2
 
     # Cloudinary (tùy chọn - nếu bỏ trống, ảnh đại diện bé và file ghi âm tiếng khóc
     # fail-open sang lưu trên đĩa local app/static/, giống nguyên tắc SMTP/Redis)

@@ -6,7 +6,8 @@ class BabyProfileTool(BaseTool):
     name = "baby_profile_tool"
     description = "Retrieve or update baby profiles. Actions: get_baby, get_my_babies, create_baby, update_baby."
 
-    def _run(self, action: str, user_id: str, baby_id: str = None, data: dict = None):
+    def _run(self, action: str, user_id: str, baby_id: str = None, data: dict = None, **kwargs):
+
         service = BabyService()
         if action == "get_baby":
             if not baby_id:

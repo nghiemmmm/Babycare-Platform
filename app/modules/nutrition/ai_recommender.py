@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
@@ -105,7 +106,8 @@ class NutritionRecommenderService:
         # trong router.py, nên không được chạm GEMINI_API_KEY lúc import (sẽ crash app khi
         # thiếu key, kể cả với các request không liên quan đến gợi ý dinh dưỡng).
         if self._reasoner is None:
-            self._reasoner = AIReasoner(model_name="gemini-flash-latest")
+            from app.AI_agents.core.constant import NUTRITION_RECOMMENDER_MODEL
+            self._reasoner = AIReasoner(model_name=NUTRITION_RECOMMENDER_MODEL)
         return self._reasoner
 
     def get_cached(self, baby_id: str, user_id: str) -> Optional[NutritionRecommendationResponse]:
@@ -206,6 +208,7 @@ class NutritionRecommenderService:
         )
 
     async def generate_recommendation(self, baby_id: str, user_id: str) -> NutritionRecommendationResponse:
+        t_start = time.time()
         baby = self.baby_service.get_baby_by_id(baby_id, user_id)
         age_months = self._calculate_age_months(baby.birth_date)
 
@@ -215,9 +218,9 @@ class NutritionRecommenderService:
         growth_history = self.growth_service.get_growth_history(baby_id, user_id)
         latest_growth = growth_history[0] if growth_history else None
         recent_medications = self.medication_service.get_medication_history(baby_id, user_id)[:5]
+        t_ctx = time.time()
+        logger.info(f"[NutritionRecommender Stage 1] Profile & DB context fetched in {(t_ctx - t_start):.3f}s")
 
-        # Mỗi truy vấn RAG gắn kèm domain filter để đảm bảo lấy đúng tài liệu chuyên biệt
-        # (vd không để nội dung dị ứng bị nội dung ăn dặm chung lấn át trong similarity search).
         rag_queries: list[tuple[str, Optional[str]]] = [
             (f"Thực đơn ăn dặm phù hợp cho bé {age_months} tháng tuổi", "nutrition_general")
         ]
@@ -231,6 +234,7 @@ class NutritionRecommenderService:
                 rag_queries.append((f"Dinh dưỡng cho bé đang bị {diagnosis_summary}", "illness_diet"))
 
         try:
+            t_rag_start = time.time()
             rag_results = await asyncio.gather(
                 *[asyncio.to_thread(self.retriever.retrieve_context, q, 3, domain) for q, domain in rag_queries]
             )
@@ -238,16 +242,22 @@ class NutritionRecommenderService:
                 f"[Nguồn: {domain or 'chung'}]\n{context}"
                 for (_, domain), context in zip(rag_queries, rag_results)
             )
+            t_rag_end = time.time()
+            logger.info(f"[NutritionRecommender Stage 2] Multi-Query RAG ({len(rag_queries)} queries) fetched in {(t_rag_end - t_rag_start):.3f}s")
 
             context_prompt = self._build_context_prompt(
                 baby, age_months, active_conditions, recent_foods, averse_ingredients,
                 latest_growth, recent_medications, rag_context
             )
 
+            t_llm_start = time.time()
             raw_response = await self.reasoner.areason(
                 prompt=context_prompt,
                 system_instruction=NUTRITION_RECOMMENDATION_SYSTEM_PROMPT,
             )
+            t_llm_end = time.time()
+            logger.info(f"[NutritionRecommender Stage 3] LLM Reasoning finished in {(t_llm_end - t_llm_start):.3f}s (Total pipeline: {(t_llm_end - t_start):.3f}s)")
+
             parsed = _extract_json(raw_response)
             llm_output = _LLMNutritionOutput.model_validate(parsed)
         except Exception as e:

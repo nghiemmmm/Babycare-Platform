@@ -1,4 +1,9 @@
 import logging
+from dotenv import load_dotenv
+
+# Nạp tất cả biến môi trường từ .env bao gồm LangSmith Tracing
+load_dotenv(override=True)
+
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, APIRouter
 from fastapi.staticfiles import StaticFiles
@@ -27,7 +32,9 @@ from app.modules.medication.router import health_medication_router
 from app.modules.nutrition import nutrition_router
 from app.modules.nutrition.router import feeds_router
 from app.modules.cry import cry_router
-from app.modules.ai_agent import ai_agent_router
+from app.modules.ai_agent.router import ai_agent_router
+from app.modules.jobs.router import jobs_router
+
 
 # Configure logging
 def setup_logging():
@@ -38,6 +45,11 @@ def setup_logging():
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+if os.getenv("LANGCHAIN_TRACING_V2") == "true":
+    logger.info(f"[LangSmith] 🚀 Tracing Enabled | Project: '{os.getenv('LANGCHAIN_PROJECT')}' | Endpoint: '{os.getenv('LANGCHAIN_ENDPOINT')}'")
+else:
+    logger.warning("[LangSmith] ⚠️ Tracing is currently DISABLED.")
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -84,6 +96,7 @@ api_router.include_router(nutrition_router)
 api_router.include_router(feeds_router)
 api_router.include_router(cry_router)
 api_router.include_router(ai_agent_router)
+api_router.include_router(jobs_router)
 
 app.include_router(api_router, prefix="/api/v1")
 

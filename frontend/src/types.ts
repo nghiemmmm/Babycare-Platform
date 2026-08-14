@@ -155,6 +155,17 @@ export interface Citation {
   uri: string;
 }
 
+export interface ToolStep {
+  id?: string;
+  tool_name: string;
+  display_name: string;
+  args?: any;
+  status: string;
+  result_summary?: string;
+  start_time?: string;
+  duration_ms?: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -162,6 +173,9 @@ export interface ChatMessage {
   timestamp: string;
   extraction?: SmartExtraction | null;
   citations?: Citation[];
+  toolSteps?: ToolStep[];
+  tool_steps?: ToolStep[];
+  activeStepName?: string;
   isVoice?: boolean;
   voiceDuration?: string;
 }
@@ -170,7 +184,7 @@ export interface NotificationItem {
   id: string;
   title: string;
   message: string;
-  type: "medication" | "safety" | "feeding" | "system";
+  type: "medication" | "safety" | "feeding" | "system" | "health_check";
   created_at: string;
   read: boolean;
   action_url?: string;

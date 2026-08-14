@@ -1,4 +1,5 @@
 from typing import Optional, Annotated
+import operator
 from typing_extensions import TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
@@ -23,6 +24,7 @@ class OverallState(TypedDict):
     # Out-of-scope web search fields
     web_search_results: Optional[list[dict]]   # Raw results from WebSearchTool
     is_out_of_scope: Optional[bool]            # Flag set when intent = "out_of_scope"
+    tool_steps: Annotated[list[dict], operator.add]
 
 
 from typing import Any, Iterator, Tuple
@@ -120,7 +122,8 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
                 .get()
             )
             if docs:
-                d = docs[0].to_dict()
+                sorted_docs = sorted(docs, key=lambda x: x.to_dict().get("checkpoint_id", ""), reverse=True)
+                d = sorted_docs[0].to_dict()
                 if d.get("user_id") and user_id and d.get("user_id") != user_id:
                     raise PermissionError("Access denied: You do not have permission to access this chat thread.")
                 return CheckpointTuple(
@@ -175,7 +178,8 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
             )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        return self.get_tuple(config)
+        from app.shared.concurrency import run_in_threadpool
+        return await run_in_threadpool(self.get_tuple, config)
 
     async def aput(
         self,
@@ -184,7 +188,9 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        return self.put(config, checkpoint, metadata, new_versions)
+        from app.shared.concurrency import run_in_threadpool
+        return await run_in_threadpool(self.put, config, checkpoint, metadata, new_versions)
+
 
     def put_writes(
         self,

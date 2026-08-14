@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiClientError } from "../lib/authClient";
 import AuthLayout from "../components/AuthLayout";
+import { Eye, EyeOff } from "lucide-react";
 
 const inputClass =
   "w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all";
@@ -18,6 +19,8 @@ export default function RegisterPage() {
   const [email, setEmail] = useState(() => searchParams.get("email") || "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -82,33 +85,55 @@ export default function RegisterPage() {
           <label htmlFor="password" className="text-xs font-bold text-slate-600">
             Mật khẩu
           </label>
-          <input
-            id="password"
-            type="password"
-            className={inputClass}
-            required
-            minLength={6}
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Tối thiểu 6 ký tự"
-          />
+          <div className="relative">
+            <input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              className={`${inputClass} pr-10`}
+              required
+              minLength={6}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Tối thiểu 6 ký tự"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+              tabIndex={-1}
+              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         </div>
         <div className="space-y-1.5">
           <label htmlFor="confirm-password" className="text-xs font-bold text-slate-600">
             Xác nhận mật khẩu
           </label>
-          <input
-            id="confirm-password"
-            type="password"
-            className={inputClass}
-            required
-            minLength={6}
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Nhập lại mật khẩu"
-          />
+          <div className="relative">
+            <input
+              id="confirm-password"
+              type={showConfirmPassword ? "text" : "password"}
+              className={`${inputClass} pr-10`}
+              required
+              minLength={6}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Nhập lại mật khẩu"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+              tabIndex={-1}
+              aria-label={showConfirmPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+            >
+              {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         </div>
         <button
           type="submit"

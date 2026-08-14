@@ -12,6 +12,8 @@ from app.modules.growth_tracking.utils import get_closest_standard, evaluate_met
 from app.modules.baby.service import BabyService
 from app.modules.guardian.permissions import ADMIN, GUARDIAN, require_role
 from app.shared.exceptions import EntityNotFoundError
+from app.infrastructure.cache.redis import get_json, set_json, invalidate_baby_cache
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -103,12 +105,19 @@ class GrowthTrackingService:
         
         # 3. Tính toán và lưu trữ kèm trạng thái WHO
         self._populate_who_status(log_obj, baby.birth_date, baby.gender)
-        return repo.create(log_obj)
+        created = repo.create(log_obj)
+        invalidate_baby_cache(baby_id, user_id)
+        return created
 
     def get_growth_history(self, baby_id: str, user_id: str) -> list[GrowthLogResponse]:
         """
-        Lấy lịch sử phát triển chiều cao, cân nặng của bé kèm đối chiếu WHO.
+        Lấy lịch sử phát triển chiều cao, cân nặng của bé kèm đối chiếu WHO (đệm Redis 60s).
         """
+        cache_key = f"growth_history:{baby_id}"
+        cached_data = get_json(cache_key)
+        if cached_data and isinstance(cached_data, list):
+            return [GrowthLogResponse(**item) for item in cached_data]
+
         baby = self.baby_service.get_baby_by_id(baby_id, user_id)
 
         repo = GrowthTrackingRepository(baby_id)
@@ -120,6 +129,7 @@ class GrowthTrackingService:
             
         # Sắp xếp nhật ký mới nhất lên trước
         logs.sort(key=lambda x: x.logged_at, reverse=True)
+        set_json(cache_key, [l.model_dump() for l in logs], ttl_seconds=settings.BABY_CACHE_TTL_SECONDS)
         return logs
 
     def delete_growth_log(self, baby_id: str, log_id: str, user_id: str) -> bool:
@@ -134,4 +144,7 @@ class GrowthTrackingService:
         if not log:
             raise EntityNotFoundError("Không tìm thấy bản ghi nhật ký phát triển")
 
-        return repo.delete(log_id)
+        res = repo.delete(log_id)
+        if res:
+            invalidate_baby_cache(baby_id, user_id)
+        return res

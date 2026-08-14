@@ -15,7 +15,8 @@ from typing import Optional, List
 from app.modules.baby.service import BabyService
 from app.modules.growth_tracking.service import GrowthTrackingService
 from app.modules.medication.service import MedicationService
-from google.cloud.firestore import FieldFilter
+from google.cloud.firestore import FieldFilter, Query
+
 from app.infrastructure.database import get_firestore_db
 
 from app.modules.dashboard.schemas import (
@@ -27,6 +28,7 @@ from app.modules.dashboard.schemas import (
     SafetyAlert,
     CountdownWidget,
     GrowthSnapshot,
+    MilestoneSnapshot,
     AiTipWidget,
     ActivityStreamItem,
 )
@@ -233,6 +235,39 @@ class DashboardAggregator:
             logger.warning(f"Could not aggregate growth data: {e}")
             return None
 
+    def _aggregate_milestone(self, birth_date_str: str) -> MilestoneSnapshot:
+        """
+        Tính toán mốc phát triển CDC Milestone dựa trên độ tuổi thực tế của bé.
+        Cơ chế: Medical Knowledge + Exact Timing.
+        """
+        try:
+            birth_date = datetime.fromisoformat(birth_date_str.replace("Z", "+00:00")).date()
+        except Exception:
+            birth_date = datetime.now(timezone.utc).date()
+
+        age_days = (datetime.now(timezone.utc).date() - birth_date).days
+        age_months = max(0.0, round(age_days / 30.4375, 1))
+
+        if age_months <= 3:
+            stage = "2 - 3 Tháng"
+            points = ["Tự nâng đầu khi nằm sấp", "Mỉm cười đáp lại cha mẹ", "Dõi theo chuyển động mắt"]
+        elif age_months <= 6:
+            stage = "6 Tháng"
+            points = ["Ngồi có hỗ trợ", "Quay đầu khi được gọi tên", "Bắt đầu tập ăn dặm chuẩn WHO"]
+        elif age_months <= 9:
+            stage = "9 Tháng"
+            points = ["Bò trườn linh hoạt", "Bám vịn đứng dậy", "Chơi trò giấu đồ vật"]
+        else:
+            stage = "12 Tháng+"
+            points = ["Tự đứng / Chập chững bước đi", "Nói từ đơn 'Mẹ/Bố'", "Vẫy tay chào tạm biệt"]
+
+        return MilestoneSnapshot(
+            age_months=age_months,
+            milestone_stage=f"Mốc {stage} (Chuẩn CDC/AAP)",
+            key_developments=points,
+            guideline_source="CDC / American Academy of Pediatrics (AAP)"
+        )
+
     def _aggregate_ai_tip(self, baby, baby_id: str) -> Optional[AiTipWidget]:
         """
         Tìm tip AI phù hợp tuổi bé trong Firestore collection healthcare_tips.
@@ -246,9 +281,15 @@ class DashboardAggregator:
             age_months = 6
 
         db = get_firestore_db()
-        for doc in db.collection("healthcare_tips").stream():
+        docs = (
+            db.collection("healthcare_tips")
+            .where(filter=FieldFilter("min_age_months", "<=", age_months))
+            .limit(5)
+            .stream()
+        )
+        for doc in docs:
             d = doc.to_dict()
-            if d.get("min_age_months", 0) <= age_months <= d.get("max_age_months", 24):
+            if age_months <= d.get("max_age_months", 24):
                 return AiTipWidget(
                     tip_id=doc.id,
                     category=d.get("category", "Chăm sóc bé"),
@@ -278,6 +319,8 @@ class DashboardAggregator:
             docs = (
                 db.collection("notifications")
                 .where(filter=FieldFilter("baby_id", "==", baby_id))
+                .order_by("created_at", direction=Query.DESCENDING)
+                .limit(20)
                 .stream()
             )
             for doc in docs:
@@ -296,6 +339,7 @@ class DashboardAggregator:
         except Exception as e:
             logger.warning(f"Error fetching notifications collection: {e}")
 
+
         # 2. Tự động bổ sung thông báo lịch uống thuốc đến hạn nếu chưa có
         try:
             med_logs = self.med_svc.get_medication_history(baby_id, user_id)
@@ -313,7 +357,26 @@ class DashboardAggregator:
         except Exception as e:
             logger.warning(f"Error aggregating medication notifications: {e}")
 
-        # 3. Tự động bổ sung thông báo mẫu nếu danh sách rỗng
+        # 3. Tự động bổ sung thông báo Nhắc nhở theo dõi khỏi bệnh (health_check)
+        try:
+            health_records = self.health_svc.get_history(baby_id, user_id)
+            for hr in health_records[:2]:
+                diag = hr.diagnosis or (hr.symptoms[0] if hr.symptoms else "Sức khỏe mệt")
+                notifications.append(
+                    NotificationResponse(
+                        id=f"notif_health_{hr.id}",
+                        title="🔔 Nhắc nhở theo dõi sức khỏe",
+                        message=f"Bé đã khỏi đợt '{diag}' chưa phụ huynh?",
+                        type="health_check",
+                        created_at=hr.recorded_at,
+                        read=False,
+                        action_url=f"/health?resolve_id={hr.id}"
+                    )
+                )
+        except Exception as e:
+            logger.warning(f"Error aggregating health check notifications: {e}")
+
+        # 4. Tự động bổ sung thông báo mẫu nếu danh sách rỗng
         if not notifications:
             notifications = [
                 NotificationResponse(

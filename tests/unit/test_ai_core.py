@@ -291,8 +291,9 @@ async def test_agent_abstractions():
 from app.AI_agents.core import agent_config, get_agent_logger, AIAgentException
 
 def test_core_utilities():
-    assert agent_config.DEFAULT_CHAT_MODEL == "gemini-flash-latest"
+    assert agent_config.DEFAULT_CHAT_MODEL == "gemini-3.5-flash"
     assert agent_config.RAG_CHUNK_SIZE == 1500
+
     
     logger = get_agent_logger("test")
     assert logger.name == "app.AI_agents.test"

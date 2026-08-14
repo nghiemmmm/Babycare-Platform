@@ -55,7 +55,8 @@ def generate_pdf_report(filename: str, title: str, text_content: str):
 
 class ReportGraph:
     def __init__(self):
-        self.reasoner = AIReasoner(model_name=COMPLEX_REASONING_MODEL) # Complex summary -> use pro
+        from app.AI_agents.core.constant import WEEKLY_REPORT_MODEL
+        self.reasoner = AIReasoner(model_name=WEEKLY_REPORT_MODEL)
         self.baby_service = BabyService()
         self.growth_service = GrowthTrackingService(self.baby_service)
         self.health_service = HealthRecordService(self.baby_service)

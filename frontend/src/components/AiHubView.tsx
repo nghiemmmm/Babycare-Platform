@@ -12,6 +12,7 @@ import {
   Paperclip,
   Check,
   ChevronDown,
+  ChevronRight,
   BookOpen,
   Calendar,
   Activity,
@@ -23,9 +24,15 @@ import {
   Video,
   Eye,
   Sliders,
-  Award
+  Award,
+  Wrench,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Terminal,
+  FileText
 } from "lucide-react";
-import { BabyProfile, ChatMessage, SmartExtraction } from "../types";
+import { BabyProfile, ChatMessage, SmartExtraction, ToolStep } from "../types";
 
 interface AiHubViewProps {
   activeBaby: BabyProfile;
@@ -64,6 +71,23 @@ export default function AiHubView({
   const [activeThread, setActiveThread] = useState("sitting");
   const [showCitationDropdown, setShowCitationDropdown] = useState(false);
   const [showSwitchBabyDropdown, setShowSwitchBabyDropdown] = useState(false);
+  const [openToolTimelines, setOpenToolTimelines] = useState<Record<string, boolean>>({});
+
+  const toggleToolTimeline = (msgId: string) => {
+    setOpenToolTimelines((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
+  };
+
+  const formatBabyName = (name: string) => {
+    if (!name) return "Bé";
+    const trimmed = name.trim();
+    return /^bé\b/i.test(trimmed) ? trimmed : `Bé ${trimmed}`;
+  };
+
+  const rawList = babies && babies.length > 0 ? babies : activeBaby ? [activeBaby] : [];
+  const uniqueBabies = Array.from(
+    new Map(rawList.map((b) => [b.id, b])).values()
+  );
+
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploadingChatFile, setIsUploadingChatFile] = useState(false);
@@ -103,7 +127,7 @@ export default function AiHubView({
       setInputText(transcript);
     }
   }, [transcript]);
-  
+
   // Voice Memo Simulation State
   const [isVoicePlaying, setIsVoicePlaying] = useState(false);
   const [voiceProgress, setVoiceProgress] = useState(0);
@@ -163,24 +187,9 @@ export default function AiHubView({
     return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  // Tuổi hiển thị của bé đang chọn, cùng công thức với ProfileView.calculateAgeDetails
-  const calculateAgeLabel = (birthDateStr: string) => {
-    const birth = new Date(birthDateStr);
-    const now = new Date();
-    const diffDays = Math.ceil(Math.abs(now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24));
-    const years = Math.floor(diffDays / 365);
-    const months = Math.floor((diffDays % 365) / 30.4);
-    return years > 0 ? `${years} tuổi, ${months} tháng tuổi` : `${months} tháng tuổi`;
-  };
-
-  const handleSwitchBaby = (id: string) => {
-    onSelectBaby(id);
-    setShowSwitchBabyDropdown(false);
-  };
-
   return (
     <div className="flex h-[calc(100vh-100px)] overflow-hidden -m-gutter font-sans" id="ai-hub-view">
-      
+
       {/* 1. Cột Trái (20%): Lịch sử hội thoại (Recent Chats) */}
       <div className="w-[22%] bg-white/40 border-r border-white/20 flex flex-col p-4 space-y-5 select-none shrink-0 h-full">
         {/* New Chat Button */}
@@ -195,16 +204,15 @@ export default function AiHubView({
         {/* Recent Chats Thread List */}
         <div className="flex-1 overflow-y-auto space-y-1">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2.5 mb-2">Cuộc trò chuyện gần đây</p>
-          
+
           {threads.map((thread) => (
             <button
               key={thread.id}
               onClick={() => onSelectThread(thread.id)}
-              className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all flex flex-col gap-1 cursor-pointer ${
-                activeThreadId === thread.id
+              className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${activeThreadId === thread.id
                   ? "bg-[#e0f2fe]/70 text-[#1c648e]"
                   : "text-slate-500 hover:bg-white/40"
-              }`}
+                }`}
             >
               <span className="flex items-center gap-2.5 w-full min-w-0">
                 <MessageSquare className="w-4 h-4 shrink-0 text-[#1c648e]" />
@@ -219,84 +227,94 @@ export default function AiHubView({
           ))}
         </div>
 
-        {/* Active Baby Mini-Profile panel */}
-        <div className="p-3 bg-white/50 border border-white/30 rounded-2xl flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-rose-200 overflow-hidden shrink-0 flex items-center justify-center border border-white">
-              {activeBaby.avatarUrl ? (
-                <img src={activeBaby.avatarUrl} alt={activeBaby.name} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-[10px] font-black text-rose-600">{activeBaby.name.slice(0, 2)}</span>
-              )}
+        {/* User Mini-Profile panel */}
+        <div className="relative">
+          <button
+            onClick={() => setShowSwitchBabyDropdown(!showSwitchBabyDropdown)}
+            className="w-full p-3 bg-white/60 hover:bg-white border border-white/40 rounded-2xl flex items-center justify-between gap-2 cursor-pointer transition-all shadow-xs"
+          >
+            <div className="flex items-center gap-2.5">
+              <img
+                src={activeBaby.avatarUrl || "/static/img/leo.png"}
+                alt={activeBaby.name}
+                className="w-8 h-8 rounded-full object-cover border border-white shrink-0"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/static/img/leo.png"; }}
+              />
+              <div className="text-left">
+                <p className="text-xs font-black text-slate-800">{formatBabyName(activeBaby.name)}</p>
+                <p className="text-[9px] text-slate-400 font-bold">Đang chọn</p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-800 truncate">{activeBaby.name}</p>
-              <p className="text-[9px] text-slate-400 font-bold">{calculateAgeLabel(activeBaby.birthDate)}</p>
-            </div>
-          </div>
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          </button>
+
+          <AnimatePresence>
+            {showSwitchBabyDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 5 }}
+                className="absolute bottom-full left-0 mb-2 w-full bg-white border border-slate-100 rounded-2xl shadow-xl p-1.5 z-50 text-xs font-bold"
+              >
+                <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider px-2 py-1">Chọn hồ sơ bé</p>
+                {uniqueBabies.map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={() => {
+                      onSelectBaby(b.id);
+                      setShowSwitchBabyDropdown(false);
+                    }}
+                    className={`w-full text-left p-2 rounded-xl flex items-center justify-between cursor-pointer transition-colors ${b.id === activeBaby.id
+                        ? "bg-[#e0f2fe]/70 text-[#1c648e] font-black"
+                        : "text-slate-600 hover:bg-slate-50 font-medium"
+                      }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={b.avatarUrl || "/static/img/leo.png"}
+                        alt={b.name}
+                        className="w-6 h-6 rounded-full object-cover"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/static/img/leo.png"; }}
+                      />
+                      <span>{formatBabyName(b.name)}</span>
+                    </div>
+                    {b.id === activeBaby.id && <Check className="w-3.5 h-3.5 text-[#1c648e]" />}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
       {/* 2. Cột Trung tâm (55%): Cửa sổ Chat thông minh (The AI Hub) */}
-      <div className="flex-1 flex flex-col bg-slate-50/40 relative h-full">
+      <div className="flex-1 flex flex-col bg-[#f8fafc] relative h-full">
         {/* Header Chat */}
         {(() => {
           const currentThread = threads.find((t) => t.id === activeThreadId);
           return (
-            <div className="p-4 border-b border-white/20 flex items-center justify-between bg-white/30 backdrop-blur-md">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white/70 backdrop-blur-md">
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-sm font-black text-slate-800">{currentThread?.title || "Trò chuyện với Trợ lý AI"}</h2>
-              
-              {/* Switch Baby Dropdown selector button */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowSwitchBabyDropdown(!showSwitchBabyDropdown)}
-                  className="bg-white/60 hover:bg-white border border-slate-200 px-2 py-0.5 rounded-md text-[9px] font-extrabold text-slate-500 inline-flex items-center gap-1 cursor-pointer"
-                >
-                  Chọn bé
-                  <ChevronDown className="w-2.5 h-2.5" />
-                </button>
+                  <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-[#1c648e]/10 text-[#1c648e]">
+                    {formatBabyName(activeBaby.name)}
+                  </span>
+                </div>
 
-                <AnimatePresence>
-                  {showSwitchBabyDropdown && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 5 }}
-                      className="absolute left-0 mt-1.5 w-40 bg-white border border-slate-100 rounded-xl shadow-lg p-1 z-50 text-[10px] font-bold"
-                    >
-                      {babies.map((b) => (
-                        <button
-                          key={b.id}
-                          onClick={() => handleSwitchBaby(b.id)}
-                          className={`w-full text-left p-2 hover:bg-slate-50 rounded-lg truncate ${
-                            b.id === activeBaby.id ? "text-[#1c648e]" : "text-slate-600"
-                          }`}
-                        >
-                          {b.name}{b.id === activeBaby.id ? " (Đang chọn)" : ""}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                  Sẵn sàng hỗ trợ tư vấn — Tích hợp Gemini Flash
+                </p>
               </div>
-            </div>
-            
-            <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-              Sẵn sàng hỗ trợ tư vấn — Tích hợp Gemini Flash
-            </p>
-          </div>
 
-          <div className="flex items-center gap-3 text-slate-600">
-            <button className="p-2 hover:bg-white/60 rounded-xl cursor-pointer transition-colors">
-              <Phone className="w-4 h-4 text-slate-600" />
-            </button>
-            <button className="p-2 hover:bg-white/60 rounded-xl cursor-pointer transition-colors">
-              <Video className="w-4 h-4 text-slate-600" />
-            </button>
+              <div className="flex items-center gap-3 text-slate-600">
+                <button className="p-2 hover:bg-white/60 rounded-xl cursor-pointer transition-colors">
+                  <Phone className="w-4 h-4 text-slate-600" />
+                </button>
+                <button className="p-2 hover:bg-white/60 rounded-xl cursor-pointer transition-colors">
+                  <Video className="w-4 h-4 text-slate-600" />
+                </button>
               </div>
             </div>
           );
@@ -304,7 +322,7 @@ export default function AiHubView({
 
         {/* Messages List Area */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs leading-relaxed">
-          
+
           {chats.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3 py-12">
               <div className="w-12 h-12 rounded-full bg-[#1c648e]/10 text-[#1c648e] flex items-center justify-center">
@@ -319,9 +337,8 @@ export default function AiHubView({
             chats.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex items-start gap-3 max-w-[85%] ${
-                  msg.role === "user" ? "ml-auto justify-end" : "mr-auto"
-                }`}
+                className={`flex items-start gap-3 max-w-[85%] ${msg.role === "user" ? "ml-auto justify-end" : "mr-auto"
+                  }`}
               >
                 {msg.role === "assistant" && (
                   <div className="w-8 h-8 rounded-full bg-[#1c648e]/10 text-[#1c648e] flex items-center justify-center shrink-0 mt-0.5">
@@ -330,17 +347,113 @@ export default function AiHubView({
                 )}
 
                 <div
-                  className={`rounded-3xl p-4 shadow-sm ${
-                    msg.role === "user"
+                  className={`rounded-3xl p-4 shadow-sm ${msg.role === "user"
                       ? "bg-[#1c648e] text-white rounded-tr-xs"
                       : "bg-white/70 border border-white/40 text-slate-700 rounded-tl-xs"
-                  }`}
+                    }`}
                 >
                   {msg.role === "assistant" ? (
-                    <div className="prose prose-sm max-w-none text-slate-700 leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-1 [&_strong]:font-semibold [&_strong]:text-slate-900 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-slate-800 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
-                      </ReactMarkdown>
+                    <div>
+                      {/* Live Progress Badge khi đang chạy tác vụ phức tạp */}
+                      {msg.activeStepName && (!msg.content || isAiLoading) && (
+                        <div className="flex items-center gap-2 text-xs font-bold text-[#1c648e] bg-[#e0f2fe]/80 border border-[#1c648e]/20 px-3 py-2 rounded-2xl animate-pulse mb-2 shadow-2xs">
+                          <Loader2 className="w-4 h-4 animate-spin text-[#1c648e]" />
+                          <span>{msg.activeStepName}</span>
+                        </div>
+                      )}
+
+                      <div className="prose prose-sm max-w-none text-slate-700 leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-1 [&_strong]:font-semibold [&_strong]:text-slate-900 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-slate-800 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+
+                      {/* Mục "Đã làm gì" (Tool Steps Timeline Accordion) */}
+                      {((msg.toolSteps && msg.toolSteps.length > 0) || (msg.tool_steps && msg.tool_steps.length > 0)) && (
+                        <div className="mt-3 pt-2.5 border-t border-slate-100/80">
+                          <button
+                            onClick={() => toggleToolTimeline(msg.id)}
+                            className="flex items-center gap-1.5 text-[11px] font-bold text-[#1c648e] hover:text-[#154c6d] bg-[#e0f2fe]/70 hover:bg-[#e0f2fe] px-3 py-1.5 rounded-xl transition-all cursor-pointer select-none shadow-2xs"
+                          >
+                            <Wrench className="w-3.5 h-3.5" />
+                            <span>Đã làm gì ({(msg.toolSteps || msg.tool_steps || []).length} bước)</span>
+                            {openToolTimelines[msg.id] ? (
+                              <ChevronDown className="w-3.5 h-3.5 ml-0.5" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                            )}
+                          </button>
+
+
+                          <AnimatePresence>
+                            {openToolTimelines[msg.id] && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="mt-2.5 p-3 bg-slate-50/90 border border-slate-200/80 rounded-2xl space-y-2.5 text-[10px] overflow-hidden"
+                              >
+                                <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
+                                  <span className="font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1 text-[9px]">
+                                    <Clock className="w-3 h-3 text-[#1c648e]" />
+                                    Tiến trình thực thi tác vụ Agent
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 font-semibold">Chỉ hiển thị các lượt gọi tool thực tế</span>
+                                </div>
+
+                                {(msg.toolSteps || msg.tool_steps || []).map((step: ToolStep, idx: number) => (
+                                  <div key={step.id || idx} className="bg-white p-3 rounded-xl border border-slate-200/70 shadow-2xs space-y-1.5">
+                                    <div className="flex items-center justify-between font-bold">
+                                      <div className="flex items-center gap-1.5 text-slate-800">
+                                        <span className="w-4.5 h-4.5 rounded-full bg-[#1c648e]/10 text-[#1c648e] flex items-center justify-center text-[9px] font-black shrink-0">
+                                          {idx + 1}
+                                        </span>
+                                        <span className="text-slate-800 text-xs font-black">{step.display_name || step.tool_name}</span>
+                                      </div>
+
+                                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold flex items-center gap-1 ${step.status === "completed"
+                                          ? "bg-emerald-100 text-emerald-700"
+                                          : step.status === "failed"
+                                            ? "bg-rose-100 text-rose-700"
+                                            : "bg-amber-100 text-amber-700 animate-pulse"
+                                        }`}>
+                                        {step.status === "completed" ? (
+                                          <CheckCircle2 className="w-3 h-3" />
+                                        ) : step.status === "failed" ? (
+                                          <XCircle className="w-3 h-3" />
+                                        ) : (
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                        )}
+                                        {step.status === "completed" ? "Hoàn thành" : step.status === "failed" ? "Lỗi" : "Đang chạy"}
+                                      </span>
+                                    </div>
+
+                                    {step.args && Object.keys(step.args).length > 0 && (
+                                      <div className="text-slate-500 font-mono text-[9px] bg-slate-100/80 p-2 rounded-lg border border-slate-200/50 break-all">
+                                        <span className="font-sans font-bold text-slate-600 mr-1">Tham số:</span>
+                                        {JSON.stringify(step.args)}
+                                      </div>
+                                    )}
+
+                                    {step.result_summary && (
+                                      <p className="text-slate-600 font-medium text-[10.5px]">
+                                        <span className="font-bold text-slate-700">Kết quả:</span> {step.result_summary}
+                                      </p>
+                                    )}
+
+                                    <div className="flex items-center justify-between text-[8.5px] text-slate-400 font-medium pt-0.5">
+                                      <span>Bắt đầu: {step.start_time ? new Date(step.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Vừa xong'}</span>
+                                      {step.duration_ms !== undefined && step.duration_ms !== null && (
+                                        <span className="font-bold text-[#1c648e]">Thực thi: {(step.duration_ms / 1000).toFixed(2)}s</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <p className="whitespace-pre-wrap">{msg.content}</p>
@@ -356,18 +469,46 @@ export default function AiHubView({
             ))
           )}
 
+          {/* Live Progress Card when Agent is Thinking */}
           {isAiLoading && (
-            <div className="flex items-start gap-3 mr-auto">
+            <div className="flex items-start gap-3 mr-auto max-w-[85%]">
               <div className="w-8 h-8 rounded-full bg-[#1c648e]/10 text-[#1c648e] flex items-center justify-center shrink-0 animate-pulse">
                 <Sparkles className="w-4.5 h-4.5" />
               </div>
-              <div className="bg-white/70 border border-white/40 text-slate-400 rounded-2xl rounded-tl-xs p-3.5 flex items-center gap-2">
-                <span className="flex gap-1 animate-pulse">
-                  <span className="w-1.5 h-1.5 bg-[#1c648e] rounded-full" />
-                  <span className="w-1.5 h-1.5 bg-[#1c648e] rounded-full" />
-                  <span className="w-1.5 h-1.5 bg-[#1c648e] rounded-full" />
-                </span>
-                <span className="text-[10px] font-bold">Trợ lý AI đang xử lý...</span>
+
+              <div className="bg-white border border-slate-200/90 shadow-lg text-slate-700 rounded-3xl rounded-tl-xs p-4 space-y-3 min-w-[320px]">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 text-[#1c648e] animate-spin" />
+                    <span className="text-xs font-black text-slate-800">Trợ lý AI đang suy nghĩ...</span>
+                  </div>
+                  <span className="text-[9px] font-black px-2.5 py-0.5 rounded-full bg-[#1c648e]/10 text-[#1c648e] animate-pulse">
+                    Running
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-[10px]">
+                  <p className="font-extrabold text-slate-400 uppercase tracking-wider text-[9px] flex items-center gap-1">
+                    <Activity className="w-3.5 h-3.5 text-[#1c648e]" />
+                    Tiến trình gọi tool thực tế
+                  </p>
+
+                  <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-3 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between font-bold text-slate-800">
+                      <div className="flex items-center gap-1.5">
+                        <Wrench className="w-3.5 h-3.5 text-[#1c648e]" />
+                        <span>Tra cứu hồ sơ & tài liệu nhi khoa</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[8.5px] font-black bg-amber-100 text-amber-700 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Running
+                      </span>
+                    </div>
+                    <p className="text-[9px] text-slate-500 font-medium">
+                      Tham số: <span className="font-mono bg-slate-200/60 px-1 py-0.5 rounded text-slate-700">baby_id: "{activeBaby.name}"</span>
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -415,9 +556,8 @@ export default function AiHubView({
                   startListening();
                 }
               }}
-              className={`p-1.5 rounded-full transition-all cursor-pointer ${
-                isListening ? "bg-red-500 text-white animate-pulse" : "text-slate-400 hover:text-[#1c648e]"
-              }`}
+              className={`p-1.5 rounded-full transition-all cursor-pointer ${isListening ? "bg-red-500 text-white animate-pulse" : "text-slate-400 hover:text-[#1c648e]"
+                }`}
               title={isListening ? "Đang lắng nghe... Bấm để dừng" : "Nói tiếng Việt để nhập tin nhắn"}
             >
               <Mic className="w-4 h-4" />
@@ -430,7 +570,7 @@ export default function AiHubView({
               <Send className="w-3.5 h-3.5 fill-white" />
             </button>
           </div>
-          
+
           <div className="text-center mt-2.5">
             <span className="text-[8px] font-bold text-slate-400 tracking-widest uppercase">
               Dữ liệu em bé được bảo mật & mã hóa
@@ -441,7 +581,7 @@ export default function AiHubView({
 
       {/* 3. Cột Phải (25%): Trích xuất thông minh (Smart Extraction) */}
       <div className="w-[25%] bg-white/40 border-l border-white/20 p-5 flex flex-col justify-between shrink-0 h-full overflow-y-auto space-y-6">
-        
+
         {/* Suggested log extractions */}
         <div className="space-y-4">
           <div>
@@ -453,7 +593,7 @@ export default function AiHubView({
           </div>
 
           <div className="space-y-4">
-            
+
             {/* Suggested Feeding Log Card */}
             <div className="bg-white/60 border border-white/40 rounded-2xl p-4 space-y-4 shadow-sm hover:bg-white/80 transition-all">
               <div className="flex items-center justify-between">
@@ -462,7 +602,7 @@ export default function AiHubView({
                 </div>
                 <span className="text-[9px] text-slate-400 font-bold">12:00 PM</span>
               </div>
-              
+
               <div>
                 <h4 className="text-xs font-bold text-slate-800">Nhật ký cữ bú</h4>
                 <p className="text-[10px] text-slate-400 font-semibold mt-0.5">LƯỢNG SỮA</p>
@@ -492,7 +632,7 @@ export default function AiHubView({
                 </div>
                 <span className="text-[9px] text-slate-400 font-bold">Đang chờ</span>
               </div>
-              
+
               <div>
                 <h4 className="text-xs font-bold text-slate-800">Thời lượng giấc ngủ?</h4>
                 <p className="text-[10px] text-slate-500 leading-relaxed font-semibold mt-1">
@@ -502,7 +642,7 @@ export default function AiHubView({
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => {}}
+                  onClick={() => { }}
                   className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold py-2 rounded-xl transition-all cursor-pointer"
                 >
                   Không

@@ -1,16 +1,14 @@
 import os
+import sys
 import json
 import anyio
 from app.AI_agents.knowledge.retriever import MedicalRetriever
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 def safe_print(msg):
-    try:
-        print(msg)
-    except UnicodeEncodeError:
-        try:
-            print(msg.encode("ascii", "replace").decode("ascii"))
-        except Exception:
-            pass
+    print(msg)
 
 async def main():
     safe_print("=== LOCAL RETRIEVER EVALUATION (COST-FREE) ===")

@@ -192,3 +192,39 @@ export const authApi = {
   resetPassword: (email: string, otp: string, newPassword: string) =>
     authRequest<Message>("/auth/reset-password", jsonBody({ email, otp, new_password: newPassword })),
 };
+
+export interface JobStatusResponse {
+  job_id: string;
+  job_type?: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  progress: number;
+  result?: any;
+  error?: string;
+}
+
+export async function pollJobStatus<T = any>(
+  jobId: string,
+  onProgress?: (progress: number, status: string) => void,
+  intervalMs: number = 2000,
+  maxAttempts: number = 60
+): Promise<T> {
+  let attempts = 0;
+  while (attempts < maxAttempts) {
+    attempts++;
+    const res = await apiFetch(`/api/v1/jobs/${jobId}`);
+    if (res.ok) {
+      const data: JobStatusResponse = await res.json();
+      if (onProgress) {
+        onProgress(data.progress || 0, data.status);
+      }
+      if (data.status === "COMPLETED") {
+        return data.result as T;
+      }
+      if (data.status === "FAILED") {
+        throw new Error(data.error || "Nhắc nhở xử lý sức khỏe cho bé gặp gián đoạn, vui lòng thử lại sau.");
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error("Tác vụ xử lý cho bé vượt quá thời gian chờ, hệ thống vẫn đang cập nhật cho bé.");
+}

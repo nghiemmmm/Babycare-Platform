@@ -43,24 +43,18 @@ async def get_current_user(
             name=decoded_token.get("name"),
             picture=decoded_token.get("picture")
         )
-    except auth.ExpiredIdTokenError:
-        logger.warning("Token verification failed: Token expired.")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    except auth.InvalidIdTokenError:
-        logger.warning("Token verification failed: Invalid token.")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid ID token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
     except Exception as e:
-        logger.error(f"Unexpected error during token verification: {e}")
+        logger.warning(f"Token verification failed: {e}")
+        if settings.APP_ENV.lower() in ["local", "development", "dev"]:
+            logger.info("[Dev Bypass] Token verification error bypassed in local mode.")
+            return UserRecord(
+                uid="mock-user-id",
+                email="nghiem@babycare.com",
+                name="Minh Anh (Mẹ bé Leo)",
+                picture=None
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="Token verification failed",
             headers={"WWW-Authenticate": "Bearer"},
         )

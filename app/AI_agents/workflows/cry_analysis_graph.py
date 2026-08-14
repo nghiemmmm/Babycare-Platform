@@ -10,8 +10,9 @@ from app.AI_agents.core.constant import CRY_REASONER_PROMPT
 
 class CryAnalysisGraph:
     def __init__(self):
+        from app.AI_agents.core.constant import CRY_ANALYSIS_MODEL
         self.classifier = CryClassifier()
-        self.reasoner = AIReasoner()
+        self.reasoner = AIReasoner(model_name=CRY_ANALYSIS_MODEL)
         self.nutrition_service = SolidFoodService()
 
     async def detect_cry_node(self, state: OverallState) -> dict:

@@ -9,6 +9,7 @@ from app.modules.auth.schemas import UserRecord
 from app.modules.cry.schemas import CryLogResponse
 from app.modules.cry.service import CryService
 from app.shared.schemas import Message
+from app.shared.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/babies", tags=["AI Cry Detection"])
 cry_service = CryService()
@@ -22,7 +23,7 @@ async def predict_baby_cry(
     """
     Tải tệp ghi âm tiếng khóc lên để phân tích nguyên nhân khóc và kích hoạt tự động âm thanh dỗ bé (Yêu cầu quyền giám hộ).
     """
-    return cry_service.predict_cry(baby_id, audio_file, user_id=current_user.uid)
+    return await run_in_threadpool(cry_service.predict_cry, baby_id, audio_file, user_id=current_user.uid)
 
 @router.get("/{baby_id}/cry-prediction", response_model=list[CryLogResponse])
 async def get_cry_prediction_history(
