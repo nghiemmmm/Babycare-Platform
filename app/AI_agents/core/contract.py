@@ -86,5 +86,8 @@ class AgentContract:
         """
         state["messages_context"] = tier1_context
         state["retrieved_docs"] = retrieved_docs
+        state["rag_context_reused"] = True
+        if tier1_context and isinstance(tier1_context, dict) and tier1_context.get("rag_context"):
+            state["rag_context"] = tier1_context.get("rag_context")
         return await self.execute(state)
 

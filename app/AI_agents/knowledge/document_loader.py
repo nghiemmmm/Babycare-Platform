@@ -119,20 +119,24 @@ class DocumentLoader:
                         text = f.read()
                         documents.append(Document(page_content=text, metadata={"source": filename, "domain": domain}))
                 elif filename.endswith(".pdf"):
-                    try:
-                        import pypdf
-                        reader = pypdf.PdfReader(filepath)
-                        for i, page in enumerate(reader.pages):
-                            text = page.extract_text()
-                            if text and text.strip():
-                                documents.append(Document(
-                                    page_content=text,
-                                    metadata={"source": filename, "page": i + 1, "domain": domain}
-                                ))
-                    except Exception as e:
-                        print(f"Lỗi khi đọc tệp PDF {filename}: {e}")
+                    # Nếu trong thư mục đã có file enriched_chunks.jsonl (đã xử lý sẵn), bỏ qua parse PDF để tránh tốn 50s CPU
+                    jsonl_exists = any(f.endswith(".jsonl") for f in filenames)
+                    if not jsonl_exists:
+                        try:
+                            import pypdf
+                            reader = pypdf.PdfReader(filepath)
+                            for i, page in enumerate(reader.pages):
+                                text = page.extract_text()
+                                if text and text.strip():
+                                    documents.append(Document(
+                                        page_content=text,
+                                        metadata={"source": filename, "page": i + 1, "domain": domain}
+                                    ))
+                        except Exception as e:
+                            print(f"Lỗi khi đọc tệp PDF {filename}: {e}")
                 elif filename.endswith(".jsonl"):
                     documents.extend(self._load_jsonl(filepath, domain))
         return documents
+
 
 

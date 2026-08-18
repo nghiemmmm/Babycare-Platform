@@ -7,3 +7,17 @@ from app.AI_agents.tools.implementation.cry_tools import CryAnalysisTool
 from app.AI_agents.tools.implementation.calendar_tool import VaccinationCalendarTool
 from app.AI_agents.tools.implementation.email_tool import EmailNotificationTool
 from app.AI_agents.tools.implementation.web_search_tool import WebSearchTool
+from app.AI_agents.tools.implementation.care_coordination_tools import CareCoordinationTool
+
+__all__ = [
+    "BabyProfileTool",
+    "GrowthTrackingTool",
+    "HealthRecordsTool",
+    "NutritionTrackingTool",
+    "KnowledgeRetrievalTool",
+    "CryAnalysisTool",
+    "VaccinationCalendarTool",
+    "EmailNotificationTool",
+    "WebSearchTool",
+    "CareCoordinationTool"
+]

@@ -1,7 +1,6 @@
 from langgraph.graph import StateGraph, START, END
 from app.AI_agents.orchestrator.state_manager import OverallState
 from app.AI_agents.orchestrator.task_planner import TaskPlanner
-from app.AI_agents.workflows.voice_logging_graph import VoiceLoggingGraph
 from app.AI_agents.workflows.chat_graph import ChatGraph
 from app.AI_agents.workflows.cry_analysis_graph import CryAnalysisGraph
 from app.AI_agents.workflows.report_graph import ReportGraph
@@ -13,7 +12,6 @@ from langchain_core.messages import AIMessage
 class RouterGraph:
     def __init__(self, checkpointer=None):
         self.planner = TaskPlanner()
-        self.voice_logging_graph = VoiceLoggingGraph().compile()
         self.chat_graph = ChatGraph().compile()
         self.cry_analysis_graph = CryAnalysisGraph().compile()
         self.report_graph = ReportGraph().compile()
@@ -33,7 +31,6 @@ class RouterGraph:
         # Add nodes
         builder.add_node("classify_intent", self.classify_intent_node)
         builder.add_node("chat_subgraph", self.chat_graph)
-        builder.add_node("voice_logging_subgraph", self.voice_logging_graph)
         builder.add_node("cry_analysis_subgraph", self.cry_analysis_graph)
         builder.add_node("health_subgraph", self.health_graph)
         builder.add_node("nutrition_subgraph", self.nutrition_graph)
@@ -48,7 +45,6 @@ class RouterGraph:
             intent = state.get("extracted_intent", "chat")
             mapping = {
                 "chat": "chat_subgraph",
-                "log_activity": "voice_logging_subgraph",
                 "analyze_cry": "cry_analysis_subgraph",
                 "check_health": "health_subgraph",
                 "check_nutrition": "nutrition_subgraph",
@@ -62,7 +58,6 @@ class RouterGraph:
             route_intent,
             {
                 "chat_subgraph": "chat_subgraph",
-                "voice_logging_subgraph": "voice_logging_subgraph",
                 "cry_analysis_subgraph": "cry_analysis_subgraph",
                 "health_subgraph": "health_subgraph",
                 "nutrition_subgraph": "nutrition_subgraph",
@@ -73,7 +68,6 @@ class RouterGraph:
 
         # End transitions
         builder.add_edge("chat_subgraph", END)
-        builder.add_edge("voice_logging_subgraph", END)
         builder.add_edge("cry_analysis_subgraph", END)
         builder.add_edge("health_subgraph", END)
         builder.add_edge("nutrition_subgraph", END)

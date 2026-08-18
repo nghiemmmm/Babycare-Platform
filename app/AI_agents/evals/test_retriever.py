@@ -2,7 +2,7 @@ import os
 import json
 import anyio
 from app.AI_agents.knowledge.retriever import MedicalRetriever
-from tests.evaluation.evaluator import LLMJudge
+from app.AI_agents.evals.evaluator import LLMJudge
 
 def safe_print(msg):
     try:

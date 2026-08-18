@@ -1,19 +1,11 @@
 from typing import Dict, Optional, Tuple, List, Set
 import logging
 from app.AI_agents.core.contract import AgentContract
+from app.AI_agents.core.constant import CRITICAL_CAPABILITIES, CAPABILITY_REGISTRY_CONFIG
 
 logger = logging.getLogger(__name__)
 
-# Cấu hình tập hợp Critical Capabilities (Thiếu critical cap -> Bị loại khỏi danh sách cân nhắc)
-CRITICAL_CAPABILITIES: Set[str] = {
-    "medical_safety_eval",
-    "symptom_severity_analysis"
-}
-
-# Cấu hình ngưỡng Coverage tối thiểu (Configurable threshold)
-CAPABILITY_REGISTRY_CONFIG = {
-    "min_coverage": 0.6
-}
+from langsmith import traceable
 
 class CapabilityRegistry:
     """
@@ -38,24 +30,43 @@ class CapabilityRegistry:
         return cls._agents
 
     @classmethod
+    @traceable(name="CapabilityRegistry.resolve_agent_by_capability")
     def resolve_agent_by_capability(
         cls,
         unmet_capabilities: List[str],
         min_coverage: Optional[float] = None
     ) -> Tuple[Optional[AgentContract], float]:
         """
-        Phân giải Specialist Agent phù hợp nhất dựa trên danh sách capabilities chưa được đáp ứng:
-        1. Critical Capability Constraint: Nếu request cần Critical Capability mà Agent không có -> Reject.
-        2. Minimum Coverage Threshold: Phải đạt score >= min_coverage.
-        3. Best Coverage & Deterministic Tie-Breaker.
-        4. Trả về (None, 0.0) nếu NoSuitableAgent.
+        Phân giải và lựa chọn Specialist Agent phù hợp nhất dựa trên tỷ lệ bao phủ năng lực (Capability Coverage Score).
+
+        Quy trình xử lý:
+            1. Ràng buộc Critical Capabilities: Nếu request đòi hỏi năng lực y tế/an toàn cấp bách
+               (như medical_safety_eval) mà Agent không sở hữu -> Loại bỏ ngay khỏi danh sách ứng viên.
+            2. Tính toán Coverage Score: score = |required ∩ agent_capabilities| / |required|.
+            3. Áp dụng Minimum Threshold: Chỉ chấp nhận các Agent có score >= min_coverage (mặc định 0.6).
+            4. Deterministic Tie-Breaker: Chọn Agent có điểm cao nhất hoặc có số lượng năng lực khớp lớn nhất.
+
+        Args:
+            unmet_capabilities (List[str]): Danh sách các năng lực còn thiếu cần chuyên gia xử lý.
+            min_coverage (Optional[float]): Ngưỡng bao phủ tối thiểu chấp nhận được (mặc định từ CAPABILITY_REGISTRY_CONFIG).
+
+        Returns:
+            Tuple[Optional[AgentContract], float]: Tuple gồm (Selected AgentContract, Coverage Score).
+                Trả về (None, 0.0) nếu không có Agent nào đáp ứng đủ điều kiện (NoSuitableAgent).
+
+        Raises:
+            Không phát sinh ngoại lệ; tự động fallback an toàn về (None, 0.0) khi gặp lỗi hoặc danh sách trống.
         """
         if not unmet_capabilities:
             return None, 0.0
 
         threshold = min_coverage if min_coverage is not None else CAPABILITY_REGISTRY_CONFIG["min_coverage"]
-        req_set = set(unmet_capabilities)
-        req_critical = req_set.intersection(CRITICAL_CAPABILITIES)
+        def _norm_cap(c: str) -> str:
+            return str(c).lower().replace("capability_", "").strip()
+
+        req_set = set(_norm_cap(c) for c in unmet_capabilities)
+        crit_set = set(_norm_cap(c) for c in CRITICAL_CAPABILITIES)
+        req_critical = req_set.intersection(crit_set)
 
         best_agent = None
         best_score = 0.0
@@ -65,7 +76,7 @@ class CapabilityRegistry:
             if not agent.capabilities:
                 continue
 
-            agent_cap_set = set(agent.capabilities)
+            agent_cap_set = set(_norm_cap(c) for c in agent.capabilities)
 
             # STEP 1: RÀNG BUỘC CRITICAL CAPABILITY
             if req_critical and not req_critical.issubset(agent_cap_set):
@@ -82,6 +93,7 @@ class CapabilityRegistry:
                     best_score = score
                     best_overlap_count = len(intersection)
                     best_agent = agent
+
 
         if best_agent:
             logger.info(f"[CapabilityRegistry] Resolved agent '{best_agent.agent_id}' with coverage score {best_score:.2f} for unmet capabilities: {unmet_capabilities}")

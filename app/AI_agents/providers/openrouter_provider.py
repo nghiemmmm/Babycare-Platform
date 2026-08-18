@@ -4,7 +4,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 
 from app.core.config import settings
-from app.AI_agents.core.constant import DEFAULT_TEMPERATURE
+from app.AI_agents.core.constant import DEFAULT_TEMPERATURE, OPENROUTER_FREE_FALLBACK_MODELS
 from app.AI_agents.providers.base_provider import BaseLLMProvider
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,8 @@ def _get_shared_async_client() -> httpx.AsyncClient:
 class OpenRouterLLMProvider(BaseLLMProvider):
     """
     LLM Provider dành cho OpenRouter API (OpenAI-compatible).
-    Hỗ trợ kết nối đa dạng mô hình: Gemini 2.0, Claude 3.5, Llama 3.3, DeepSeek R1...
+    Hỗ trợ kết nối đa dạng mô hình và tự động chuyển giao Fallback Array:
+    Google Gemma -> OpenAI GPT-OSS -> GLM 5.2 -> LFM.
     """
 
     def get_chat_model(
@@ -37,7 +38,7 @@ class OpenRouterLLMProvider(BaseLLMProvider):
         max_retries: Optional[int] = None,
         callbacks: Optional[List[Any]] = None
     ) -> BaseChatModel:
-        target_model = model_name or settings.OPENROUTER_MODEL or "google/gemini-3.5-flash-001"
+        target_model = model_name or settings.OPENROUTER_MODEL or OPENROUTER_FREE_FALLBACK_MODELS[0]
         if "/" not in target_model:
             if "gemini" in target_model:
                 target_model = "google/gemini-3.5-flash-001"
@@ -55,6 +56,9 @@ class OpenRouterLLMProvider(BaseLLMProvider):
             "X-Title": "BabyCare AI Platform"
         }
 
+        # Danh sách Fallback Cascade tự động của OpenRouter
+        models_cascade = [target_model] + [m for m in OPENROUTER_FREE_FALLBACK_MODELS if m != target_model]
+
         # Pre-warm get_platform trên Windows để tránh asyncio.to_thread(get_platform) bị hang/cancelled
         try:
             import openai._base_client as _obc
@@ -63,7 +67,7 @@ class OpenRouterLLMProvider(BaseLLMProvider):
         except Exception:
             pass
 
-        logger.info(f"[OpenRouterLLMProvider] Initializing ChatOpenAI via OpenRouter: model='{target_model}'")
+        logger.info(f"[OpenRouterLLMProvider] Initializing ChatOpenAI via OpenRouter: primary='{target_model}', cascade={models_cascade}")
 
         return ChatOpenAI(
             model=target_model,
@@ -73,6 +77,11 @@ class OpenRouterLLMProvider(BaseLLMProvider):
             timeout=timeout or settings.LLM_TIMEOUT_SECONDS,
             max_retries=max_retries or settings.LLM_MAX_RETRIES,
             default_headers=default_headers,
+            model_kwargs={
+                "extra_body": {
+                    "models": models_cascade
+                }
+            },
             http_async_client=_get_shared_async_client(),
             callbacks=callbacks
         )

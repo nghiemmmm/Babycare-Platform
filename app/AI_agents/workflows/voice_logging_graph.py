@@ -1,15 +1,22 @@
+import time
+import json
+import logging
+from datetime import datetime, timezone
 from langgraph.graph import StateGraph, START, END
+from langchain_core.messages import AIMessage, HumanMessage
+from pydantic import ValidationError
+
 from app.AI_agents.orchestrator.state_manager import OverallState
 from app.AI_agents.core.reasoner import AIReasoner
 from app.AI_agents.tools.implementation.nutrition_tools import NutritionTrackingTool
 from app.AI_agents.tools.implementation.health_tools import HealthRecordsTool
 from app.AI_agents.tools.implementation.growth_tools import GrowthTrackingTool
-from langchain_core.messages import AIMessage, HumanMessage
-from datetime import datetime, timezone
-import json
 from app.AI_agents.utils.prompts import load_prompt
 from app.AI_agents.utils.schemas import FeedingLogSchema, MedicationLogSchema, SymptomLogSchema, GrowthLogSchema
-from pydantic import ValidationError
+from app.AI_agents.utils.helpers import extract_user_query, build_tool_step, calculate_elapsed_ms
+from app.AI_agents.utils.validators import validate_and_parse_llm_json
+
+logger = logging.getLogger(__name__)
 
 class VoiceLoggingGraph:
     def __init__(self):
@@ -21,28 +28,31 @@ class VoiceLoggingGraph:
         self.extraction_prompt = load_prompt("extraction.txt")
 
     async def extract_entities_node(self, state: OverallState) -> dict:
-        user_message = state["messages"][-1].content
-        import uuid, time
+        user_message = extract_user_query(state)
+        from app.AI_agents.context.context_builder import ContextBuilder
+        bundle = ContextBuilder.build_logging_context(
+            extraction_prompt=self.extraction_prompt,
+            messages=state.get("messages", [])
+        )
         t0 = time.time()
         try:
-            response_text = await self.reasoner.areason(prompt=user_message, system_instruction=self.extraction_prompt)
-            cleaned_text = response_text.replace("```json", "").replace("```", "").strip()
-            result = json.loads(cleaned_text)
-            t1 = time.time()
-            step = {
-                "id": f"step_{uuid.uuid4().hex[:6]}",
-                "tool_name": "EntityExtractionTool",
-                "display_name": "Phân tích trích xuất dữ liệu nhật ký",
-                "args": {"message": user_message[:40]},
-                "status": "completed",
-                "result_summary": f"Đã bóc tách loại hoạt động: {result.get('activity_type', 'N/A')}",
-                "start_time": datetime.now(timezone.utc).isoformat(),
-                "duration_ms": int((t1 - t0) * 1000)
-            }
+            response_text = await self.reasoner.areason(prompt=user_message, system_instruction=bundle.system_instruction)
+            is_valid_json, result, err_msg = validate_and_parse_llm_json(response_text)
+            if not is_valid_json or not result:
+                return {"error_message": f"Lỗi phân tích JSON từ AI: {err_msg}", "next_step": "chat"}
+
+            step = build_tool_step(
+                tool_name="EntityExtractionTool",
+                display_name="Phân tích trích xuất dữ liệu nhật ký",
+                args={"message": user_message[:40]},
+                result_summary=f"Đã bóc tách loại hoạt động: {result.get('activity_type', 'N/A')}",
+                duration_ms=calculate_elapsed_ms(t0)
+            )
             return {
                 "extracted_data": result.get("data", {}),
                 "next_step": result.get("activity_type", "chat"),
-                "tool_steps": [step]
+                "tool_steps": [step],
+                "context_bundle": bundle
             }
         except Exception as e:
             return {"error_message": str(e), "next_step": "chat"}
@@ -52,7 +62,6 @@ class VoiceLoggingGraph:
         data = state.get("extracted_data", {})
         baby_id = state.get("baby_id")
         user_id = state.get("current_user_id")
-        import uuid, time
         t0 = time.time()
 
         if not baby_id or not user_id:
@@ -158,17 +167,14 @@ class VoiceLoggingGraph:
             status = "failed"
             summary = f"Lỗi lưu trữ: {str(e)}"
 
-        t1 = time.time()
-        step = {
-            "id": f"step_{uuid.uuid4().hex[:6]}",
-            "tool_name": tool_name,
-            "display_name": display_name,
-            "args": data,
-            "status": status,
-            "result_summary": summary,
-            "start_time": datetime.now(timezone.utc).isoformat(),
-            "duration_ms": int((t1 - t0) * 1000)
-        }
+        step = build_tool_step(
+            tool_name=tool_name,
+            display_name=display_name,
+            args=data,
+            status=status,
+            result_summary=summary,
+            duration_ms=calculate_elapsed_ms(t0)
+        )
 
         return {"messages": [AIMessage(content=msg)], "tool_steps": [step]}
 

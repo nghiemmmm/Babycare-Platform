@@ -35,17 +35,21 @@ async def get_cry_prediction_history(
     """
     return cry_service.get_cry_history(baby_id, user_id=current_user.uid)
 
+from typing import Union
+from app.modules.cry.schemas import CryLogResponse, CryFeedbackUpdate
+
 @router.patch("/{baby_id}/cry-prediction/{log_id}/feedback", response_model=CryLogResponse)
 async def update_cry_feedback(
     baby_id: str,
     log_id: str,
-    feedback_accurate: bool,
+    feedback: Union[CryFeedbackUpdate, bool],
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
-    Cập nhật phản hồi thực tế của phụ huynh để đánh giá độ chính xác của AI (Yêu cầu quyền giám hộ).
+    Cập nhật phản hồi thực tế của phụ huynh và kết quả can thiệp để đánh giá độ chính xác của AI (Yêu cầu quyền giám hộ).
     """
-    return cry_service.update_parent_feedback(baby_id, log_id, feedback_accurate, user_id=current_user.uid)
+    return cry_service.update_parent_feedback(baby_id, log_id, feedback, user_id=current_user.uid)
+
 
 @router.delete("/{baby_id}/cry-prediction/{log_id}", response_model=Message)
 async def delete_cry_log(

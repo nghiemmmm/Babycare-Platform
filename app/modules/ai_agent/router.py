@@ -86,36 +86,46 @@ async def list_chat_threads(
     db = get_firestore_db()
     docs = db.collection("chat_threads").where(filter=FieldFilter("user_id", "==", current_user.uid)).stream()
     
+    now_iso = datetime.now(timezone.utc).isoformat()
     threads = []
     for doc in docs:
         d = doc.to_dict()
+        created_at = d.get("created_at") or d.get("last_updated") or now_iso
+        updated_at = d.get("updated_at") or d.get("last_updated") or now_iso
         threads.append(ThreadResponse(
+            thread_id=doc.id,
             id=doc.id,
-            title=d.get("title", "New Chat Session"),
-            last_updated=d.get("last_updated", "")
+            title=d.get("title", "Cuộc trò chuyện mới"),
+            created_at=created_at,
+            updated_at=updated_at,
+            last_updated=updated_at,
+            baby_id=d.get("baby_id")
         ))
+
         
     # Sắp xếp cuộc trò chuyện gần nhất lên đầu
-    threads.sort(key=lambda x: x.last_updated, reverse=True)
+    threads.sort(key=lambda x: x.updated_at, reverse=True)
     threads = threads[:50]
     
     # Nếu chưa có thread nào, tự động tạo một thread ban đầu cho người dùng
     if not threads:
-        thread_id = "thread_default"
+        thread_id = f"thread_{current_user.uid[:8]}_default"
         doc_ref = db.collection("chat_threads").document(thread_id)
         doc_ref.set({
             "user_id": current_user.uid,
-            "title": "Baby Progress Chat",
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "title": "Tư vấn chăm sóc bé",
+            "created_at": now_iso,
+            "updated_at": now_iso
         })
         threads.append(ThreadResponse(
-            id=thread_id,
-            title="Baby Progress Chat",
-            last_updated=datetime.now(timezone.utc).isoformat()
+            thread_id=thread_id,
+            title="Tư vấn chăm sóc bé",
+            created_at=now_iso,
+            updated_at=now_iso
         ))
         
     return threads[:50]
+
 
 @ai_agent_router.post("/threads", response_model=ThreadCreateResponse)
 async def create_chat_thread(
@@ -126,17 +136,24 @@ async def create_chat_thread(
     """
     db = get_firestore_db()
     thread_id = f"thread_{uuid.uuid4().hex[:8]}"
-    title = "New Chat Session"
+    title = "Cuộc trò chuyện mới"
+    now_iso = datetime.now(timezone.utc).isoformat()
     
     doc_ref = db.collection("chat_threads").document(thread_id)
     doc_ref.set({
         "user_id": current_user.uid,
         "title": title,
-        "last_updated": datetime.now(timezone.utc).isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "last_updated": now_iso,
+        "created_at": now_iso
     })
     
-    return ThreadCreateResponse(thread_id=thread_id, title=title)
+    return ThreadCreateResponse(
+        thread_id=thread_id,
+        id=thread_id,
+        title=title,
+        created_at=now_iso
+    )
+
 
 from app.infrastructure.cache import redis as cache_redis
 
@@ -229,8 +246,9 @@ async def create_thread_message(
     Gửi tin nhắn vào phiên chat hiện tại và nhận phản hồi từ AI Agent cùng kết quả trích xuất nhật ký.
     Sử dụng ResponseFormatter để chuẩn hóa câu trả lời, bóc tách Citations thật và kiểm tra Grounding/Cache.
     """
+    msg_text = req.text_content
     # 1. Kiểm tra Cache Policy cho các câu hỏi tra cứu chung
-    cached_response = await ResponseFormatter.get_cached_response(req.content)
+    cached_response = await ResponseFormatter.get_cached_response(msg_text)
     if cached_response:
         return MessageCreateResponse(**cached_response)
 
@@ -246,7 +264,7 @@ async def create_thread_message(
     # 3. Gọi AgentOrchestrator chạy LangGraph
     orchestrator = get_orchestrator(request)
     result = await orchestrator.run_agent(
-        message=req.content,
+        message=msg_text,
         thread_id=thread_id,
         baby_id=baby_id,
         user_id=current_user.uid
@@ -276,7 +294,7 @@ async def create_thread_message(
     tool_steps_dicts = [m.model_dump() for m in formatted_response.tool_steps]
     msgs_col.document(user_msg_id).set({
         "role": "user",
-        "content": req.content,
+        "content": msg_text,
         "timestamp": now_iso
     })
     msgs_col.document(ai_msg_id).set({
@@ -295,19 +313,19 @@ async def create_thread_message(
     if thread_ref.get().exists:
         update_fields = {"last_updated": now_iso}
         thread_data = thread_ref.get().to_dict()
-        if thread_data.get("title") in ["New Chat Session", "Baby Progress Chat"]:
-            update_fields["title"] = req.content[:30] + "..." if len(req.content) > 30 else req.content
+        if thread_data.get("title") in ["New Chat Session", "Cuộc trò chuyện mới", "Baby Progress Chat"]:
+            update_fields["title"] = msg_text[:30] + "..." if len(msg_text) > 30 else msg_text
         thread_ref.update(update_fields)
     else:
         thread_ref.set({
             "user_id": current_user.uid,
-            "title": req.content[:30] + "..." if len(req.content) > 30 else req.content,
+            "title": msg_text[:30] + "..." if len(msg_text) > 30 else msg_text,
             "last_updated": now_iso,
             "created_at": now_iso
         })
 
     # 7. Lưu cache nếu câu hỏi là tra cứu chung (Cache Policy)
-    await ResponseFormatter.set_cached_response(req.content, formatted_response.model_dump())
+    await ResponseFormatter.set_cached_response(msg_text, formatted_response.model_dump())
     
     return formatted_response
 
@@ -339,6 +357,7 @@ async def stream_thread_message(
             baby_id = active_b.id
 
     orchestrator = get_orchestrator(request)
+    msg_text = req.text_content
 
     async def generate_sse():
         from app.shared.context import get_current_trace_id
@@ -349,11 +368,12 @@ async def stream_thread_message(
         now_iso = datetime.now(timezone.utc).isoformat()
 
         async for sse_chunk in orchestrator.stream_agent(
-            message=req.content,
+            message=msg_text,
             thread_id=thread_id,
             baby_id=baby_id,
             user_id=current_user.uid
         ):
+
             if await request.is_disconnected():
                 wasted_text = "".join(collected_tokens)
                 wasted_tokens = int(len(wasted_text.split()) * 1.3)
@@ -426,8 +446,14 @@ async def stream_thread_message(
 
     return StreamingResponse(
         generate_sse(),
-        media_type="text/event-stream"
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
     )
+
 
 
 
@@ -502,6 +528,31 @@ async def handle_sleep_timer(
             start_time=start_time_str
         )
 
+@ai_agent_router.delete("/threads/{thread_id}")
+async def delete_chat_thread(
+    thread_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Xóa vĩnh viễn một cuộc trò chuyện (thread) và toàn bộ checkpoints tin nhắn liên quan.
+    """
+    db = get_firestore_db()
+    thread_ref = db.collection("chat_threads").document(thread_id)
+    thread_doc = thread_ref.get()
+    if thread_doc.exists:
+        thread_data = thread_doc.to_dict()
+        if thread_data.get("user_id") != current_user.uid:
+            raise HTTPException(status_code=403, detail="Access denied")
+        thread_ref.delete()
+
+    # Xoá checkpoint của LangGraph trong Firestore
+    from app.AI_agents.core.constant import CHECKPOINT_COLLECTION
+    docs = db.collection(CHECKPOINT_COLLECTION).where(filter=FieldFilter("thread_id", "==", thread_id)).stream()
+    for doc in docs:
+        doc.reference.delete()
+
+    return {"success": True, "message": "Đã xóa cuộc trò chuyện thành công."}
+
 @ai_agent_router.delete("/threads/{thread_id}/messages")
 async def delete_thread_messages(
     thread_id: str,
@@ -527,6 +578,7 @@ async def delete_thread_messages(
         
     return {"success": True, "message": "Thread history reset successfully."}
 
+
 @ai_agent_router.post("/voice-extract", response_model=VoiceExtractResponse)
 async def extract_from_voice(
     req: VoiceExtractRequest,
@@ -536,94 +588,142 @@ async def extract_from_voice(
     """
     Bóc tách câu thoại tiếng Việt thu được từ Web Speech API thành dữ liệu cấu trúc
     cho các biểu mẫu ghi chép (sữa, thuốc, tã, ngủ, tăng trưởng).
-    Xử lý phản hồi cực nhanh (< 50ms) để không bị treo loading.
+    Xử lý phản hồi cực nhanh (< 15ms) bằng FastVoiceParser Deterministic Engine.
     """
-    import re
-    import asyncio
-    text = req.transcript.lower().strip()
-    intent = "feeding"
-    extracted_data = {}
+    from app.AI_agents.core.fast_voice_parser import FastVoiceParser
+    import time
+    t0 = time.time()
     
-    # 1. Fast & Reliable Local Parsing (Phản hồi tức thì < 50ms)
-    if "sữa" in text or "bú" in text or "ml" in text:
-        intent = "feeding"
-        ml_match = re.search(r"(\d+)\s*(ml|cc)?", text)
-        if ml_match:
-            extracted_data["amount"] = float(ml_match.group(1))
+    response = FastVoiceParser.parse(transcript=req.transcript, baby_id=req.baby_id)
+    duration_ms = int((time.time() - t0) * 1000)
+    logger.info(f"🎙️ [VoiceExtract] Intent: {response.intent} | Conf: {response.confidence} | Duration: {duration_ms}ms")
+    
+    return response
+
+
+# ─── TEXT-TO-ACTION AUTONOMOUS MULTI-TOOL PIPELINE ───────────────────────────
+
+from pydantic import BaseModel, Field
+from app.AI_agents.actions.schemas import (
+    ActionExecutionReport,
+    ActionParseResponse,
+    ActionConfirmRequest,
+    ActionResultItem,
+    ActionStatus,
+    ActionType
+)
+from app.AI_agents.actions.parser import ActionParserEngine
+from app.AI_agents.actions.dispatcher import ActionDispatcher
+
+class VoiceActionRequest(BaseModel):
+    text: str = Field(..., description="Câu thoại khẩu lệnh hoặc văn bản nhập liệu")
+    baby_id: str
+
+action_dispatcher = ActionDispatcher()
+
+@ai_agent_router.post("/voice-action/parse", response_model=ActionParseResponse)
+async def parse_voice_action(
+    req: VoiceActionRequest,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Trích xuất các thành phần từ câu thoại giọng nói và trả về để người dùng xem trước & xác nhận.
+    Nếu đầy đủ thông số: is_complete = True (hiển thị nút Xác nhận Thêm).
+    Nếu thiếu thông số: trả về missing_fields + clarification_prompt + suggested_chips.
+    """
+    raw_text = req.text.strip()
+    actions = ActionParserEngine.parse_actions(text=raw_text, baby_id=req.baby_id)
+    
+    complete_actions = []
+    clarifications = []
+    for a in actions:
+        if a.status == ActionStatus.NEEDS_CLARIFICATION or len(a.missing_fields) > 0:
+            clarifications.append(a)
         else:
-            extracted_data["amount"] = 150.0
+            complete_actions.append(a)
             
-        if "công thức" in text or "bình" in text:
-            extracted_data["type"] = "Formula"
-            extracted_data["details"] = f"{extracted_data.get('amount', 150)}ml Sữa công thức"
-        elif "mẹ" in text:
-            extracted_data["type"] = "Breast"
-            extracted_data["details"] = f"{extracted_data.get('amount', 120)}ml Sữa mẹ"
-        else:
-            extracted_data["type"] = "Formula"
-            extracted_data["details"] = f"{extracted_data.get('amount', 150)}ml Sữa công thức"
+    is_complete = (len(complete_actions) > 0 and len(clarifications) == 0)
+    
+    summary_parts = []
+    for a in complete_actions:
+        if a.action_type == ActionType.CREATE_FEEDING:
+            p = a.parameters
+            feed_type_name = "Sữa mẹ" if p.get('feed_type') == 'Breast' else ("Sữa công thức" if p.get('feed_type') == 'Formula' else "Ăn dặm")
+            summary_parts.append(f"Cữ bú: {p.get('amount', 0)}ml ({feed_type_name})")
+        elif a.action_type == ActionType.CREATE_MEDICATION:
+            p = a.parameters
+            summary_parts.append(f"Uống thuốc: {p.get('medication_name', '')} ({p.get('dosage', '')})")
+        elif a.action_type == ActionType.CREATE_SLEEP:
+            p = a.parameters
+            dur = p.get('duration_minutes')
+            summary_parts.append(f"Giấc ngủ: {dur} phút" if dur else "Bắt đầu giấc ngủ")
+        elif a.action_type == ActionType.CREATE_DIAPER:
+            p = a.parameters
+            d_type = "Tè ướt" if p.get('diaper_type') == 'Wet' else ("Đi ngoài bẩn" if p.get('diaper_type') == 'Dirty' else "Cả hai")
+            summary_parts.append(f"Thay tã: {d_type}")
 
-    elif "thuốc" in text or "hapacol" in text or "paracetamol" in text or "vitamin" in text or "mg" in text or "giọt" in text:
-        intent = "medication"
-        dose_match = re.search(r"(\d+)\s*(mg|giọt|viên)", text)
-        if dose_match:
-            extracted_data["dosage"] = f"{dose_match.group(1)}{dose_match.group(2)}"
-        else:
-            extracted_data["dosage"] = "150mg"
-            
-        if "hapacol" in text:
-            extracted_data["medication_name"] = "Hapacol 150mg"
-        elif "paracetamol" in text:
-            extracted_data["medication_name"] = "Paracetamol"
-        elif "vitamin" in text:
-            extracted_data["medication_name"] = "Vitamin D3 K2"
-        else:
-            extracted_data["medication_name"] = "Hapacol 150mg"
-
-    elif "cân" in text or "ký" in text or "kg" in text or "cao" in text or "cm" in text:
-        intent = "growth"
-        kg_match = re.search(r"(\d+(\.\d+)?)\s*(kg|ký|kí)", text)
-        cm_match = re.search(r"(\d+(\.\d+)?)\s*(cm)", text)
-        if kg_match:
-            extracted_data["weight"] = float(kg_match.group(1))
-        if cm_match:
-            extracted_data["height"] = float(cm_match.group(1))
-
-    elif "tã" in text or "bỉm" in text or "tè" in text or "ỉa" in text:
-        intent = "diaper"
-        if "bẩn" in text or "ỉa" in text:
-            extracted_data["type"] = "Dirty"
-        else:
-            extracted_data["type"] = "Wet"
-
-    elif "ngủ" in text or "thức" in text or "dậy" in text:
-        intent = "sleep"
-        extracted_data["details"] = text
-
-    # 2. LLM Fallback nếu chưa nhận diện được bằng Fast Parser
-    if not extracted_data:
-        try:
-            orchestrator = get_orchestrator(request)
-            temp_thread_id = f"voice_{uuid.uuid4().hex[:8]}"
-            result = await asyncio.wait_for(
-                orchestrator.run_agent(
-                    message=f"Bóc tách nhật ký ghi chép từ câu thoại: {req.transcript}",
-                    thread_id=temp_thread_id,
-                    baby_id=req.baby_id,
-                    user_id=current_user.uid
-                ),
-                timeout=2.5
-            )
-            intent = result.get("next_step") or intent
-            extracted_data = result.get("extracted_data") or extracted_data
-        except Exception as e:
-            print(f"Voice LLM extraction fallback/timeout: {e}")
-
-    return VoiceExtractResponse(
-        intent=intent,
-        extracted_data=extracted_data,
-        confidence_message="Bóc tách dữ liệu từ giọng nói thành công."
+    summary_prompt = " • ".join(summary_parts) if summary_parts else None
+    
+    return ActionParseResponse(
+        raw_text=raw_text,
+        is_complete=is_complete,
+        parsed_actions=complete_actions,
+        clarifications=clarifications,
+        warnings=[],
+        summary_prompt=summary_prompt
     )
+
+@ai_agent_router.post("/voice-action", response_model=ActionExecutionReport)
+async def execute_voice_action(
+    req: VoiceActionRequest,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Tiếp nhận câu thoại hoặc văn bản, tự động phân tích và thực thi đa hành động (Multi-Tool Calling)
+    qua các Business Service chính thức, bảo đảm an toàn y tế và tự động lưu vào database Firestore.
+    """
+    import time
+    t0 = time.time()
+    
+    # 1. Bóc tách Actions
+    actions = ActionParserEngine.parse_actions(text=req.text, baby_id=req.baby_id)
+    
+    # 2. Điều phối Multi-Tool Execution song song
+    report = await action_dispatcher.dispatch(actions=actions, user_id=current_user.uid)
+    
+    duration_ms = int((time.time() - t0) * 1000)
+    logger.info(f"⚡ [VoiceAction] Executed: {len(report.executed_actions)} | Pending: {len(report.pending_confirmations)} | Duration: {duration_ms}ms")
+    return report
+
+
+@ai_agent_router.post("/actions/confirm", response_model=ActionExecutionReport)
+async def confirm_action(
+    req: ActionConfirmRequest,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Cổng xác nhận Human-in-the-Loop cho các hành động rủi ro cao (ví dụ: cữ uống thuốc).
+    """
+    if not req.confirmed:
+        return ActionExecutionReport(
+            success=True,
+            summary_message="Đã hủy hành động theo yêu cầu của phụ huynh."
+        )
+    
+    # Thực thi Action đã được phụ huynh xác nhận
+    result_item = await action_dispatcher.execute_action(action=req.action, user_id=current_user.uid)
+    
+    executed = [result_item] if result_item.status == ActionStatus.COMPLETED else []
+    failed = [result_item] if result_item.status == ActionStatus.FAILED else []
+    
+    return ActionExecutionReport(
+        success=(len(failed) == 0),
+        executed_actions=executed,
+        failed_actions=failed,
+        summary_message=result_item.message
+    )
+
+
 
 async def _bg_generate_baby_report(job_id: str, baby_id: str, user_id: str):
     JobManager.update_job(job_id, JobStatus.PROCESSING, progress=20)

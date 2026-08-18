@@ -33,6 +33,7 @@ from app.modules.nutrition.router import feeds_router
 from app.modules.cry import cry_router
 from app.modules.ai_agent.router import ai_agent_router
 from app.modules.jobs.router import jobs_router
+from app.modules.care_coordination import care_coordination_router
 
 
 # Configure logging
@@ -45,10 +46,8 @@ def setup_logging():
 setup_logging()
 logger = logging.getLogger(__name__)
 
-if os.getenv("LANGCHAIN_TRACING_V2") == "true":
-    logger.info(f"[LangSmith] 🚀 Tracing Enabled | Project: '{os.getenv('LANGCHAIN_PROJECT')}' | Endpoint: '{os.getenv('LANGCHAIN_ENDPOINT')}'")
-else:
-    logger.warning("[LangSmith] ⚠️ Tracing is currently DISABLED.")
+from app.AI_agents.llmops.observability.tracing import LangSmithTracerManager
+LangSmithTracerManager.get_tracer()
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -84,6 +83,7 @@ api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(baby_router)
 api_router.include_router(guardian_router)
+api_router.include_router(care_coordination_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(growth_router)
 api_router.include_router(measurements_router)

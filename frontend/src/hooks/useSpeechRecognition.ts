@@ -55,16 +55,16 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}):
     recognition.lang = "vi-VN";
 
     recognition.onresult = (event: any) => {
-      let currentTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        currentTranscript += event.results[i][0].transcript;
+      let fullTranscript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript;
       }
-      setTranscript(currentTranscript);
-      transcriptRef.current = currentTranscript;
+      setTranscript(fullTranscript);
+      transcriptRef.current = fullTranscript;
 
-      // Đếm ngược tự động dừng & gửi khi người dùng ngừng nói
+      // Đếm ngược tự động dừng & gửi khi người dùng ngừng nói (1.5s)
       clearSilenceTimer();
-      if (currentTranscript.trim()) {
+      if (fullTranscript.trim()) {
         silenceTimerRef.current = setTimeout(() => {
           try {
             recognition.stop();
@@ -80,6 +80,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}):
         }, silenceTimeoutMsRef.current);
       }
     };
+
 
     recognition.onerror = (event: any) => {
       clearSilenceTimer();

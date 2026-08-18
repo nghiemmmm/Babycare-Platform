@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time 
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import AIMessage
 
@@ -31,33 +32,27 @@ class OutOfScopeGraph:
 
     async def web_search_node(self, state: OverallState) -> dict:
         """
-        Node 1: Run web search using Tavily (primary) or DuckDuckGo (fallback).
-        Extracts the user query from the last message and searches the web.
-        """
-        messages = state.get("messages", [])
-        query = ""
-        for msg in reversed(messages):
-            if hasattr(msg, "type") and msg.type == "human":
-                query = msg.content
-                break
-            elif hasattr(msg, "role") and msg.role == "user":
-                query = msg.content
-                break
+        Node 1: Thực hiện tìm kiếm thông tin mở rộng trên Web (Tavily Search / DuckDuckGo).
 
-        if not query:
-            query = messages[-1].content if messages else "general search"
+        Args:
+            state (OverallState): Trạng thái hội thoại chứa câu hỏi người dùng và tool_steps.
+
+        Returns:
+            dict: Cập nhật state chứa web_search_results (danh sách kết quả web), cờ is_out_of_scope=True và tool_steps.
+
+        Raises:
+            Không phát sinh ngoại lệ; tự động fallback về kết quả rỗng nếu lỗi mạng hoặc hết hạn API search.
+        """
+        from app.AI_agents.utils.helpers import extract_user_query, build_tool_step, calculate_elapsed_ms
+        query = extract_user_query(state) or "general search"
 
         logger.info(f"[OutOfScope] web_search_node: query='{query}'")
-
-        import time, uuid
-        from datetime import datetime, timezone
 
         t0 = time.time()
         search_result = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: self.web_search_tool._run(query, max_results=3)
         )
-        t1 = time.time()
         results = search_result.get("results", [])
         provider = search_result.get("provider", "web")
 
@@ -66,16 +61,13 @@ class OutOfScopeGraph:
             f"results={len(results)}"
         )
 
-        step = {
-            "id": f"step_{uuid.uuid4().hex[:6]}",
-            "tool_name": "WebSearchTool",
-            "display_name": "Tìm kiếm thông tin mở rộng (Web Search)",
-            "args": {"query": query, "provider": provider},
-            "status": "completed",
-            "result_summary": f"Đã thu thập {len(results)} kết quả từ nguồn web ({provider})",
-            "start_time": datetime.now(timezone.utc).isoformat(),
-            "duration_ms": int((t1 - t0) * 1000)
-        }
+        step = build_tool_step(
+            tool_name="WebSearchTool",
+            display_name="Tìm kiếm thông tin mở rộng (Web Search)",
+            args={"query": query, "provider": provider},
+            result_summary=f"Đã thu thập {len(results)} kết quả từ nguồn web ({provider})",
+            duration_ms=calculate_elapsed_ms(t0)
+        )
 
         return {
             "web_search_results": results,
@@ -85,8 +77,16 @@ class OutOfScopeGraph:
 
     async def web_finalize_node(self, state: OverallState) -> dict:
         """
-        Node 2 (after interrupt): Synthesize web search results into a user-friendly response.
-        Uses the LLM to summarize and contextualize the web search output.
+        Node 2: Tổng hợp và định dạng kết quả tìm kiếm web thành câu trả lời tự nhiên, thân thiện và ấm áp cho phụ huynh.
+
+        Args:
+            state (OverallState): Trạng thái hội thoại chứa web_search_results và messages.
+
+        Returns:
+            dict: Cập nhật state gồm danh sách messages phản hồi từ AI Agent (AIMessage).
+
+        Raises:
+            Không phát sinh ngoại lệ; tự động trả về phản hồi an toàn nếu quá trình tổng hợp LLM bị lỗi.
         """
         messages = state.get("messages", [])
         web_results = state.get("web_search_results", [])
@@ -164,19 +164,49 @@ class OutOfScopeGraph:
 
 from app.AI_agents.core.contract import AgentContract
 
+from langsmith import traceable
+
 class OutOfScopeAgentContract(AgentContract):
     agent_id = "out_of_scope_agent"
     display_name = "Web Search & General Out-Of-Scope Agent"
     description = "Tìm kiếm thông tin tổng hợp trên mạng cho các câu hỏi nằm ngoài phạm vi nhi khoa."
     capabilities = [
         "out_of_scope_handling",
-        "web_search"
+        "web_search",
+        "CAPABILITY_WEB_SEARCH"
     ]
     intents = ["out_of_scope"]
 
     def __init__(self, checkpointer=None):
         self.graph = OutOfScopeGraph().compile(checkpointer=checkpointer, interrupt_before=[])
 
-    async def execute(self, state: dict) -> dict:
-        return await self.graph.ainvoke(state)
+    @traceable(name="Tier3.OutOfScopeAgent.execute")
+    async def execute(self, state: dict, config: dict = None) -> dict:
+        thread_id = state.get("thread_id") or "thread_out_of_scope_default"
+        cfg = config or {"configurable": {"thread_id": thread_id}}
+        return await self.graph.ainvoke(state, config=cfg)
+
+    @traceable(name="Tier3.OutOfScopeAgent.execute_with_context")
+    async def execute_with_context(
+        self,
+        query: str,
+        state: dict,
+        tier1_context: str = None,
+        retrieved_docs: list = None,
+        escalation_decision=None,
+        config: dict = None
+    ) -> dict:
+        from langchain_core.messages import HumanMessage
+        thread_id = state.get("thread_id") or "thread_out_of_scope_default"
+        cfg = config or {"configurable": {"thread_id": thread_id}}
+        exec_state = {
+            "messages": state.get("messages", [HumanMessage(content=query)]),
+            "baby_id": state.get("baby_id"),
+            "current_user_id": state.get("current_user_id"),
+            "tool_steps": state.get("tool_steps", []),
+            "next_step": "out_of_scope_agent"
+        }
+        return await self.graph.ainvoke(exec_state, config=cfg)
+
+
 

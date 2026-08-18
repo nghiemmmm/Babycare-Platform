@@ -25,8 +25,9 @@ class FeedCreate(BaseModel):
     baby_id: str
     type: str
     details: str
-    amount: float
-    time: str
+    amount: float = 0.0
+    time: Optional[str] = ""
+
 
 class FeedResponse(BaseModel):
     id: str
