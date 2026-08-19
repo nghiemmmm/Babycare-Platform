@@ -5,7 +5,7 @@ from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.schemas import UserRecord
 from app.AI_agents.orchestrator.agent_orchestrator import AgentOrchestrator
 from app.AI_agents.core.response_formatter import ResponseFormatter
-from google.cloud.firestore import FieldFilter
+from google.cloud.firestore import FieldFilter, Query
 from app.infrastructure.database import get_firestore_db
 from app.modules.baby.service import BabyService
 from datetime import datetime, timezone, timedelta
@@ -167,18 +167,25 @@ async def list_chat_threads(
 
     # Lấy trước nội dung tin nhắn cuối cùng của từng cuộc trò chuyện để hiện trong danh sách lịch
     # sử chat - trước đây chỉ có "title" (chốt cứng từ tin nhắn ĐẦU TIÊN, không đổi về sau), nên
-    # người dùng không biết cuộc trò chuyện đang nói về nội dung gì nếu chưa bấm vào xem. Dùng
-    # chung 1 orchestrator cho cả vòng lặp thay vì tạo mới từng thread để đỡ tốn chi phí compile graph.
-    orchestrator = AgentOrchestrator()
+    # người dùng không biết cuộc trò chuyện đang nói về nội dung gì nếu chưa bấm vào xem. Đọc từ
+    # Firestore subcollection chat_threads/{id}/messages (nguồn thật, được ghi ở create_thread_message
+    # / stream_thread_message) - kiến trúc Tier 0/1/2 mới không còn checkpointer.put() sau mỗi lượt
+    # chat nên orchestrator.get_state() luôn rỗng, dùng nó ở đây sẽ khiến preview luôn trống.
     for t in threads:
         try:
-            state = await orchestrator.get_state(t.id, current_user.uid)
-            msgs = state.get("values", {}).get("messages", [])
-            if msgs:
-                content = msgs[-1].content
+            last_msg_docs = list(
+                db.collection("chat_threads")
+                .document(t.id)
+                .collection("messages")
+                .order_by("timestamp", direction=Query.DESCENDING)
+                .limit(1)
+                .get()
+            )
+            if last_msg_docs:
+                content = last_msg_docs[0].to_dict().get("content", "")
                 t.last_message_preview = content[:80] + "..." if len(content) > 80 else content
         except Exception:
-            pass  # Không chặn cả danh sách thread nếu đọc checkpoint của 1 thread bị lỗi
+            pass  # Không chặn cả danh sách thread nếu đọc preview của 1 thread bị lỗi
 
     return threads[:50]
 
