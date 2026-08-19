@@ -5,7 +5,12 @@ from app.AI_agents.knowledge.text_splitter import TextSplitter
 from langchain_community.vectorstores import FAISS
 from app.AI_agents.memory.embeddings import get_embeddings
 from app.AI_agents.knowledge.sparse_retriever import SparseBM25Retriever
-from app.AI_agents.core.constant import HYBRID_RETRIEVE_CANDIDATES
+from app.AI_agents.core.constant import (
+    HYBRID_RETRIEVE_CANDIDATES,
+    RAG_ENABLE_MMR,
+    RAG_MMR_LAMBDA,
+    RAG_MMR_FETCH_K_MULTIPLIER
+)
 from langsmith import traceable
 
 
@@ -124,9 +129,22 @@ class RAGPipeline:
 
         def _do_dense():
             try:
+                total_vectors = getattr(self.vector_store.index, "ntotal", 100) if hasattr(self.vector_store, "index") else 100
+                fetch_limit = min(total_vectors, _DENSE_CANDIDATES * RAG_MMR_FETCH_K_MULTIPLIER)
+                if RAG_ENABLE_MMR and hasattr(self.vector_store, "max_marginal_relevance_search"):
+                    try:
+                        return self.vector_store.max_marginal_relevance_search(
+                            query,
+                            k=_DENSE_CANDIDATES,
+                            fetch_k=fetch_limit,
+                            lambda_mult=RAG_MMR_LAMBDA,
+                            filter=filter_dict
+                        )
+                    except Exception as mmr_err:
+                        pass
+                
+                # Fallback to similarity_search
                 if filter_dict:
-                    total_vectors = self.vector_store.index.ntotal
-                    fetch_limit = min(total_vectors, _DENSE_CANDIDATES * 10)
                     return self.vector_store.similarity_search(
                         query, k=_DENSE_CANDIDATES,
                         filter=filter_dict, fetch_k=fetch_limit
@@ -171,7 +189,7 @@ class RAGPipeline:
         """
         Hybrid Retrieval bằng SearchPlan đã được bóc tách từ QueryAnalyzer:
         - BM25 dùng keywords cốt lõi
-        - FAISS Dense dùng dense_query đã được chuẩn hóa ngữ nghĩa
+        - FAISS Dense dùng dense_query đã được chuẩn hóa ngữ nghĩa (kèm MMR đa dạng hóa)
         - Metadata filter dùng plan.filters
         """
         if not self.vector_store:
@@ -183,8 +201,22 @@ class RAGPipeline:
 
         def _do_dense_plan():
             try:
+                total_vectors = getattr(self.vector_store.index, "ntotal", 100) if hasattr(self.vector_store, "index") else 100
+                fetch_limit = min(total_vectors, _DENSE_CANDIDATES * RAG_MMR_FETCH_K_MULTIPLIER)
+                if RAG_ENABLE_MMR and hasattr(self.vector_store, "max_marginal_relevance_search"):
+                    try:
+                        return self.vector_store.max_marginal_relevance_search(
+                            dense_query,
+                            k=_DENSE_CANDIDATES,
+                            fetch_k=fetch_limit,
+                            lambda_mult=RAG_MMR_LAMBDA,
+                            filter=filters
+                        )
+                    except Exception:
+                        pass
+
+                # Fallback to similarity_search
                 if filters:
-                    total_vectors = self.vector_store.index.ntotal
                     return self.vector_store.similarity_search(
                         dense_query, k=_DENSE_CANDIDATES,
                         filter=filters, fetch_k=total_vectors

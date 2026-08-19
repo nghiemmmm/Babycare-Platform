@@ -375,6 +375,10 @@ export default function DashboardView({
   const [lastExecuted, setLastExecuted] = useState<LastExecutedAction | null>(null);
   const [undoCountdown, setUndoCountdown] = useState<number>(0);
 
+  // Voice concurrency control refs
+  const voiceAbortControllerRef = useRef<AbortController | null>(null);
+  const voiceRequestEpochRef = useRef<number>(0);
+
   // Undo countdown timer
   useEffect(() => {
     if (undoCountdown <= 0) return;
@@ -387,6 +391,17 @@ export default function DashboardView({
   // Process voice transcript with FastAPI AI Agent Parser Engine
   const handleProcessVoiceTranscript = useCallback(async (text: string) => {
     if (!text || !text.trim()) return;
+
+    // 1. Hủy ngay request cũ nếu đang chạy ngầm (Request Cancellation)
+    if (voiceAbortControllerRef.current) {
+      voiceAbortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    voiceAbortControllerRef.current = abortController;
+
+    // 2. Tăng Sequence Token Epoch để chống Stale Overwrite
+    const currentEpoch = ++voiceRequestEpochRef.current;
+
     setIsExtractingVoice(true);
     try {
       const res = await apiFetch("/api/v1/ai/voice-action/parse", {
@@ -395,7 +410,13 @@ export default function DashboardView({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ text: text.trim(), baby_id: activeBaby.id }),
+        signal: abortController.signal
       });
+
+      // Nếu đã có request mới hơn được phát đi, bỏ qua response cũ
+      if (currentEpoch !== voiceRequestEpochRef.current) {
+        return;
+      }
 
       if (res.ok) {
         const report = await res.json();
@@ -1970,9 +1991,6 @@ export default function DashboardView({
                     onClick={() => {
                       if (isListening) {
                         stopListening();
-                        if (transcript && transcript.trim()) {
-                          handleProcessVoiceTranscript(transcript.trim());
-                        }
                       } else {
                         startListening();
                       }
@@ -1997,8 +2015,11 @@ export default function DashboardView({
                     <button
                       type="button"
                       onClick={() => {
-                        if (isListening) stopListening();
-                        handleProcessVoiceTranscript(transcript.trim());
+                        if (isListening) {
+                          stopListening();
+                        } else {
+                          handleProcessVoiceTranscript(transcript.trim());
+                        }
                       }}
                       className="w-full py-2 bg-linear-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
                     >

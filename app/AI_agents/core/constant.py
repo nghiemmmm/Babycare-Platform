@@ -146,6 +146,12 @@ RERANKER_MODEL_NAME = "mixedbread-ai/mxbai-rerank-xsmall-v1"
 ENABLE_RERANKER = False  # Production default: Hybrid RRF achieves Hit@3=1.00 & MRR=0.92 in < 45ms, reranker disabled by default for zero CPU latency
 HYBRID_RETRIEVE_CANDIDATES = 10
 
+# MMR (Maximal Marginal Relevance) Diversity Configurations
+RAG_ENABLE_MMR = True             # Bật MMR để giảm trùng lặp ngữ nghĩa (semantic redundancy)
+RAG_MMR_LAMBDA = 0.7              # 0.7 = 70% độ liên quan (relevance) + 30% độ đa dạng (diversity)
+RAG_MMR_FETCH_K_MULTIPLIER = 3    # Quét trước 30 ứng viên (k * 3) trước khi lọc MMR về k ứng viên
+
+
 # Firestore Configurations
 CHECKPOINT_COLLECTION = "chat_checkpoints"
 

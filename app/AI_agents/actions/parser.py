@@ -174,8 +174,6 @@ JSON:"""
                 dosage_val = f"{mg_match.group(1)}mg"
             elif dose_match:
                 dosage_val = f"{dose_match.group(1)}{dose_match.group(2)}"
-            elif "hapacol" in converted_text:
-                dosage_val = "150mg"
 
             params = {"medication_name": med_name, "dosage": dosage_val}
             missing_fields = []

@@ -167,7 +167,7 @@ class FastVoiceParser:
             elif dose_match:
                 dosage_val = f"{dose_match.group(1)}{dose_match.group(2)}"
             else:
-                dosage_val = "150mg" if "hapacol" in converted_text else None
+                dosage_val = None
 
             if dosage_val is not None:
                 extracted_data["medication_name"] = med_name
@@ -178,11 +178,11 @@ class FastVoiceParser:
                 }
             else:
                 missing_fields.append("dosage")
-                suggested_chips = ["1 gói", "1/2 gói", "5ml", "2.5ml", "2 giọt", "1 viên"]
+                suggested_chips = ["80mg", "150mg", "250mg", "5ml", "1 gói", "1/2 gói", "2 giọt", "1 viên"]
                 extracted_data["medication_name"] = med_name
                 extracted_data["dosage"] = None
                 canonical_data = {"medication_name": med_name, "dosage": None}
-                confidence = 0.75
+                confidence = 0.70
 
         # B. CỮ ĂN / DINH DƯỠNG (FEEDING)
         elif any(w in converted_text for w in ["sữa", "bú", "ml", "cc", "bình", "cháo", "bột", "ăn dặm", "yến mạch"]):
