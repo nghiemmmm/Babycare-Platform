@@ -2,67 +2,76 @@
 
 # ==============================================================================
 # Build Arguments toàn cục
-# Cho phép truyền tham số phiên bản Python và Model Version khi build
+# Phiên bản CUDA Runtime và Model Version
 # ==============================================================================
-ARG PYTHON_VERSION=3.11.9-slim
+ARG CUDA_VERSION=12.1.1-runtime-ubuntu22.04
 ARG MODEL_VERSION=v1.0.0
 
 # ==============================================================================
-# Stage 1: Builder
-# Cài đặt công cụ biên dịch và xây dựng virtual environment tối ưu
+# Stage 1: Builder (Cài đặt Python 3.11 & Torch CUDA 12.1)
 # ==============================================================================
-FROM python:${PYTHON_VERSION} AS builder
+FROM nvidia/cuda:${CUDA_VERSION} AS builder
 ARG MODEL_VERSION
 
 WORKDIR /build
 
-# Cài đặt build dependencies cần thiết cho các thư viện C/C++ (FAISS, soundfile, PyTorch)
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Cài đặt Python 3.11 và các công cụ biên dịch C/C++ cần thiết
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3.11-dev \
+    python3-pip \
     build-essential \
     curl \
     libsndfile1-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# Tận dụng triệt để Layer Caching: copy requirements trước khi copy source code
+# Tận dụng triệt để Layer Caching: copy requirements trước
 COPY requirements.txt .
 
-# Tạo virtual environment độc lập và cài đặt toàn bộ dependencies
-RUN python -m venv /opt/venv \
+# Tạo virtualenv độc lập và cài đặt PyTorch hỗ trợ CUDA 12.1 cùng toàn bộ requirements
+RUN python3.11 -m venv /opt/venv \
  && /opt/venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
+ && /opt/venv/bin/pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cu121 \
  && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # ==============================================================================
-# Stage 2: Final Runtime
-# Image siêu nhẹ cho production, chỉ chứa runtime binaries và virtualenv đã build
+# Stage 2: Final Runtime (GPU Tối ưu & Siêu nhẹ)
 # ==============================================================================
-FROM python:${PYTHON_VERSION} AS runtime
+FROM nvidia/cuda:${CUDA_VERSION} AS runtime
 ARG MODEL_VERSION
 
 WORKDIR /app
 
-# Metadata Label để quản lý image và model version trong hệ thống
+# Khai báo Metadata Labels
 LABEL maintainer="BabyCare AI Team"
 LABEL ai.model.version="${MODEL_VERSION}"
+LABEL ai.hardware="nvidia-gpu"
 
-# Thiết lập các biến môi trường tối ưu cho Python runtime
-ENV PYTHONDONTWRITEBYTECODE=1 \
+# Thiết lập biến môi trường tối ưu cho Python và NVIDIA Container Toolkit
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     PATH="/opt/venv/bin:$PATH" \
     MODEL_VERSION=${MODEL_VERSION} \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     PORT=8000 \
     HOST=0.0.0.0
 
-# Cài đặt các thư viện hệ thống cần thiết cho AI & Audio (Whisper STT, Soundfile, FAISS OpenMP)
-# và curl cho healthcheck
+# Cài đặt Python runtime và các thư viện xử lý âm thanh tiếng khóc & vector search
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
     ffmpeg \
     libsndfile1 \
     libgomp1 \
     curl \
  && rm -rf /var/lib/apt/lists/*
 
-# Tạo dedicated non-root user và group để đảm bảo an toàn bảo mật (UID: 10001)
+# Tạo dedicated non-root user và group để đảm bảo bảo mật an toàn
 RUN groupadd -g 10001 appgroup \
  && useradd -u 10001 -g appgroup -s /bin/bash -m -d /home/appuser appuser \
  && mkdir -p /app /home/appuser/.cache \
@@ -81,7 +90,7 @@ USER appuser
 EXPOSE 8000
 
 # Healthcheck định kỳ kiểm tra trạng thái dịch vụ FastAPI
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
 # Khởi chạy ứng dụng FastAPI bằng Uvicorn

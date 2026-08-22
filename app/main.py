@@ -34,6 +34,7 @@ from app.modules.cry import cry_router
 from app.modules.ai_agent.router import ai_agent_router
 from app.modules.jobs.router import jobs_router
 from app.modules.care_coordination import care_coordination_router
+from app.modules.sleep import sleep_router
 
 
 # Configure logging
@@ -95,6 +96,7 @@ api_router.include_router(feeds_router)
 api_router.include_router(cry_router)
 api_router.include_router(ai_agent_router)
 api_router.include_router(jobs_router)
+api_router.include_router(sleep_router)
 
 app.include_router(api_router, prefix="/api/v1")
 

@@ -85,13 +85,18 @@ class RAGPipeline:
         if self.vector_store is None:
             docs = self.loader.load()
             chunks = self.splitter.split_documents(docs)
-            if chunks:
-                self.vector_store = FAISS.from_documents(chunks, self.embeddings)
+            
+            # Nạp thêm các chunks đã được Airflow xử lý và lưu trong SQLite
+            sqlite_chunks = self.load_from_sqlite_chunks()
+            all_initial_chunks = chunks + sqlite_chunks
+
+            if all_initial_chunks:
+                self.vector_store = FAISS.from_documents(all_initial_chunks, self.embeddings)
                 try:
                     self.vector_store.save_local(index_dir)
                 except Exception as e:
                     print(f"Lỗi khi lưu FAISS index cục bộ: {e}")
-                self._all_chunks = chunks
+                self._all_chunks = all_initial_chunks
             else:
                 from langchain_core.documents import Document as Doc
                 dummy = Doc(page_content="dummy", metadata={"source": "dummy"})
@@ -107,6 +112,18 @@ class RAGPipeline:
         except Exception as e:
             print(f"[RAGPipeline] Reranker failed to load (non-fatal, fallback to RRF only): {e}")
             self._reranker = None
+
+    def load_from_sqlite_chunks(self) -> List[Document]:
+        """
+        Đọc trực tiếp các chunks đã xử lý hoàn tất (COMPLETED) từ cơ sở dữ liệu SQLite của Airflow.
+        Bảo toàn metadata (source, page, chunk_index, content_hash) phục vụ trích dẫn chính xác.
+        """
+        try:
+            from airflow.shared.indexing.vector_indexer import load_chunks_as_documents
+            return load_chunks_as_documents()
+        except Exception as e:
+            print(f"[RAGPipeline] Không thể đọc SQLite chunks từ Airflow (bỏ qua): {e}")
+            return []
 
     def retrieve(self, query: str, k: int = 3, domain: Optional[str] = None) -> List[Document]:
         """

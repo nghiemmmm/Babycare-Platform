@@ -4,6 +4,8 @@ from langchain_core.documents import Document
 from sentence_transformers import CrossEncoder
 from app.AI_agents.core.constant import RERANKER_MODEL_NAME, MODEL_CACHE_DIR
 
+import torch
+
 logger = logging.getLogger(__name__)
 
 _cross_encoder_singleton = None
@@ -12,10 +14,11 @@ _cross_encoder_singleton = None
 def _get_cross_encoder():
     global _cross_encoder_singleton
     if _cross_encoder_singleton is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         try:
             _cross_encoder_singleton = CrossEncoder(
                 RERANKER_MODEL_NAME,
-                device="cpu",
+                device=device,
                 cache_folder=MODEL_CACHE_DIR,
                 local_files_only=True
             )
@@ -23,7 +26,7 @@ def _get_cross_encoder():
             try:
                 _cross_encoder_singleton = CrossEncoder(
                     RERANKER_MODEL_NAME,
-                    device="cpu",
+                    device=device,
                     cache_folder=MODEL_CACHE_DIR
                 )
             except Exception as e:

@@ -1,0 +1,22 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Cài đặt requirements
+COPY airflow_project/ingestion_service/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Copy shared code và service code
+COPY shared /app/airflow/shared
+COPY airflow_project/ingestion_service /app/ingestion_service
+
+ENV PYTHONPATH="/app:${PYTHONPATH}"
+
+EXPOSE 8000
+
+CMD ["uvicorn", "ingestion_service.main:app", "--host", "0.0.0.0", "--port", "8000"]

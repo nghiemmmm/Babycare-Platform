@@ -1,0 +1,90 @@
+# ==============================================================================
+# Docker Compose cho BabyCare AI
+# ------------------------------------------------------------------------------
+# 1. Chạy chế độ CPU (Mặc định):
+#    docker compose up --build -d
+#
+# 2. Chạy chế độ GPU (Tăng tốc xử lý tiếng khóc & RAG):
+#    docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
+# ==============================================================================
+
+services:
+  # ==============================================================================
+  # Dịch vụ Backend FastAPI & AI Engine
+  # ==============================================================================
+  backend:
+    container_name: babycare-api
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        PYTHON_VERSION: 3.11.9-slim
+        MODEL_VERSION: v1.0.0
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    environment:
+      - APP_ENV=production
+      - PORT=8000
+      - HOST=0.0.0.0
+      - REDIS_URL=redis://redis:6379/0
+      # Đường dẫn file trọng số model AST Cry Classifier bên trong container
+      - MODEL_PATH=/app/app/ai/CRY/weights/best_audio_model.pth
+      # Cấu hình Reranker & FAISS Vector Index
+      - MODEL_CACHE_DIR=/app/app/ai/models
+      - RERANKER_MODEL_NAME=mixedbread-ai/mxbai-rerank-xsmall-v1
+      # Cấu hình cache thư mục mô hình AI (Whisper, Sentence-Transformers, HuggingFace)
+      - HF_HOME=/home/appuser/.cache/huggingface
+      - TRANSFORMERS_CACHE=/home/appuser/.cache/huggingface/hub
+    volumes:
+      # Persistent cache cho các mô hình AI đã tải về
+      - huggingface_cache:/home/appuser/.cache/huggingface
+      # Mount toàn bộ Model AI cục bộ (Reranker mxbai, Embedding BGE-M3, FAISS index, Faster-Whisper)
+      - ../app/ai/models:/app/app/ai/models:ro
+      # Mount file trọng số mô hình tiếng khóc (AST Model .pth)
+      - ../app/ai/CRY/weights:/app/app/ai/CRY/weights:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - babycare-network
+
+  # ==============================================================================
+  # Dịch vụ Redis: Cache dữ liệu bé, Rate Limiting & Hàng đợi tác vụ
+  # ==============================================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: babycare-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - babycare-network
+
+# ==============================================================================
+# Khai báo Volumes lưu trữ dữ liệu bền vững (Persistent Storage)
+# ==============================================================================
+volumes:
+  redis_data:
+    name: babycare_redis_data
+  huggingface_cache:
+    name: babycare_huggingface_cache
+
+# ==============================================================================
+# Khai báo Mạng nội bộ kết nối an toàn giữa các dịch vụ
+# ==============================================================================
+networks:
+  babycare-network:
+    name: babycare-net
+    driver: bridge
