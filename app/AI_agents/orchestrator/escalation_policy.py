@@ -1,16 +1,11 @@
 import logging
 from typing import Set, List
 from app.AI_agents.core.contract import Tier1Result, EscalationDecision
+from app.AI_agents.core.constant import TIER1_NATIVE_CAPABILITIES
 
 logger = logging.getLogger(__name__)
 
-# Các Capability mà Tier 1 (First-line Solver) tự giải quyết native được
-TIER1_NATIVE_CAPABILITIES: Set[str] = {
-    "knowledge_grounded_qa",
-    "general_rag_retrieval",
-    "standard_reasoning",
-    "multi_document_synthesis"
-}
+from langsmith import traceable
 
 class EscalationPolicy:
     """
@@ -23,7 +18,26 @@ class EscalationPolicy:
     def __init__(self, native_capabilities: Set[str] = None):
         self.native_capabilities = native_capabilities or TIER1_NATIVE_CAPABILITIES
 
+    @traceable(name="EscalationPolicy.evaluate")
     def evaluate(self, tier1_result: Tier1Result) -> EscalationDecision:
+        """
+        Đánh giá khoảng trống năng lực (Capability Gap) giữa yêu cầu của câu hỏi và năng lực native của Tier 1.
+
+        Thuật toán:
+            Capability Gap = required_capabilities - TIER1_NATIVE_CAPABILITIES
+            - Nếu Gap rỗng: Tier 1 tự giải quyết toàn diện (should_escalate = False).
+            - Nếu Gap có phần tử: Kích hoạt leo thang (should_escalate = True) và lập danh sách chẩn đoán.
+
+        Args:
+            tier1_result (Tier1Result): Đối tượng chứa kết quả phân tích yêu cầu từ Tier 1 ChatAgent.
+
+        Returns:
+            EscalationDecision: Quyết định leo thang gồm trạng thái should_escalate, 
+                danh sách unmet_capabilities và các mã lý do chẩn đoán (reasons).
+
+        Raises:
+            Không phát sinh ngoại lệ; tự động trả về EscalationDecision(should_escalate=False) nếu tier1_result là None.
+        """
         if not tier1_result:
             return EscalationDecision(should_escalate=False, unmet_capabilities=[], reasons=[])
 

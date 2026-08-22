@@ -32,7 +32,7 @@
 | 🎤 **Nhật Ký Giọng Nói** | Bóc tách nhật ký ăn uống/sức khỏe từ giọng nói của cha mẹ bằng Gemini Multimodal |
 | 🌐 **Tra Cứu Web Thời Gian Thực** | Tích hợp Tavily Search (fallback DuckDuckGo) khi câu hỏi vượt ngoài kho tri thức nội bộ |
 | 👨‍👩‍👧 **Đồng Bộ Gia Đình** | Mời và phân quyền chia sẻ dữ liệu bé giữa cha, mẹ và người giám hộ |
-| ⏱️ **Đo Lường Giấc Ngủ** | Theo dõi và tự động lưu trữ nhật ký giấc ngủ cho bé |
+| ⏱️ **Dự Đoán Cửa Sổ Thức (Wake Window AI)** | Dự đoán điểm rơi giấc ngủ tối ưu (*Sweet Spot*) cá nhân hóa bám sát **Patent US 20250292903** bằng Global LightGBM + Ma trận 5 ngày + Chốt chặn Nhi khoa & LLM Reasoner khi có biến cố sức khỏe |
 
 ### 🎨 Giao Diện Ứng Dụng (Application UI Showcase)
 
@@ -113,6 +113,7 @@ babycare-ai/
 │   │   ├── health_records/           # Nhật ký bệnh trạng & triệu chứng sức khỏe
 │   │   ├── nutrition/                # Cữ bú, ăn dặm, dị ứng & hướng dẫn WHO/AAP
 │   │   ├── cry/                      # Upload & phân tích tiếng khóc AI
+│   │   ├── sleep/                    # ⏱️ Dự đoán Wake Window (LightGBM + LLM + Guardrails) & Sleep Timer
 │   │   ├── guardian/                 # Người giám hộ & phân quyền gia đình
 │   │   └── ai_agent/                 # Chat AI, giọng nói, báo cáo & sleep timer
 │   ├── AI_agents/                    # 🤖 MULTI-AGENT AI LAYER (LangGraph)
@@ -125,7 +126,8 @@ babycare-ai/
 │   │   ├── prompts/                  # Hệ thống prompt chuyên biệt cho từng tác nhân
 │   │   ├── core/                     # Hằng số, mô hình suy luận (Gemini Pro/Flash, Provider Router)
 │   │   └── utils/                    # Các tiện ích hỗ trợ
-│   ├── ai/                           # 🔊 ML INFERENCE LAYER (PyTorch)
+│   ├── ai/                           # 🔊 ML INFERENCE LAYER (PyTorch & LightGBM)
+│   │   ├── models/                   # Mô hình Global LightGBM (global_lightgbm_wake_window.txt)
 │   │   ├── CRY/                      # Mô hình AST nhận dạng tiếng khóc
 │   │   │   ├── inference.py          # Trích xuất đặc trưng Kaldi fbank + suy luận AST
 │   │   │   ├── models/ast_models.py  # Kiến trúc Audio Spectrogram Transformer
@@ -140,6 +142,12 @@ babycare-ai/
 │       ├── sounds/                   # Nhạc ru & tiếng ồn trắng dỗ bé
 │       ├── samples/                  # Âm thanh mẫu kiểm thử
 │       └── voices/                   # Giọng nói nhân bản
+│
+├── airflow/                          # 🌪️ AIRFLOW MLOPS & INGESTION PIPELINES
+│   ├── airflow_project/dags/
+│   │   ├── ingest_documents_dag.py   # RAG Document Ingestion & Dual Indexing DAG
+│   │   └── train_wake_window_dag.py  # LightGBM Wake Window Retraining & Drift Check DAG
+│   └── shared/                       # Parsing, Deduplication & Vector Indexing tasks
 │
 ├── frontend/                         # ⚛️ FRONTEND LAYER (React + Vite + TypeScript)
 │   ├── src/
@@ -157,10 +165,12 @@ babycare-ai/
 │   └── package.json
 │
 ├── tests/
-│   └── unit/
-│       └── test_ai_core.py           # 21 unit test tự động (AI Core, Memory, Tools)
+│   ├── unit/
+│   │   ├── test_ai_core.py           # 21 unit test tự động (AI Core, Memory, Tools)
+│   │   └── test_wake_window_system.py# 6 unit test hệ thống Wake Window (Patent US 20250292903)
+│   └── evaluation/                   # Đánh giá RAG Retriever & AST Models
 │
-├── scripts/                          # Công cụ seed & kiểm thử thủ công
+├── scripts/                          # Công cụ seed data & huấn luyện Global LightGBM
 ├── requirements.txt                  # Phụ thuộc Python
 ├── .env.example                      # Mẫu biến môi trường
 ├── .gitignore                        # Bỏ qua model weights, uploads, secrets
@@ -408,6 +418,9 @@ Hệ thống RAG (Retrieval-Augmented Generation) y khoa được thiết kế t
 | `GET/POST` | `/api/v1/nutrition/feeds` | Cữ bú & ăn dặm |
 | `GET` | `/api/v1/nutrition/safety-guidelines` | Cảnh báo dị ứng & thực phẩm cấm theo tuổi |
 | `GET` | `/api/v1/nutrition/safety-handbook` | Cẩm nang an toàn y khoa WHO/AAP |
+| `GET` | `/api/v1/babies/{id}/sleep/next-wake-window` | ⏱️ **Dự đoán Wake Window & Sweet Spot** (Global LightGBM + 5-day history + Guardrails + LLM) |
+| `GET/POST` | `/api/v1/babies/{id}/sleep/records` | Quản lý nhật ký giấc ngủ của bé |
+| `POST` | `/api/v1/babies/{id}/sleep/timer` | Bật/tắt/kiểm tra đồng hồ bấm giờ giấc ngủ (`start` / `stop` / `status`) |
 | `GET/POST` | `/api/v1/ai/threads` | Quản lý phiên chat AI (giới hạn 6 gần nhất) |
 | `POST` | `/api/v1/ai/threads/{id}/messages` | Gửi tin nhắn & nhận phản hồi AI |
 | `POST` | `/api/v1/ai/voice-extract` | Bóc tách nhật ký từ giọng nói |

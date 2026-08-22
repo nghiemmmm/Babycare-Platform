@@ -1,8 +1,12 @@
 import os
 import logging
 from app.AI_agents.tools.base_tool import BaseTool
+from app.AI_agents.llmops.observability.timeout import TimeoutConfig
+
+from langsmith import traceable
 
 logger = logging.getLogger(__name__)
+
 
 
 class WebSearchTool(BaseTool):
@@ -54,7 +58,7 @@ class WebSearchTool(BaseTool):
         encoded_query = urllib.parse.quote_plus(query)
         url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1&skip_disambig=1"
         req = urllib.request.Request(url, headers={"User-Agent": "BabyCareAI/1.0"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=int(TimeoutConfig.WEB_SEARCH_TOOL_TIMEOUT)) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         results = []
         # Abstract (best answer)
@@ -83,7 +87,9 @@ class WebSearchTool(BaseTool):
             })
         return results[:max_results]
 
+    @traceable(name="Tier3.WebSearchTool._run")
     def _run(self, query: str, max_results: int = 3) -> dict:
+
         """
         Run web search: Tavily primary → DuckDuckGo fallback.
         Returns: {"query": str, "results": list[dict], "provider": str}
@@ -91,6 +97,7 @@ class WebSearchTool(BaseTool):
         # Try Tavily first
         try:
             results = self._search_tavily(query, max_results=max_results)
+
             logger.info(f"[WebSearch] Tavily success for query: '{query}' ({len(results)} results)")
             return {"query": query, "results": results, "provider": "tavily"}
         except Exception as e:

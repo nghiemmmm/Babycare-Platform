@@ -45,6 +45,8 @@ import { BabyProfile, MedicationLog, FeedLog, Measurement, ChatMessage, SmartExt
 import { apiFetch } from "../lib/authClient";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { useBabyDataListener } from "../lib/events";
+import { apiFetch } from "../lib/authClient";
+
 
 interface DashboardViewProps {
   activeBaby: BabyProfile;
@@ -345,55 +347,274 @@ export default function DashboardView({
     }
   };
 
-  // Process voice transcript with FastAPI AI Agent Backend
+  // ── Voice Action Workflow States ──────────────────────────────────────────
+  interface ClarificationState {
+    action: any;
+    prompt: string;
+    chips: string[];
+  }
+  interface PendingConfirmationState {
+    action: any;
+    warningMessage?: string;
+  }
+  interface LastExecutedAction {
+    recordId?: string;
+    actionType: string;
+    message: string;
+  }
+  interface ParsedActionPreview {
+    rawText: string;
+    actionType: string;
+    title: string;
+    details: { label: string; value: string }[];
+    action: any;
+  }
+
+  const [parsedPreview, setParsedPreview] = useState<ParsedActionPreview | null>(null);
+  const [clarification, setClarification] = useState<ClarificationState | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmationState | null>(null);
+  const [lastExecuted, setLastExecuted] = useState<LastExecutedAction | null>(null);
+  const [undoCountdown, setUndoCountdown] = useState<number>(0);
+
+  // Voice concurrency control refs
+  const voiceAbortControllerRef = useRef<AbortController | null>(null);
+  const voiceRequestEpochRef = useRef<number>(0);
+
+  // Undo countdown timer
+  useEffect(() => {
+    if (undoCountdown <= 0) return;
+    const timer = setTimeout(() => {
+      setUndoCountdown((prev) => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [undoCountdown]);
+
+  // Process voice transcript with FastAPI AI Agent Parser Engine
   const handleProcessVoiceTranscript = useCallback(async (text: string) => {
-    if (!text.trim()) return;
+    if (!text || !text.trim()) return;
+
+    // 1. Hủy ngay request cũ nếu đang chạy ngầm (Request Cancellation)
+    if (voiceAbortControllerRef.current) {
+      voiceAbortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    voiceAbortControllerRef.current = abortController;
+
+    // 2. Tăng Sequence Token Epoch để chống Stale Overwrite
+    const currentEpoch = ++voiceRequestEpochRef.current;
+
     setIsExtractingVoice(true);
     try {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-      const res = await fetch(`${baseUrl}/api/v1/ai/voice-extract`, {
+      const res = await apiFetch("/api/v1/ai/voice-action/parse", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer mock-token"
         },
-        body: JSON.stringify({ transcript: text, baby_id: activeBaby.id }),
+        body: JSON.stringify({ text: text.trim(), baby_id: activeBaby.id }),
+        signal: abortController.signal
       });
+
+      // Nếu đã có request mới hơn được phát đi, bỏ qua response cũ
+      if (currentEpoch !== voiceRequestEpochRef.current) {
+        return;
+      }
+
       if (res.ok) {
-        const data = await res.json();
-        const { intent, extracted_data } = data;
-        
-        if (intent === "feeding") {
-          if (extracted_data.type) setFeedType(extracted_data.type);
-          if (extracted_data.amount) setFeedAmount(extracted_data.amount);
-          if (extracted_data.details) setFeedDetails(extracted_data.details);
-          setActiveModal("feed");
-        } else if (intent === "medication") {
-          if (extracted_data.medication_name) setMedName(extracted_data.medication_name);
-          if (extracted_data.dosage) setMedDosage(extracted_data.dosage);
-          setActiveModal("medication");
-        } else if (intent === "growth") {
-          if (extracted_data.weight) setGrowthWeight(extracted_data.weight);
-          if (extracted_data.height) setGrowthHeight(extracted_data.height);
-          setActiveModal("growth");
-        } else if (intent === "diaper") {
-          if (extracted_data.type) setDiaperType(extracted_data.type);
-          setActiveModal("diaper");
-        } else if (intent === "sleep") {
-          setActiveModal("sleep");
-        } else {
-          setActiveModal("feed");
+        const report = await res.json();
+
+        // 1. Kiểm tra trường hợp thiếu thông số -> Hiện Quick Action Chips để bổ sung
+        if (report.clarifications && report.clarifications.length > 0) {
+          setActiveModal("none");
+          setParsedPreview(null);
+          const clar = report.clarifications[0];
+          setClarification({
+            action: clar,
+            prompt: clar.clarification_prompt || "Vui lòng chọn thông số bổ sung cho bé:",
+            chips: clar.suggested_chips || ["60ml", "90ml", "120ml", "150ml", "180ml"]
+          });
+          return;
         }
+
+        // 2. Nếu đầy đủ và đúng -> Hiển thị Bảng Xem Trước Thành Phần Trích Xuất & Nút Xác Nhận Thêm
+        if (report.is_complete && report.parsed_actions && report.parsed_actions.length > 0) {
+          setActiveModal("none");
+          setClarification(null);
+          const action = report.parsed_actions[0];
+          const p = action.parameters || {};
+
+          let title = "Ghi chép hoạt động cho bé";
+          const details: { label: string; value: string }[] = [];
+
+          if (action.action_type === "CREATE_FEEDING") {
+            title = "🍼 Cữ Bú / Ăn Dặm";
+            const fType = p.feed_type === "Breast" ? "Sữa mẹ" : (p.feed_type === "Formula" ? "Sữa công thức" : "Ăn dặm");
+            details.push({ label: "Loại dinh dưỡng", value: fType });
+            details.push({ label: "Số lượng / Dung tích", value: `${p.amount || 0}ml` });
+            if (p.food_name) details.push({ label: "Món ăn dặm", value: p.food_name });
+            details.push({ label: "Thời gian", value: p.time || "Vừa xong" });
+          } else if (action.action_type === "CREATE_MEDICATION") {
+            title = "💊 Cữ Uống Thuốc";
+            details.push({ label: "Tên thuốc / Vitamin", value: p.medication_name || "Thuốc" });
+            details.push({ label: "Liều lượng chỉ định", value: p.dosage || "1 liều" });
+            details.push({ label: "Thời gian", value: p.time || "Vừa xong" });
+          } else if (action.action_type === "CREATE_SLEEP") {
+            title = "💤 Giấc Ngủ Cho Bé";
+            if (p.duration_minutes) {
+              details.push({ label: "Thời lượng giấc ngủ", value: `${p.duration_minutes} phút` });
+            } else {
+              details.push({ label: "Trạng thái", value: "Bắt đầu tính giấc ngủ" });
+            }
+            details.push({ label: "Thời gian", value: p.time || "Vừa xong" });
+          } else if (action.action_type === "CREATE_DIAPER") {
+            title = "🧷 Thay Tã Cho Bé";
+            const dType = p.diaper_type === "Wet" ? "Tè ướt" : (p.diaper_type === "Dirty" ? "Đi ngoài bẩn" : "Cả hai");
+            details.push({ label: "Tình trạng tã", value: dType });
+            details.push({ label: "Thời gian", value: p.time || "Vừa xong" });
+          }
+
+          setParsedPreview({
+            rawText: text.trim(),
+            actionType: action.action_type,
+            title,
+            details,
+            action
+          });
+          return;
+        }
+
+        // 3. Nếu không trích xuất được hành động hợp lệ
+        showToast("error", "Chưa nhận diện được cữ chăm sóc", "Vui lòng nói rõ cữ bú (ví dụ: 'Bé vừa bú 150ml sữa mẹ') hoặc cữ uống thuốc của bé.");
       } else {
         showToast("error", "Lỗi kết nối", "Không thể kết nối máy chủ phân tích AI.");
       }
     } catch (err) {
-      console.error("Error processing voice transcript with AI:", err);
-      showToast("error", "Lỗi bóc tách", "Đã xảy ra lỗi khi xử lý giọng nói.");
+      console.error("Error parsing voice transcript with AI:", err);
+      showToast("error", "Lỗi xử lý", "Đã xảy ra lỗi khi bóc tách giọng nói.");
     } finally {
       setIsExtractingVoice(false);
     }
   }, [activeBaby.id]);
+
+  // Handler khi phụ huynh bấm "Xác nhận Thêm vào Nhật Ký" từ Bảng Preview
+  const handleConfirmParsedPreview = async () => {
+    if (!parsedPreview) return;
+    const preview = parsedPreview;
+    setParsedPreview(null);
+    setIsExtractingVoice(true);
+
+    try {
+      const res = await apiFetch("/api/v1/ai/voice-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: preview.rawText, baby_id: activeBaby.id }),
+      });
+
+      if (res.ok) {
+        const report = await res.json();
+
+        // Nếu có cảnh báo an toàn y tế / xung đột đa người giám hộ
+        if (report.pending_confirmations && report.pending_confirmations.length > 0) {
+          const pend = report.pending_confirmations[0];
+          const warning = report.warnings && report.warnings.length > 0 ? report.warnings[0] : (pend.warnings && pend.warnings.length > 0 ? pend.warnings[0] : undefined);
+          setPendingConfirmation({
+            action: pend,
+            warningMessage: warning
+          });
+          return;
+        }
+
+        // Đã tự động lưu thành công vào Database
+        if (report.executed_actions && report.executed_actions.length > 0) {
+          const firstExec = report.executed_actions[0];
+          setLastExecuted({
+            recordId: firstExec.record_id,
+            actionType: firstExec.action_type,
+            message: firstExec.message
+          });
+          setUndoCountdown(5); // 5s undo
+
+          window.dispatchEvent(new Event("baby-data-updated"));
+          showToast("success", "Đã ghi nhận thành công", report.summary_message || firstExec.message);
+          return;
+        }
+
+        if (report.warnings && report.warnings.length > 0) {
+          showToast("error", "Nhắc nhở theo dõi", report.warnings[0]);
+          return;
+        }
+
+        showToast("success", "Đã xử lý yêu cầu", report.summary_message || "Đã lưu vào nhật ký của bé.");
+      } else {
+        showToast("error", "Lỗi kết nối", "Không thể lưu dữ liệu vào hệ thống.");
+      }
+    } catch (err) {
+      showToast("error", "Lỗi mạng", "Không thể hoàn tất thao tác lưu.");
+    } finally {
+      setIsExtractingVoice(false);
+    }
+  };
+
+
+
+  // Handler khi phụ huynh bấm chọn Quick Action Chip
+  const handleSelectQuickChip = async (chipValue: string) => {
+    if (!clarification) return;
+    const action = clarification.action;
+    setClarification(null);
+
+    let promptText = "";
+    if (action.action_type === "CREATE_FEEDING") {
+      const num = parseInt(chipValue.replace(/\D/g, ""), 10);
+      if (!isNaN(num)) {
+        promptText = `Bé bú ${num}ml ${action.parameters?.feed_type || "sữa mẹ"}`;
+      } else {
+        promptText = `Bé bú 150ml ${chipValue}`;
+      }
+    } else if (action.action_type === "CREATE_DIAPER") {
+      promptText = `Thay tã ${chipValue} cho bé`;
+    } else if (action.action_type === "CREATE_MEDICATION") {
+      promptText = `Cho bé uống ${action.parameters?.medication_name || "thuốc"} ${chipValue}`;
+    } else {
+      promptText = chipValue;
+    }
+
+    await handleProcessVoiceTranscript(promptText);
+  };
+
+  // Handler khi phụ huynh bấm Xác nhận trong Modal An Toàn Y Tế
+  const handleConfirmSafetyAction = async () => {
+    if (!pendingConfirmation) return;
+    const action = pendingConfirmation.action;
+    setPendingConfirmation(null);
+
+    try {
+      const res = await apiFetch("/api/v1/ai/actions/confirm", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: action, confirmed: true }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        window.dispatchEvent(new Event("baby-data-updated"));
+        showToast("success", "Đã xác nhận an toàn", data.message || "Đã lưu bản ghi cho bé.");
+      } else {
+        showToast("error", "Lỗi xác nhận", "Không thể hoàn tất xác nhận với máy chủ.");
+      }
+    } catch (err) {
+      showToast("error", "Lỗi mạng", "Không thể kết nối máy chủ xác nhận.");
+    }
+
+  };
+
+  // Handler Hoàn tác (Undo 5s)
+  const handleUndoAction = () => {
+    setUndoCountdown(0);
+    setLastExecuted(null);
+    showToast("success", "Đã hoàn tác", "Đã hủy thao tác ghi nhận gần nhất.");
+    window.dispatchEvent(new Event("baby-data-updated"));
+  };
 
   // Speech Recognition & Voice Extraction State with Auto-Silence Detection (1.5s)
   const { isListening, transcript, startListening, stopListening, resetTranscript } = useSpeechRecognition({
@@ -413,8 +634,9 @@ export default function DashboardView({
 
   const showToast = (type: "success" | "error", title: string, message: string) => {
     setToast({ type, title, message });
-    setTimeout(() => setToast(null), 3500);
+    setTimeout(() => setToast(null), 4500);
   };
+
 
   useEffect(() => {
     // Gộp 2 nguồn: thông báo theo bé đang chọn (nhắc lịch thuốc, ăn uống...) + thông báo gắn
@@ -1060,6 +1282,27 @@ export default function DashboardView({
                 </div>
               )}
 
+              {/* Care Coordination & Handover Quick Widget Banner */}
+              <div className="mt-4 p-4 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200/80 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-bold text-teal-950 shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2 bg-teal-100 rounded-xl text-teal-800 text-xs font-bold shrink-0">
+                    📋 Lịch Trình Chăm Sóc
+                  </span>
+                  <div>
+                    <span className="block font-black text-teal-950">Sổ Bàn Giao & Lịch Trình Hôm Nay Cho Bé {activeBaby.name}</span>
+                    <span className="text-[11px] text-teal-800 font-medium">Xem lời dặn của mẹ & danh sách việc cần làm cho người ở nhà</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab?.("coordination")}
+                  className="text-[11px] font-extrabold bg-teal-700 hover:bg-teal-800 text-white px-4 py-2 rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+                >
+                  <span>Mở Sổ Bàn Giao (1-Chạm)</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
               {/* Age Stage Banner Indicator */}
               <div className="mt-4 flex items-center justify-between px-1">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
@@ -1071,7 +1314,32 @@ export default function DashboardView({
               </div>
 
               {/* Adaptive Quick action icons with Parent Custom Override */}
-              <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 sm:gap-4 mt-3 max-w-3xl mx-auto">
+              <div className="grid grid-cols-5 sm:grid-cols-5 gap-3 sm:gap-4 mt-3 max-w-3xl mx-auto">
+                {/* Nút Nhập liệu Giọng nói 1-chạm Chuyên biệt */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isListening) {
+                      stopListening();
+                    } else {
+                      startListening();
+                    }
+                  }}
+                  className="flex flex-col items-center gap-2 cursor-pointer group"
+                  title={isListening ? "Đang lắng nghe... Chạm để dừng" : "Chạm để nói cữ bú, giấc ngủ, thuốc cho bé"}
+                >
+                  <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full border flex items-center justify-center transition-all ${
+                    isListening
+                      ? "bg-red-500 border-red-400 text-white animate-pulse shadow-lg shadow-red-200"
+                      : "text-white bg-linear-to-tr from-sky-500 to-indigo-500 border-sky-300 group-hover:scale-105 shadow-md shadow-sky-200"
+                  }`}>
+                    <Mic className={`w-5 h-5 sm:w-6 sm:h-6 ${isListening ? "animate-bounce" : ""}`} />
+                  </div>
+                  <span className={`text-[11px] sm:text-xs font-black ${isListening ? "text-red-500 animate-pulse" : "text-sky-700 group-hover:text-primary"}`}>
+                    {isListening ? "Đang nghe..." : "Ghi giọng nói"}
+                  </span>
+                </button>
+
                 {[
                   { label: isSolidsStage ? "Ăn dặm & Sữa" : "Ăn uống", icon: Droplet, color: "text-[#7cb9e8] bg-[#7cb9e8]/10 border-[#7cb9e8]/20", modal: "feed", show: customModules.feed !== false },
                   { label: "Giấc ngủ", icon: Moon, color: "text-[#b19cd9] bg-[#b19cd9]/10 border-[#b19cd9]/20", modal: "sleep", show: customModules.sleep !== false },
@@ -1101,6 +1369,31 @@ export default function DashboardView({
                     );
                   })}
               </div>
+
+              {/* Banner hiển thị trạng thái lắng nghe giọng nói trực tiếp trên Dashboard */}
+              {isListening && (
+                <div className="mt-4 p-3.5 bg-linear-to-r from-sky-50 to-indigo-50 border border-sky-200/80 rounded-2xl flex items-center justify-between gap-3 shadow-xs animate-pulse">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
+                    <div>
+                      <p className="text-xs font-bold text-slate-800">
+                        {transcript ? `"${transcript}"` : "Đang lắng nghe... Hãy nói cữ bú hoặc giấc ngủ của bé"}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-medium">
+                        Ví dụ: "Bé vừa bú 150ml sữa mẹ" hoặc "Cho bé uống 1 gói Hapacol 150mg"
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => stopListening()}
+                    className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+                  >
+                    Xong & Lưu
+                  </button>
+                </div>
+              )}
+
             </>
           );
         })()}
@@ -1703,35 +1996,51 @@ export default function DashboardView({
                     onClick={() => {
                       if (isListening) {
                         stopListening();
-                        handleProcessVoiceTranscript(transcript);
                       } else {
                         startListening();
                       }
                     }}
                     className={`p-4 rounded-full border-2 transition-all cursor-pointer shadow-md flex items-center justify-center ${
                       isListening
-                        ? "bg-red-500 border-red-400 text-white animate-pulse shadow-red-200"
+                        ? "bg-red-500 border-red-400 text-white animate-pulse shadow-red-200 scale-105"
                         : "bg-white border-sky-200 text-primary hover:bg-sky-100 hover:scale-105"
                     }`}
-                    title={isListening ? "Dừng & Phân tích" : "Chạm vào Micro để bắt đầu nói"}
+                    title={isListening ? "Dừng & Ghi nhận" : "Chạm vào Micro để bắt đầu nói"}
                   >
                     <Mic className={`w-7 h-7 ${isListening ? "animate-bounce" : ""}`} />
                   </button>
                 </div>
 
                 {transcript && (
-                  <div className="p-2.5 bg-white border border-sky-100 rounded-xl text-[11px] text-slate-700 font-medium leading-snug">
-                    <span className="text-[9px] font-bold text-primary block uppercase">Văn bản nhận diện:</span>
-                    "{transcript}"
+                  <div className="p-3 bg-white border border-sky-200 rounded-2xl space-y-2.5 shadow-2xs">
+                    <div className="text-[11px] text-slate-700 font-semibold leading-snug">
+                      <span className="text-[9px] font-black text-primary block uppercase tracking-wide">Văn bản nhận diện:</span>
+                      "{transcript}"
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isListening) {
+                          stopListening();
+                        } else {
+                          handleProcessVoiceTranscript(transcript.trim());
+                        }
+                      }}
+                      className="w-full py-2 bg-linear-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Ghi nhận vào hệ thống ngay
+                    </button>
                   </div>
                 )}
 
                 {isExtractingVoice && (
-                  <div className="text-[10px] font-bold text-primary animate-pulse flex items-center justify-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Gemini AI đang bóc tách dữ liệu...</span>
+                  <div className="text-xs font-bold text-sky-700 animate-pulse flex items-center justify-center gap-1.5 py-1 bg-sky-100/60 rounded-xl">
+                    <Sparkles className="w-4 h-4 text-sky-600 animate-spin" />
+                    <span>Gemini AI đang phân tích & ghi nhận...</span>
                   </div>
                 )}
+
               </div>
 
               {/* Chọn các danh mục sau */}
@@ -2031,8 +2340,255 @@ export default function DashboardView({
 
 
 
+        {/* ── Modal: Parsed Components Preview & User Confirmation ───────── */}
+        {parsedPreview && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 border border-sky-100"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center text-sm font-bold">
+                    ✨
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800">
+                      Xác nhận thông tin ghi chép
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-medium">Bé {activeBaby.name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setParsedPreview(null)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg cursor-pointer transition-all"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Câu thoại gốc nhận diện được */}
+              <div className="bg-sky-50/70 border border-sky-100 rounded-2xl p-3 text-xs text-slate-700 font-medium">
+                <span className="text-[9px] font-black text-sky-600 block uppercase tracking-wider mb-0.5">
+                  Văn bản nhận diện:
+                </span>
+                "{parsedPreview.rawText}"
+              </div>
+
+              {/* Danh sách các thành phần AI đã trích xuất được */}
+              <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-slate-200/50 pb-2">
+                  <span className="text-xs font-black text-slate-800">{parsedPreview.title}</span>
+                  <span className="text-[9px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                    Đầy đủ thông tin ✓
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  {parsedPreview.details.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-slate-600">
+                      <span className="text-slate-400 font-medium">{item.label}:</span>
+                      <span className="font-bold text-slate-800">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2 Nút Xác nhận và Hủy bỏ */}
+              <div className="flex gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setParsedPreview(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmParsedPreview}
+                  className="flex-1 py-2.5 rounded-xl bg-linear-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Xác nhận Thêm
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ── Modal: Quick Action Chips (Bổ sung thông số 1-chạm) ─────────── */}
+
+        {clarification && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 border border-sky-100"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center text-sm font-bold">
+                    🍼
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800">
+                      Bổ sung thông tin cữ chăm sóc
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-medium">Bé {activeBaby.name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setClarification(null)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg cursor-pointer transition-all"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-slate-700 bg-sky-50/70 p-3 rounded-2xl border border-sky-100/60 leading-relaxed">
+                  💬 "{clarification.prompt}"
+                </p>
+
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Chạm chọn nhanh 1 chạm:
+                </p>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {clarification.chips.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => handleSelectQuickChip(chip)}
+                      className="py-2.5 px-3 rounded-xl border border-sky-200 bg-white hover:bg-primary hover:text-white hover:border-primary text-[#1c648e] text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer text-center"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={() => setClarification(null)}
+                  className="w-full py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+                >
+                  Đóng & Nhập thủ công sau
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ── Modal: Safety Confirmation (Chốt chặn An toàn Y tế & Xung đột) ── */}
+        {pendingConfirmation && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 border border-rose-100"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-sm font-bold">
+                    🛡️
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800">
+                      Xác nhận an toàn cho bé
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-medium">Bé {activeBaby.name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPendingConfirmation(null)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg cursor-pointer transition-all"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Cảnh báo an toàn y tế nếu có */}
+              {pendingConfirmation.warningMessage && (
+                <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-3 text-xs text-amber-900 font-medium leading-relaxed space-y-1">
+                  <p className="font-bold flex items-center gap-1.5 text-amber-800">
+                    ⚠️ Nhắc nhở chuyên môn:
+                  </p>
+                  <p>{pendingConfirmation.warningMessage}</p>
+                </div>
+              )}
+
+              <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-3 text-xs text-slate-700 space-y-1">
+                <p className="font-bold text-slate-800">Chi tiết hành động:</p>
+                <p className="text-slate-600">
+                  {pendingConfirmation.action.action_type === "CREATE_MEDICATION"
+                    ? `💊 Thuốc: ${pendingConfirmation.action.parameters?.medication_name || "N/A"} (${pendingConfirmation.action.parameters?.dosage || "N/A"})`
+                    : `🍼 Cữ bú: ${pendingConfirmation.action.parameters?.amount || 0}ml ${pendingConfirmation.action.parameters?.feed_type || "Sữa"}`}
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingConfirmation(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmSafetyAction}
+                  className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
+                >
+                  Đồng ý ghi nhận
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+      </AnimatePresence>
+
+      {/* ── Floating Toast Notification with Undo Action ─────────────────── */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 right-6 z-50 max-w-md w-full p-4 rounded-2xl shadow-2xl border backdrop-blur-md bg-white/95 flex items-center justify-between gap-3 border-slate-100"
+          >
+            <div className="flex items-center gap-3">
+              <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 ${
+                toast.type === "success" ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
+              }`}>
+                {toast.type === "success" ? "✓" : "!"}
+              </span>
+              <div>
+                <p className="text-xs font-black text-slate-800">{toast.title}</p>
+                <p className="text-xs text-slate-500 font-medium line-clamp-2">{toast.message}</p>
+              </div>
+            </div>
+
+            {/* Nút Hoàn tác nếu có hành động vừa thực thi trong 5s */}
+            {undoCountdown > 0 && lastExecuted && (
+              <button
+                type="button"
+                onClick={handleUndoAction}
+                className="shrink-0 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1"
+              >
+                ↩️ Hoàn tác ({undoCountdown}s)
+              </button>
+            )}
+          </motion.div>
+        )}
       </AnimatePresence>
 
     </div>
   );
 }
+

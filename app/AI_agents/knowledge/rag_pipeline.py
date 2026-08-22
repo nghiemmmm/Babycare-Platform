@@ -5,8 +5,14 @@ from app.AI_agents.knowledge.text_splitter import TextSplitter
 from langchain_community.vectorstores import FAISS
 from app.AI_agents.memory.embeddings import get_embeddings
 from app.AI_agents.knowledge.sparse_retriever import SparseBM25Retriever
-from app.AI_agents.knowledge.reranker import LocalReranker
-from app.AI_agents.core.constant import HYBRID_RETRIEVE_CANDIDATES
+from app.AI_agents.core.constant import (
+    HYBRID_RETRIEVE_CANDIDATES,
+    RAG_ENABLE_MMR,
+    RAG_MMR_LAMBDA,
+    RAG_MMR_FETCH_K_MULTIPLIER
+)
+from langsmith import traceable
+
 
 # BM25 candidates và FAISS candidates trước khi rerank
 _DENSE_CANDIDATES = HYBRID_RETRIEVE_CANDIDATES   # = 10 (từ constant.py)
@@ -79,13 +85,18 @@ class RAGPipeline:
         if self.vector_store is None:
             docs = self.loader.load()
             chunks = self.splitter.split_documents(docs)
-            if chunks:
-                self.vector_store = FAISS.from_documents(chunks, self.embeddings)
+            
+            # Nạp thêm các chunks đã được Airflow xử lý và lưu trong SQLite
+            sqlite_chunks = self.load_from_sqlite_chunks()
+            all_initial_chunks = chunks + sqlite_chunks
+
+            if all_initial_chunks:
+                self.vector_store = FAISS.from_documents(all_initial_chunks, self.embeddings)
                 try:
                     self.vector_store.save_local(index_dir)
                 except Exception as e:
                     print(f"Lỗi khi lưu FAISS index cục bộ: {e}")
-                self._all_chunks = chunks
+                self._all_chunks = all_initial_chunks
             else:
                 from langchain_core.documents import Document as Doc
                 dummy = Doc(page_content="dummy", metadata={"source": "dummy"})
@@ -101,6 +112,18 @@ class RAGPipeline:
         except Exception as e:
             print(f"[RAGPipeline] Reranker failed to load (non-fatal, fallback to RRF only): {e}")
             self._reranker = None
+
+    def load_from_sqlite_chunks(self) -> List[Document]:
+        """
+        Đọc trực tiếp các chunks đã xử lý hoàn tất (COMPLETED) từ cơ sở dữ liệu SQLite của Airflow.
+        Bảo toàn metadata (source, page, chunk_index, content_hash) phục vụ trích dẫn chính xác.
+        """
+        try:
+            from airflow.shared.indexing.vector_indexer import load_chunks_as_documents
+            return load_chunks_as_documents()
+        except Exception as e:
+            print(f"[RAGPipeline] Không thể đọc SQLite chunks từ Airflow (bỏ qua): {e}")
+            return []
 
     def retrieve(self, query: str, k: int = 3, domain: Optional[str] = None) -> List[Document]:
         """
@@ -123,9 +146,22 @@ class RAGPipeline:
 
         def _do_dense():
             try:
+                total_vectors = getattr(self.vector_store.index, "ntotal", 100) if hasattr(self.vector_store, "index") else 100
+                fetch_limit = min(total_vectors, _DENSE_CANDIDATES * RAG_MMR_FETCH_K_MULTIPLIER)
+                if RAG_ENABLE_MMR and hasattr(self.vector_store, "max_marginal_relevance_search"):
+                    try:
+                        return self.vector_store.max_marginal_relevance_search(
+                            query,
+                            k=_DENSE_CANDIDATES,
+                            fetch_k=fetch_limit,
+                            lambda_mult=RAG_MMR_LAMBDA,
+                            filter=filter_dict
+                        )
+                    except Exception as mmr_err:
+                        pass
+                
+                # Fallback to similarity_search
                 if filter_dict:
-                    total_vectors = self.vector_store.index.ntotal
-                    fetch_limit = min(total_vectors, _DENSE_CANDIDATES * 10)
                     return self.vector_store.similarity_search(
                         query, k=_DENSE_CANDIDATES,
                         filter=filter_dict, fetch_k=fetch_limit
@@ -144,13 +180,11 @@ class RAGPipeline:
             except Exception:
                 return []
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            fut_dense = executor.submit(_do_dense)
-            fut_sparse = executor.submit(_do_sparse)
-            dense_docs = fut_dense.result()
-            sparse_docs = fut_sparse.result()
+        dense_docs = _do_dense()
+        sparse_docs = _do_sparse()
 
         # ── 3. Reciprocal Rank Fusion ─────────────────────────────────────────
+
         merged_docs = _reciprocal_rank_fusion(dense_docs, sparse_docs)
 
         if not merged_docs:
@@ -166,11 +200,13 @@ class RAGPipeline:
         # Fallback: RRF top-k (nếu reranker lỗi hoặc merged_docs <= k)
         return merged_docs[:k]
 
+    @traceable(name="RAGPipeline.retrieve_with_plan")
     def retrieve_with_plan(self, plan: any, k: int = 3) -> List[Document]:
+
         """
         Hybrid Retrieval bằng SearchPlan đã được bóc tách từ QueryAnalyzer:
         - BM25 dùng keywords cốt lõi
-        - FAISS Dense dùng dense_query đã được chuẩn hóa ngữ nghĩa
+        - FAISS Dense dùng dense_query đã được chuẩn hóa ngữ nghĩa (kèm MMR đa dạng hóa)
         - Metadata filter dùng plan.filters
         """
         if not self.vector_store:
@@ -180,12 +216,24 @@ class RAGPipeline:
         dense_query = getattr(plan, "dense_query", "") or keywords_str
         filters = getattr(plan, "filters", {}) or None
 
-        from concurrent.futures import ThreadPoolExecutor
-
         def _do_dense_plan():
             try:
+                total_vectors = getattr(self.vector_store.index, "ntotal", 100) if hasattr(self.vector_store, "index") else 100
+                fetch_limit = min(total_vectors, _DENSE_CANDIDATES * RAG_MMR_FETCH_K_MULTIPLIER)
+                if RAG_ENABLE_MMR and hasattr(self.vector_store, "max_marginal_relevance_search"):
+                    try:
+                        return self.vector_store.max_marginal_relevance_search(
+                            dense_query,
+                            k=_DENSE_CANDIDATES,
+                            fetch_k=fetch_limit,
+                            lambda_mult=RAG_MMR_LAMBDA,
+                            filter=filters
+                        )
+                    except Exception:
+                        pass
+
+                # Fallback to similarity_search
                 if filters:
-                    total_vectors = self.vector_store.index.ntotal
                     return self.vector_store.similarity_search(
                         dense_query, k=_DENSE_CANDIDATES,
                         filter=filters, fetch_k=total_vectors
@@ -203,16 +251,14 @@ class RAGPipeline:
             except Exception:
                 return []
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            fut_dense = executor.submit(_do_dense_plan)
-            fut_sparse = executor.submit(_do_sparse_plan)
-            dense_docs = fut_dense.result()
-            sparse_docs = fut_sparse.result()
+        dense_docs = _do_dense_plan()
+        sparse_docs = _do_sparse_plan()
 
         # 3. RRF Fusion
         merged_docs = _reciprocal_rank_fusion(dense_docs, sparse_docs)
         if not merged_docs:
             return []
+
 
         # 4. Rerank
         if self._reranker and len(merged_docs) > k:
@@ -223,78 +269,7 @@ class RAGPipeline:
 
         return merged_docs[:k]
 
-def compact_and_budget_context(docs: List[Document], plan: any = None, max_tokens: int = 800) -> str:
-    """
-    Nén ngữ cảnh & Quản lý ngân sách Token áp dụng 4 bước nâng cao:
-    1. Remove Duplicates: Khử trùng lặp giữa các chunk
-    2. Rerank: Duy trì thứ tự ưu tiên điểm số Rerank
-    3. Merge Related Chunks: Gộp các chunk thuộc cùng một nguồn tài liệu
-    4. Preserve Metadata: Giữ nguyên metadata nguồn, trang, chapter
-    """
-    if not docs:
-        return "Không tìm thấy tài liệu y tế phù hợp."
-
-    # 1. Remove Duplicates (Khử trùng lặp dựa trên nội dung)
-    seen_hashes = set()
-    unique_docs = []
-    for doc in docs:
-        content_snippet = doc.page_content.strip()[:150].lower()
-        if content_snippet not in seen_hashes:
-            seen_hashes.add(content_snippet)
-            unique_docs.append(doc)
-
-    # 2 & 3. Merge Related Chunks (Gộp các chunk cùng nguồn tài liệu & bảo tồn thứ tự Rerank)
-    grouped_docs: dict[str, dict] = {}
-    for doc in unique_docs:
-        source = doc.metadata.get("source", "Tài liệu Y tế")
-        page = doc.metadata.get("page")
-        chapter = doc.metadata.get("chapter")
-        
-        # Key đại diện nguồn
-        key = source
-        if key not in grouped_docs:
-            grouped_docs[key] = {
-                "source": source,
-                "pages": set(),
-                "chapters": set(),
-                "contents": []
-            }
-        
-        if page:
-            grouped_docs[key]["pages"].add(str(page))
-        if chapter:
-            grouped_docs[key]["chapters"].add(str(chapter))
-            
-        lines = [line.strip() for line in doc.page_content.strip().split("\n") if line.strip()]
-        grouped_docs[key]["contents"].append("\n".join(lines))
-
-    # 4. Preserve Metadata & Token Budget Guard
-    max_chars = max_tokens * 4
-    context_parts = []
-    current_length = 0
-
-    for i, (source_key, data) in enumerate(grouped_docs.items(), 1):
-        # Build Metadata Tag
-        meta_info = f"Nguồn: {data['source']}"
-        if data["pages"]:
-            meta_info += f" | Trang: {', '.join(sorted(data['pages']))}"
-        if data["chapters"]:
-            meta_info += f" | Mục: {', '.join(sorted(data['chapters']))}"
-
-        merged_text = "\n---\n".join(data["contents"])
-        part = f"--- Tài liệu {i} ({meta_info}) ---\n{merged_text}"
-        part_len = len(part)
-
-        if current_length + part_len > max_chars:
-            remaining_chars = max_chars - current_length
-            if remaining_chars > 100:
-                context_parts.append(part[:remaining_chars] + "\n...[Cắt bớt do giới hạn Token Budget]")
-            break
-
-        context_parts.append(part)
-        current_length += part_len
-
-    return "\n\n".join(context_parts)
+from app.AI_agents.knowledge.context_compressor import ContextCompressor, compact_and_budget_context
 
 
 

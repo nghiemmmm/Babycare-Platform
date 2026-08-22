@@ -6,11 +6,11 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from app.core.config import settings
 
 # Path đến model BGE-M3 đã download về local
-_BGE_M3_LOCAL_PATH = os.path.join(
-    "app", "ai", "models",
+_BGE_M3_LOCAL_PATH = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "..", "..", "ai", "models",
     "models--BAAI--bge-m3", "snapshots",
     "5617a9f61b028005a4858fdac845db406aefb181"
-)
+))
 
 # Singleton — chỉ load 1 lần vào RAM
 _bge_model = None
@@ -20,12 +20,20 @@ def _get_bge_model():
     """Lazy-load BGE-M3 model singleton. Thread-safe đủ dùng với uvicorn single-worker."""
     global _bge_model
     if _bge_model is None:
+        try:
+            import torch
+            torch.set_num_threads(1)
+        except Exception:
+            pass
         from sentence_transformers import SentenceTransformer
         _bge_model = SentenceTransformer(
             _BGE_M3_LOCAL_PATH,
             device="cpu",
+            local_files_only=True
         )
     return _bge_model
+
+
 
 
 class LocalBGEM3Embeddings(Embeddings):
@@ -38,23 +46,28 @@ class LocalBGEM3Embeddings(Embeddings):
     """
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        import torch
         model = _get_bge_model()
-        vectors = model.encode(
-            texts,
-            normalize_embeddings=True,   # cosine similarity = dot product sau khi normalize
-            show_progress_bar=False,
-            batch_size=32,
-        )
+        with torch.inference_mode():
+            vectors = model.encode(
+                texts,
+                normalize_embeddings=True,   # cosine similarity = dot product sau khi normalize
+                show_progress_bar=False,
+                batch_size=32,
+            )
         return vectors.tolist()
 
     def embed_query(self, text: str) -> List[float]:
+        import torch
         model = _get_bge_model()
-        vector = model.encode(
-            text,
-            normalize_embeddings=True,
-            show_progress_bar=False,
-        )
+        with torch.inference_mode():
+            vector = model.encode(
+                text,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            )
         return vector.tolist()
+
 
 
 class FakeEmbeddings(Embeddings):

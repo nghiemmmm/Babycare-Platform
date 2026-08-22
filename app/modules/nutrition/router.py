@@ -79,6 +79,9 @@ from app.modules.nutrition.schemas import (
 from fastapi import APIRouter
 feeds_router = APIRouter(prefix="/nutrition", tags=["Nutrition & Solid Food AI"])
 
+from app.modules.nutrition.feed_service import FeedService
+feed_service = FeedService()
+
 @feeds_router.get("/feeds", response_model=List[FeedResponse])
 async def get_nutrition_feeds(
     baby_id: str,
@@ -88,30 +91,7 @@ async def get_nutrition_feeds(
     """
     Lấy lịch sử bú sữa và ăn dặm của bé.
     """
-    # Kiểm tra quyền giám hộ
-    solid_food_service.baby_service.get_baby_by_id(baby_id, current_user.uid)
-    
-    db = get_firestore_db()
-    query = db.collection("nutrition_feeds").where("baby_id", "==", baby_id)
-    if date and date != "Today":
-        query = query.where("date", "==", date)
-        
-    docs = query.limit(50).stream()
-    results = []
-    for doc in docs:
-        d = doc.to_dict()
-        results.append(FeedResponse(
-            id=doc.id,
-            type=d.get("type", ""),
-            details=d.get("details", ""),
-            amount=d.get("amount", 0.0),
-            time=d.get("time", ""),
-            date=d.get("date", "")
-        ))
-    
-    # Sắp xếp theo time (đơn giản hoá thành chuỗi thời gian) hoặc theo ngày tạo
-    # Trong thực tế, có thể sắp xếp theo time.
-    return results
+    return feed_service.get_feed_history(baby_id, current_user.uid, date=date)
 
 @feeds_router.post("/feeds", response_model=FeedCreateResponse)
 async def add_nutrition_feed(
@@ -121,44 +101,26 @@ async def add_nutrition_feed(
     """
     Ghi nhận lịch sử bú sữa/ăn dặm mới.
     """
-    solid_food_service.baby_service.get_baby_by_id(feed_in.baby_id, current_user.uid)
-    require_role(feed_in.baby_id, current_user.uid, ADMIN, GUARDIAN)
-
-    db = get_firestore_db()
-    feed_id = f"feed_{uuid.uuid4().hex[:8]}"
-    doc_ref = db.collection("nutrition_feeds").document(feed_id)
-    doc_ref.set({
-        "baby_id": feed_in.baby_id,
-        "type": feed_in.type,
-        "details": feed_in.details,
-        "amount": feed_in.amount,
-        "time": feed_in.time,
-        "date": datetime.now(timezone.utc).date().isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    })
-    
-    return FeedCreateResponse(success=True, feed_id=feed_id)
+    return feed_service.add_feed_log(feed_in.baby_id, feed_in, current_user.uid)
 
 @feeds_router.delete("/feeds/{feed_id}", response_model=SuccessResponse)
 async def delete_nutrition_feed(
     feed_id: str,
+    baby_id: Optional[str] = None,
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
     Xóa một bản ghi nhật ký ăn uống.
     """
-    db = get_firestore_db()
-    doc_ref = db.collection("nutrition_feeds").document(feed_id)
-    doc = doc_ref.get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Feed log not found")
-    
-    # Verify permission
-    feed_data = doc.to_dict()
-    solid_food_service.baby_service.get_baby_by_id(feed_data.get("baby_id"), current_user.uid)
-    require_role(feed_data.get("baby_id"), current_user.uid, ADMIN, GUARDIAN)
+    # Lấy baby_id từ query param hoặc tìm kiếm từ feed
+    if not baby_id:
+        db = get_firestore_db()
+        doc = db.collection("nutrition_feeds").document(feed_id).get()
+        if not doc.exists:
+            raise HTTPException(status_code=404, detail="Feed log not found")
+        baby_id = doc.to_dict().get("baby_id")
 
-    doc_ref.delete()
+    feed_service.delete_feed_log(baby_id, feed_id, current_user.uid)
     return SuccessResponse(success=True, message="Feed log deleted successfully")
 
 @feeds_router.get("/ingredients", response_model=List[IngredientResponse])

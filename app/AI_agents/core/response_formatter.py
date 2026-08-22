@@ -16,10 +16,7 @@ from app.shared.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
-GROUNDING_DISCLAIMER = (
-    "\n\n*(Lưu ý: Chưa tìm thấy tài liệu y tế trực tiếp trong cơ sở dữ liệu cho câu hỏi này. "
-    "Thông tin dựa trên nguyên tắc nhi khoa chung, xin hãy tham khảo ý kiến bác sĩ chuyên khoa.)*"
-)
+from app.AI_agents.llmops.guardrails.grounding_guard import GroundingGuard, GROUNDING_DISCLAIMER
 
 
 class ResponseFormatter:
@@ -27,7 +24,7 @@ class ResponseFormatter:
     Response Formatter cho BabyCare AI:
     - Unified Response: Chuẩn hóa output từ Deterministic (Tier 0) và RAG (Tier 1/2).
     - Citation: Bóc tách, giữ nguyên và deduplicate các nguồn từ RAG evidence thật, loại bỏ citation giả.
-    - Grounding Guard: Đảm bảo câu trả lời được hỗ trợ bởi evidence; nếu thiếu evidence thì gắn disclaimer chống hallucination.
+    - Grounding Guard: Đảm bảo câu trả lời được hỗ trợ bởi evidence qua GroundingGuard.
     - Cache Policy: Cache các response tra cứu y tế chung, KHÔNG cache dữ liệu cá nhân/health của từng bé.
     - Streaming (SSE): Hỗ trợ sinh luồng Server-Sent Events cho LLM response.
     """
@@ -160,36 +157,44 @@ class ResponseFormatter:
         )
 
     @staticmethod
-    def is_cacheable_query(query: str) -> bool:
+    def is_cacheable_query(query: str, baby_id: Optional[str] = None, is_emergency: bool = False) -> bool:
         """
-        Cache Policy:
-        - KHÔNG cache nếu query liên quan đến nhật ký cá nhân hoặc ghi số liệu cụ thể.
-        - CHỈ cache các câu hỏi tra cứu y tế / mốc phát triển / dinh dưỡng chung.
+        Kiểm tra câu hỏi có hợp lệ để áp dụng Response Cache hay không qua AgentResponseCacheManager.
         """
-        personal_keywords = ["con tôi", "bé nhà tôi", "vừa bú", "vừa uống", "vừa đo", "nhật ký bú", "cân nặng hôm nay", "mấy giờ bú"]
-        query_lower = query.strip().lower()
-        if any(k in query_lower for k in personal_keywords):
-            return False
-
-        return len(query_lower) >= 5
+        from app.AI_agents.llmops.caching.response_cache import AgentResponseCacheManager
+        cacheable, _ = AgentResponseCacheManager.is_cacheable(query, baby_id=baby_id, is_emergency=is_emergency)
+        return cacheable
 
     @classmethod
-    async def get_cached_response(cls, query: str) -> Optional[Dict[str, Any]]:
-        """Lấy response từ Redis cache nếu query đủ điều kiện cache."""
-        if not cls.is_cacheable_query(query):
-            return None
-
-        cache_key = f"response_cache:{hashlib.md5(query.strip().lower().encode()).hexdigest()}"
-        return await run_in_threadpool(cache_redis.get_json, cache_key)
+    async def get_cached_response(
+        cls,
+        query: str,
+        baby_age_months: Optional[int] = None,
+        domain: str = "medical_qa"
+    ) -> Optional[Dict[str, Any]]:
+        """Lấy response từ Response Cache (L1 Memory -> L2 Redis Cloud)."""
+        from app.AI_agents.llmops.caching.response_cache import AgentResponseCacheManager
+        return await AgentResponseCacheManager.get_cached_response(query, baby_age_months=baby_age_months, domain=domain)
 
     @classmethod
-    async def set_cached_response(cls, query: str, response_dict: Dict[str, Any], ttl_seconds: int = 1800) -> None:
-        """Lưu response vào Redis cache với TTL 30 phút cho query chung."""
-        if not cls.is_cacheable_query(query):
-            return
+    async def set_cached_response(
+        cls,
+        query: str,
+        response_dict: Dict[str, Any],
+        baby_age_months: Optional[int] = None,
+        domain: str = "medical_qa",
+        ttl_seconds: int = 3600
+    ) -> None:
+        """Lưu response vào Response Cache (đồng bộ cả L1 Memory và L2 Redis Cloud)."""
+        from app.AI_agents.llmops.caching.response_cache import AgentResponseCacheManager
+        await AgentResponseCacheManager.set_cached_response(
+            query=query,
+            response_data=response_dict,
+            baby_age_months=baby_age_months,
+            domain=domain,
+            ttl_seconds=ttl_seconds
+        )
 
-        cache_key = f"response_cache:{hashlib.md5(query.strip().lower().encode()).hexdigest()}"
-        await run_in_threadpool(cache_redis.set_json, cache_key, response_dict, ttl_seconds)
 
     @staticmethod
     def format_sse_event(event_type: str, payload: Any, seq: int = 0) -> str:
@@ -198,16 +203,19 @@ class ResponseFormatter:
         return f"event: {event_type}\nid: {seq}\ndata: {data_str}\n\n"
 
     @staticmethod
-    async def create_sse_stream(content: str, chunk_size: int = 5, start_seq: int = 1) -> AsyncGenerator[str, None]:
+    async def create_sse_stream(content: str, chunk_size: int = 3, start_seq: int = 1) -> AsyncGenerator[str, None]:
         """
-        Sinh luồng Server-Sent Events (SSE) từng chunk chữ cho client.
+        Sinh luồng Server-Sent Events (SSE) từng chunk chữ cho client với hiệu ứng gõ máy tính mượt mà.
         """
+        import asyncio
         words = content.split(" ")
         seq = start_seq
         for i in range(0, len(words), chunk_size):
             chunk_text = " ".join(words[i:i + chunk_size]) + " "
             yield ResponseFormatter.format_sse_event("response.token", {"delta": chunk_text}, seq=seq)
             seq += 1
-        
+            await asyncio.sleep(0.015)
+
         yield ResponseFormatter.format_sse_event("response.completed", {"content": content, "status": "completed"}, seq=seq)
+
 

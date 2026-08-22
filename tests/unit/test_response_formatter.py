@@ -61,6 +61,6 @@ def test_sse_streaming():
 
         assert len(chunks) > 0
         assert "data:" in chunks[0]
-        assert "done" in chunks[-1]
+        assert "completed" in chunks[-1]
 
     asyncio.run(run_stream_test())

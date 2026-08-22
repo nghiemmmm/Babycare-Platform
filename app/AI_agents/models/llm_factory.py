@@ -20,17 +20,8 @@ class LLMFactory:
         """
         cache_key = (model_name, temperature)
         if cache_key not in cls._cache:
-            callbacks = []
-            if os.getenv("LANGCHAIN_TRACING_V2") == "true":
-                try:
-                    from langchain_core.tracers import LangChainTracer
-                    tracer = LangChainTracer(
-                        project_name=os.getenv("LANGCHAIN_PROJECT", "babycare-ai"),
-                        api_key=os.getenv("LANGCHAIN_API_KEY")
-                    )
-                    callbacks.append(tracer)
-                except Exception as e:
-                    logger.warning(f"[LLMFactory] Could not attach LangChainTracer: {e}")
+            from app.AI_agents.llmops.observability.tracing import get_tracer_callbacks
+            callbacks = get_tracer_callbacks()
 
             target_model = model_name if model_name.startswith("gemini") else "gemini-3.5-flash"
             cls._cache[cache_key] = ChatGoogleGenerativeAI(

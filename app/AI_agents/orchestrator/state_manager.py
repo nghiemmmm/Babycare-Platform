@@ -25,6 +25,10 @@ class OverallState(TypedDict):
     web_search_results: Optional[list[dict]]   # Raw results from WebSearchTool
     is_out_of_scope: Optional[bool]            # Flag set when intent = "out_of_scope"
     tool_steps: Annotated[list[dict], operator.add]
+    conversation_summary: Optional[str]
+    rag_context: Optional[str]
+    rag_context_reused: Optional[bool]
+    context_bundle: Optional[dict]
 
 
 from typing import Any, Iterator, Tuple

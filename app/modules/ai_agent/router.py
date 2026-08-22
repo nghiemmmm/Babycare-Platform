@@ -5,7 +5,7 @@ from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.schemas import UserRecord
 from app.AI_agents.orchestrator.agent_orchestrator import AgentOrchestrator
 from app.AI_agents.core.response_formatter import ResponseFormatter
-from google.cloud.firestore import FieldFilter, Query
+from google.cloud.firestore import FieldFilter
 from app.infrastructure.database import get_firestore_db
 from app.modules.baby.service import BabyService
 from datetime import datetime, timezone, timedelta
@@ -36,7 +36,6 @@ from app.modules.ai_agent.schemas import (
     ChatRequest,
     ChatResponse,
     ThreadResponse,
-    ThreadCreateRequest,
     ThreadCreateResponse,
     MessageCreateRequest,
     Citation,
@@ -79,141 +78,82 @@ async def chat_with_agent(
 
 @ai_agent_router.get("/threads", response_model=List[ThreadResponse])
 async def list_chat_threads(
-    baby_id: str,
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
-    Lấy danh sách lịch sử các phiên chat của người dùng, lọc đúng theo bé đang chọn -
-    nếu không lọc theo baby_id, danh sách hội thoại sẽ bị lẫn giữa các bé trong cùng gia đình
-    và không đổi theo khi người dùng chuyển bé active trên UI.
+    Lấy danh sách lịch sử các phiên chat của người dùng.
     """
-    baby_service.get_baby_by_id(baby_id, current_user.uid)  # kiểm tra quyền giám hộ bé này
-
     db = get_firestore_db()
-    docs = (
-        db.collection("chat_threads")
-        .where(filter=FieldFilter("user_id", "==", current_user.uid))
-        .where(filter=FieldFilter("baby_id", "==", baby_id))
-        .stream()
-    )
-
+    docs = db.collection("chat_threads").where(filter=FieldFilter("user_id", "==", current_user.uid)).stream()
+    
+    now_iso = datetime.now(timezone.utc).isoformat()
     threads = []
     for doc in docs:
         d = doc.to_dict()
+        created_at = d.get("created_at") or d.get("last_updated") or now_iso
+        updated_at = d.get("updated_at") or d.get("last_updated") or now_iso
         threads.append(ThreadResponse(
+            thread_id=doc.id,
             id=doc.id,
-            title=d.get("title", "New Chat Session"),
-            last_updated=d.get("last_updated", ""),
+            title=d.get("title", "Cuộc trò chuyện mới"),
+            created_at=created_at,
+            updated_at=updated_at,
+            last_updated=updated_at,
             baby_id=d.get("baby_id")
         ))
 
-    # Nhận lại các thread tạo TRƯỚC khi hệ thống hỗ trợ nhiều bé (chưa có field baby_id) về đúng
-    # bé đầu tiên của gia đình - trước đây mọi thread của user đều ngầm định thuộc về babies[0]
-    # (do backend luôn hardcode babies[0] khi trả lời chat), nên nếu không "nhận" lại, lịch sử
-    # chat có sẵn của người dùng sẽ biến mất ngay khi vừa nâng cấp lên cơ chế phân biệt theo bé.
-    # Chỉ áp dụng khi baby_id đang xét chính là bé đầu tiên - các bé khác chưa từng có lịch sử
-    # chat thật sự (AI luôn suy luận theo babies[0] trước đây) nên không có gì để nhận lại.
-    if not threads:
-        my_babies = baby_service.get_my_babies(current_user.uid)
-        if my_babies and my_babies[0].id == baby_id:
-            legacy_docs = (
-                db.collection("chat_threads")
-                .where(filter=FieldFilter("user_id", "==", current_user.uid))
-                .stream()
-            )
-            for doc in legacy_docs:
-                d = doc.to_dict()
-                if d.get("baby_id"):
-                    continue
-                db.collection("chat_threads").document(doc.id).update({"baby_id": baby_id})
-                threads.append(ThreadResponse(
-                    id=doc.id,
-                    title=d.get("title", "New Chat Session"),
-                    last_updated=d.get("last_updated", ""),
-                    baby_id=baby_id
-                ))
-
-    # Chỉ hiện các cuộc trò chuyện còn hoạt động trong vòng 1 tuần gần nhất - "hiện đầy đủ lịch sử
-    # chat trong vòng 1 tuần" nghĩa là bỏ giới hạn SỐ LƯỢNG cuộc trò chuyện cố định (trước đây cắt
-    # cứng còn 6), thay bằng giới hạn theo THỜI GIAN thực tế.
-    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-    threads = [t for t in threads if t.last_updated >= cutoff_iso]
-
+        
     # Sắp xếp cuộc trò chuyện gần nhất lên đầu
-    threads.sort(key=lambda x: x.last_updated, reverse=True)
-
-    # Nếu chưa có thread nào (kể cả sau khi thử nhận lại thread cũ), tự động tạo một thread ban
-    # đầu cho user+bé này. ID phải gắn cả user_id lẫn baby_id - trước đây dùng ID cứng
-    # "thread_default" chung cho TẤT CẢ user, nên user/bé khác cũng chưa có thread nào sẽ ghi đè
-    # lên cùng 1 document, và vì checkpoint của LangGraph lưu theo đúng thread_id đó, lịch sử chat
-    # có thể bị lẫn giữa các gia đình khác nhau.
+    threads.sort(key=lambda x: x.updated_at, reverse=True)
+    threads = threads[:50]
+    
+    # Nếu chưa có thread nào, tự động tạo một thread ban đầu cho người dùng
     if not threads:
-        thread_id = f"thread_default_{current_user.uid}_{baby_id}"
-        now = datetime.now(timezone.utc).isoformat()
+        thread_id = f"thread_{current_user.uid[:8]}_default"
         doc_ref = db.collection("chat_threads").document(thread_id)
         doc_ref.set({
             "user_id": current_user.uid,
-            "baby_id": baby_id,
-            "title": "Baby Progress Chat",
-            "last_updated": now,
-            "created_at": now
+            "title": "Tư vấn chăm sóc bé",
+            "created_at": now_iso,
+            "updated_at": now_iso
         })
         threads.append(ThreadResponse(
-            id=thread_id,
-            title="Baby Progress Chat",
-            last_updated=now,
-            baby_id=baby_id
+            thread_id=thread_id,
+            title="Tư vấn chăm sóc bé",
+            created_at=now_iso,
+            updated_at=now_iso
         ))
-
-    # Lấy trước nội dung tin nhắn cuối cùng của từng cuộc trò chuyện để hiện trong danh sách lịch
-    # sử chat - trước đây chỉ có "title" (chốt cứng từ tin nhắn ĐẦU TIÊN, không đổi về sau), nên
-    # người dùng không biết cuộc trò chuyện đang nói về nội dung gì nếu chưa bấm vào xem. Đọc từ
-    # Firestore subcollection chat_threads/{id}/messages (nguồn thật, được ghi ở create_thread_message
-    # / stream_thread_message) - kiến trúc Tier 0/1/2 mới không còn checkpointer.put() sau mỗi lượt
-    # chat nên orchestrator.get_state() luôn rỗng, dùng nó ở đây sẽ khiến preview luôn trống.
-    for t in threads:
-        try:
-            last_msg_docs = list(
-                db.collection("chat_threads")
-                .document(t.id)
-                .collection("messages")
-                .order_by("timestamp", direction=Query.DESCENDING)
-                .limit(1)
-                .get()
-            )
-            if last_msg_docs:
-                content = last_msg_docs[0].to_dict().get("content", "")
-                t.last_message_preview = content[:80] + "..." if len(content) > 80 else content
-        except Exception:
-            pass  # Không chặn cả danh sách thread nếu đọc preview của 1 thread bị lỗi
-
+        
     return threads[:50]
+
 
 @ai_agent_router.post("/threads", response_model=ThreadCreateResponse)
 async def create_chat_thread(
-    req: ThreadCreateRequest,
     current_user: UserRecord = Depends(get_current_user)
 ):
     """
-    Khởi tạo một phiên chat mới cho đúng bé đang chọn.
+    Khởi tạo một phiên chat mới.
     """
-    baby_service.get_baby_by_id(req.baby_id, current_user.uid)  # kiểm tra quyền giám hộ bé này
-
     db = get_firestore_db()
     thread_id = f"thread_{uuid.uuid4().hex[:8]}"
-    title = "New Chat Session"
-    now = datetime.now(timezone.utc).isoformat()
-
+    title = "Cuộc trò chuyện mới"
+    now_iso = datetime.now(timezone.utc).isoformat()
+    
     doc_ref = db.collection("chat_threads").document(thread_id)
     doc_ref.set({
         "user_id": current_user.uid,
-        "baby_id": req.baby_id,
         "title": title,
-        "last_updated": now,
-        "created_at": now
+        "last_updated": now_iso,
+        "created_at": now_iso
     })
+    
+    return ThreadCreateResponse(
+        thread_id=thread_id,
+        id=thread_id,
+        title=title,
+        created_at=now_iso
+    )
 
-    return ThreadCreateResponse(thread_id=thread_id, title=title)
 
 from app.infrastructure.cache import redis as cache_redis
 
@@ -226,21 +166,14 @@ async def get_thread_messages(
     """
     Lấy danh sách các tin nhắn trong phiên chat từ Redis Cache, Firestore subcollection, hoặc LangGraph Checkpointer.
     """
-    # Kiểm tra thread thuộc đúng user trước khi trả lịch sử chat - cùng lý do với
-    # delete_thread_messages: tránh lộ lịch sử chat của user/gia đình khác nếu đoán được thread_id.
-    # Phải kiểm tra TRƯỚC cả bước đọc Redis Cache, nếu không cache vẫn có thể trả lịch sử chat của
-    # người khác cho user đoán trúng thread_id.
-    db = get_firestore_db()
-    thread_doc = db.collection("chat_threads").document(thread_id).get()
-    if thread_doc.exists and thread_doc.to_dict().get("user_id") != current_user.uid:
-        raise HTTPException(status_code=403, detail="Access denied")
-
     cache_key = f"chat_messages:{thread_id}:{current_user.uid}"
-
+    
     # 1. Thử lấy từ Redis Cache (tốc độ < 10ms)
     cached_data = await run_in_threadpool(cache_redis.get_json, cache_key)
     if cached_data and isinstance(cached_data, list):
         return [ChatMessageResponse(**item) for item in cached_data]
+
+    db = get_firestore_db()
 
     # 2. Đọc từ Firestore subcollection chat_threads/{thread_id}/messages
     msg_docs = list(
@@ -261,10 +194,6 @@ async def get_thread_messages(
                 tool_steps=d.get("tool_steps", [])
             ))
         result.sort(key=lambda x: x.timestamp)
-        # Trả về TOÀN BỘ tin nhắn của đoạn chat này (trong giới hạn 100 tin gần nhất), không lọc
-        # theo thời gian - bộ lọc "7 ngày" chỉ nên áp dụng ở list_chat_threads (ẩn bớt các CUỘC TRÒ
-        # CHUYỆN không còn hoạt động khỏi sidebar), áp lại lần nữa cho nội dung BÊN TRONG một đoạn
-        # chat đã chọn sẽ làm mất tin nhắn cũ của chính đoạn chat đó nếu đã kéo dài hơn 1 tuần.
         final_messages = result[-100:]
         if final_messages:
             serializable = [m.model_dump() for m in final_messages]
@@ -277,33 +206,34 @@ async def get_thread_messages(
         orchestrator = get_orchestrator(request)
         state_dict = await orchestrator.get_state(thread_id, current_user.uid)
         messages = state_dict.get("values", {}).get("messages", [])
-    except Exception:
+    except Exception as e:
         messages = []
-
+    
     result = []
     for msg in messages:
         role = "user" if getattr(msg, "type", "") == "human" else "assistant"
         msg_id = getattr(msg, "id", None) or f"msg_{uuid.uuid4().hex[:8]}"
-
+        
         ts = getattr(msg, "response_metadata", {}).get("created_at") if hasattr(msg, "response_metadata") else None
         if not ts:
             ts = datetime.now(timezone.utc).isoformat()
-
+            
         result.append(ChatMessageResponse(
             id=msg_id,
             role=role,
             content=getattr(msg, "content", str(msg)),
             timestamp=ts
         ))
-
+        
     final_messages = result[-100:]
-
+    
     # Ghi vào Redis Cache với TTL 30 phút (1800s)
     if final_messages:
         serializable = [m.model_dump() for m in final_messages]
         await run_in_threadpool(cache_redis.set_json, cache_key, serializable, 1800)
 
     return final_messages
+
 
 @ai_agent_router.post("/threads/{thread_id}/messages", response_model=MessageCreateResponse)
 async def create_thread_message(
@@ -316,36 +246,25 @@ async def create_thread_message(
     Gửi tin nhắn vào phiên chat hiện tại và nhận phản hồi từ AI Agent cùng kết quả trích xuất nhật ký.
     Sử dụng ResponseFormatter để chuẩn hóa câu trả lời, bóc tách Citations thật và kiểm tra Grounding/Cache.
     """
+    msg_text = req.text_content
     # 1. Kiểm tra Cache Policy cho các câu hỏi tra cứu chung
-    cached_response = await ResponseFormatter.get_cached_response(req.content)
+    cached_response = await ResponseFormatter.get_cached_response(msg_text)
     if cached_response:
         return MessageCreateResponse(**cached_response)
 
-    # 2. Xác định đúng bé đang được thảo luận trong thread này - ưu tiên baby_id đã lưu sẵn trên
-    # thread (nguồn xác thực nhất vì được gán lúc tạo thread), sau đó đến req.baby_id, cuối cùng mới
-    # fallback về bé đang active của gia đình. Trước đây hardcode babies[0] nên AI luôn suy luận/ghi
-    # log theo bé đầu tiên của gia đình, bất kể người dùng đang chọn bé nào trên UI.
+    # 2. Tìm hoặc gán mặc định active baby
     db = get_firestore_db()
-    thread_ref = db.collection("chat_threads").document(thread_id)
-    thread_doc = thread_ref.get()
-    thread_data = thread_doc.to_dict() if thread_doc.exists else None
-
-    if thread_data and thread_data.get("user_id") != current_user.uid:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    baby_id = (thread_data or {}).get("baby_id") or req.baby_id
+    baby_id = req.baby_id
     if not baby_id:
         babies = baby_service.get_my_babies(current_user.uid)
         if babies:
             active_b = next((b for b in babies if b.is_active), babies[0])
             baby_id = active_b.id
-    if baby_id:
-        baby_service.get_baby_by_id(baby_id, current_user.uid)  # kiểm tra quyền giám hộ bé này
-
+        
     # 3. Gọi AgentOrchestrator chạy LangGraph
     orchestrator = get_orchestrator(request)
     result = await orchestrator.run_agent(
-        message=req.content,
+        message=msg_text,
         thread_id=thread_id,
         baby_id=baby_id,
         user_id=current_user.uid
@@ -375,7 +294,7 @@ async def create_thread_message(
     tool_steps_dicts = [m.model_dump() for m in formatted_response.tool_steps]
     msgs_col.document(user_msg_id).set({
         "role": "user",
-        "content": req.content,
+        "content": msg_text,
         "timestamp": now_iso
     })
     msgs_col.document(ai_msg_id).set({
@@ -394,19 +313,19 @@ async def create_thread_message(
     if thread_ref.get().exists:
         update_fields = {"last_updated": now_iso}
         thread_data = thread_ref.get().to_dict()
-        if thread_data.get("title") in ["New Chat Session", "Baby Progress Chat"]:
-            update_fields["title"] = req.content[:30] + "..." if len(req.content) > 30 else req.content
+        if thread_data.get("title") in ["New Chat Session", "Cuộc trò chuyện mới", "Baby Progress Chat"]:
+            update_fields["title"] = msg_text[:30] + "..." if len(msg_text) > 30 else msg_text
         thread_ref.update(update_fields)
     else:
         thread_ref.set({
             "user_id": current_user.uid,
-            "title": req.content[:30] + "..." if len(req.content) > 30 else req.content,
+            "title": msg_text[:30] + "..." if len(msg_text) > 30 else msg_text,
             "last_updated": now_iso,
             "created_at": now_iso
         })
 
     # 7. Lưu cache nếu câu hỏi là tra cứu chung (Cache Policy)
-    await ResponseFormatter.set_cached_response(req.content, formatted_response.model_dump())
+    await ResponseFormatter.set_cached_response(msg_text, formatted_response.model_dump())
     
     return formatted_response
 
@@ -438,6 +357,7 @@ async def stream_thread_message(
             baby_id = active_b.id
 
     orchestrator = get_orchestrator(request)
+    msg_text = req.text_content
 
     async def generate_sse():
         from app.shared.context import get_current_trace_id
@@ -448,11 +368,12 @@ async def stream_thread_message(
         now_iso = datetime.now(timezone.utc).isoformat()
 
         async for sse_chunk in orchestrator.stream_agent(
-            message=req.content,
+            message=msg_text,
             thread_id=thread_id,
             baby_id=baby_id,
             user_id=current_user.uid
         ):
+
             if await request.is_disconnected():
                 wasted_text = "".join(collected_tokens)
                 wasted_tokens = int(len(wasted_text.split()) * 1.3)
@@ -525,8 +446,14 @@ async def stream_thread_message(
 
     return StreamingResponse(
         generate_sse(),
-        media_type="text/event-stream"
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
     )
+
 
 
 
@@ -601,6 +528,31 @@ async def handle_sleep_timer(
             start_time=start_time_str
         )
 
+@ai_agent_router.delete("/threads/{thread_id}")
+async def delete_chat_thread(
+    thread_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Xóa vĩnh viễn một cuộc trò chuyện (thread) và toàn bộ checkpoints tin nhắn liên quan.
+    """
+    db = get_firestore_db()
+    thread_ref = db.collection("chat_threads").document(thread_id)
+    thread_doc = thread_ref.get()
+    if thread_doc.exists:
+        thread_data = thread_doc.to_dict()
+        if thread_data.get("user_id") != current_user.uid:
+            raise HTTPException(status_code=403, detail="Access denied")
+        thread_ref.delete()
+
+    # Xoá checkpoint của LangGraph trong Firestore
+    from app.AI_agents.core.constant import CHECKPOINT_COLLECTION
+    docs = db.collection(CHECKPOINT_COLLECTION).where(filter=FieldFilter("thread_id", "==", thread_id)).stream()
+    for doc in docs:
+        doc.reference.delete()
+
+    return {"success": True, "message": "Đã xóa cuộc trò chuyện thành công."}
+
 @ai_agent_router.delete("/threads/{thread_id}/messages")
 async def delete_thread_messages(
     thread_id: str,
@@ -626,6 +578,7 @@ async def delete_thread_messages(
         
     return {"success": True, "message": "Thread history reset successfully."}
 
+
 @ai_agent_router.post("/voice-extract", response_model=VoiceExtractResponse)
 async def extract_from_voice(
     req: VoiceExtractRequest,
@@ -635,94 +588,142 @@ async def extract_from_voice(
     """
     Bóc tách câu thoại tiếng Việt thu được từ Web Speech API thành dữ liệu cấu trúc
     cho các biểu mẫu ghi chép (sữa, thuốc, tã, ngủ, tăng trưởng).
-    Xử lý phản hồi cực nhanh (< 50ms) để không bị treo loading.
+    Xử lý phản hồi cực nhanh (< 15ms) bằng FastVoiceParser Deterministic Engine.
     """
-    import re
-    import asyncio
-    text = req.transcript.lower().strip()
-    intent = "feeding"
-    extracted_data = {}
+    from app.AI_agents.core.fast_voice_parser import FastVoiceParser
+    import time
+    t0 = time.time()
     
-    # 1. Fast & Reliable Local Parsing (Phản hồi tức thì < 50ms)
-    if "sữa" in text or "bú" in text or "ml" in text:
-        intent = "feeding"
-        ml_match = re.search(r"(\d+)\s*(ml|cc)?", text)
-        if ml_match:
-            extracted_data["amount"] = float(ml_match.group(1))
+    response = FastVoiceParser.parse(transcript=req.transcript, baby_id=req.baby_id)
+    duration_ms = int((time.time() - t0) * 1000)
+    logger.info(f"🎙️ [VoiceExtract] Intent: {response.intent} | Conf: {response.confidence} | Duration: {duration_ms}ms")
+    
+    return response
+
+
+# ─── TEXT-TO-ACTION AUTONOMOUS MULTI-TOOL PIPELINE ───────────────────────────
+
+from pydantic import BaseModel, Field
+from app.AI_agents.actions.schemas import (
+    ActionExecutionReport,
+    ActionParseResponse,
+    ActionConfirmRequest,
+    ActionResultItem,
+    ActionStatus,
+    ActionType
+)
+from app.AI_agents.actions.parser import ActionParserEngine
+from app.AI_agents.actions.dispatcher import ActionDispatcher
+
+class VoiceActionRequest(BaseModel):
+    text: str = Field(..., description="Câu thoại khẩu lệnh hoặc văn bản nhập liệu")
+    baby_id: str
+
+action_dispatcher = ActionDispatcher()
+
+@ai_agent_router.post("/voice-action/parse", response_model=ActionParseResponse)
+async def parse_voice_action(
+    req: VoiceActionRequest,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Trích xuất các thành phần từ câu thoại giọng nói và trả về để người dùng xem trước & xác nhận.
+    Nếu đầy đủ thông số: is_complete = True (hiển thị nút Xác nhận Thêm).
+    Nếu thiếu thông số: trả về missing_fields + clarification_prompt + suggested_chips.
+    """
+    raw_text = req.text.strip()
+    actions = ActionParserEngine.parse_actions(text=raw_text, baby_id=req.baby_id)
+    
+    complete_actions = []
+    clarifications = []
+    for a in actions:
+        if a.status == ActionStatus.NEEDS_CLARIFICATION or len(a.missing_fields) > 0:
+            clarifications.append(a)
         else:
-            extracted_data["amount"] = 150.0
+            complete_actions.append(a)
             
-        if "công thức" in text or "bình" in text:
-            extracted_data["type"] = "Formula"
-            extracted_data["details"] = f"{extracted_data.get('amount', 150)}ml Sữa công thức"
-        elif "mẹ" in text:
-            extracted_data["type"] = "Breast"
-            extracted_data["details"] = f"{extracted_data.get('amount', 120)}ml Sữa mẹ"
-        else:
-            extracted_data["type"] = "Formula"
-            extracted_data["details"] = f"{extracted_data.get('amount', 150)}ml Sữa công thức"
+    is_complete = (len(complete_actions) > 0 and len(clarifications) == 0)
+    
+    summary_parts = []
+    for a in complete_actions:
+        if a.action_type == ActionType.CREATE_FEEDING:
+            p = a.parameters
+            feed_type_name = "Sữa mẹ" if p.get('feed_type') == 'Breast' else ("Sữa công thức" if p.get('feed_type') == 'Formula' else "Ăn dặm")
+            summary_parts.append(f"Cữ bú: {p.get('amount', 0)}ml ({feed_type_name})")
+        elif a.action_type == ActionType.CREATE_MEDICATION:
+            p = a.parameters
+            summary_parts.append(f"Uống thuốc: {p.get('medication_name', '')} ({p.get('dosage', '')})")
+        elif a.action_type == ActionType.CREATE_SLEEP:
+            p = a.parameters
+            dur = p.get('duration_minutes')
+            summary_parts.append(f"Giấc ngủ: {dur} phút" if dur else "Bắt đầu giấc ngủ")
+        elif a.action_type == ActionType.CREATE_DIAPER:
+            p = a.parameters
+            d_type = "Tè ướt" if p.get('diaper_type') == 'Wet' else ("Đi ngoài bẩn" if p.get('diaper_type') == 'Dirty' else "Cả hai")
+            summary_parts.append(f"Thay tã: {d_type}")
 
-    elif "thuốc" in text or "hapacol" in text or "paracetamol" in text or "vitamin" in text or "mg" in text or "giọt" in text:
-        intent = "medication"
-        dose_match = re.search(r"(\d+)\s*(mg|giọt|viên)", text)
-        if dose_match:
-            extracted_data["dosage"] = f"{dose_match.group(1)}{dose_match.group(2)}"
-        else:
-            extracted_data["dosage"] = "150mg"
-            
-        if "hapacol" in text:
-            extracted_data["medication_name"] = "Hapacol 150mg"
-        elif "paracetamol" in text:
-            extracted_data["medication_name"] = "Paracetamol"
-        elif "vitamin" in text:
-            extracted_data["medication_name"] = "Vitamin D3 K2"
-        else:
-            extracted_data["medication_name"] = "Hapacol 150mg"
-
-    elif "cân" in text or "ký" in text or "kg" in text or "cao" in text or "cm" in text:
-        intent = "growth"
-        kg_match = re.search(r"(\d+(\.\d+)?)\s*(kg|ký|kí)", text)
-        cm_match = re.search(r"(\d+(\.\d+)?)\s*(cm)", text)
-        if kg_match:
-            extracted_data["weight"] = float(kg_match.group(1))
-        if cm_match:
-            extracted_data["height"] = float(cm_match.group(1))
-
-    elif "tã" in text or "bỉm" in text or "tè" in text or "ỉa" in text:
-        intent = "diaper"
-        if "bẩn" in text or "ỉa" in text:
-            extracted_data["type"] = "Dirty"
-        else:
-            extracted_data["type"] = "Wet"
-
-    elif "ngủ" in text or "thức" in text or "dậy" in text:
-        intent = "sleep"
-        extracted_data["details"] = text
-
-    # 2. LLM Fallback nếu chưa nhận diện được bằng Fast Parser
-    if not extracted_data:
-        try:
-            orchestrator = get_orchestrator(request)
-            temp_thread_id = f"voice_{uuid.uuid4().hex[:8]}"
-            result = await asyncio.wait_for(
-                orchestrator.run_agent(
-                    message=f"Bóc tách nhật ký ghi chép từ câu thoại: {req.transcript}",
-                    thread_id=temp_thread_id,
-                    baby_id=req.baby_id,
-                    user_id=current_user.uid
-                ),
-                timeout=2.5
-            )
-            intent = result.get("next_step") or intent
-            extracted_data = result.get("extracted_data") or extracted_data
-        except Exception as e:
-            print(f"Voice LLM extraction fallback/timeout: {e}")
-
-    return VoiceExtractResponse(
-        intent=intent,
-        extracted_data=extracted_data,
-        confidence_message="Bóc tách dữ liệu từ giọng nói thành công."
+    summary_prompt = " • ".join(summary_parts) if summary_parts else None
+    
+    return ActionParseResponse(
+        raw_text=raw_text,
+        is_complete=is_complete,
+        parsed_actions=complete_actions,
+        clarifications=clarifications,
+        warnings=[],
+        summary_prompt=summary_prompt
     )
+
+@ai_agent_router.post("/voice-action", response_model=ActionExecutionReport)
+async def execute_voice_action(
+    req: VoiceActionRequest,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Tiếp nhận câu thoại hoặc văn bản, tự động phân tích và thực thi đa hành động (Multi-Tool Calling)
+    qua các Business Service chính thức, bảo đảm an toàn y tế và tự động lưu vào database Firestore.
+    """
+    import time
+    t0 = time.time()
+    
+    # 1. Bóc tách Actions
+    actions = ActionParserEngine.parse_actions(text=req.text, baby_id=req.baby_id)
+    
+    # 2. Điều phối Multi-Tool Execution song song
+    report = await action_dispatcher.dispatch(actions=actions, user_id=current_user.uid)
+    
+    duration_ms = int((time.time() - t0) * 1000)
+    logger.info(f"⚡ [VoiceAction] Executed: {len(report.executed_actions)} | Pending: {len(report.pending_confirmations)} | Duration: {duration_ms}ms")
+    return report
+
+
+@ai_agent_router.post("/actions/confirm", response_model=ActionExecutionReport)
+async def confirm_action(
+    req: ActionConfirmRequest,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Cổng xác nhận Human-in-the-Loop cho các hành động rủi ro cao (ví dụ: cữ uống thuốc).
+    """
+    if not req.confirmed:
+        return ActionExecutionReport(
+            success=True,
+            summary_message="Đã hủy hành động theo yêu cầu của phụ huynh."
+        )
+    
+    # Thực thi Action đã được phụ huynh xác nhận
+    result_item = await action_dispatcher.execute_action(action=req.action, user_id=current_user.uid)
+    
+    executed = [result_item] if result_item.status == ActionStatus.COMPLETED else []
+    failed = [result_item] if result_item.status == ActionStatus.FAILED else []
+    
+    return ActionExecutionReport(
+        success=(len(failed) == 0),
+        executed_actions=executed,
+        failed_actions=failed,
+        summary_message=result_item.message
+    )
+
+
 
 async def _bg_generate_baby_report(job_id: str, baby_id: str, user_id: str):
     JobManager.update_job(job_id, JobStatus.PROCESSING, progress=20)

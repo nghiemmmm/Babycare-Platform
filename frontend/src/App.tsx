@@ -37,7 +37,7 @@ import {
 } from "./types";
 
 import { useAuth } from "./auth/AuthContext";
-import { apiFetch, parseErrorMessage, pollJobStatus } from "./lib/authClient";
+import { apiFetch, pollJobStatus } from "./lib/authClient";
 import { notifyBabyDataUpdated, useBabyDataListener } from "./lib/events";
 
 import DashboardView from "./components/DashboardView";
@@ -48,6 +48,7 @@ import ProfileView from "./components/ProfileView";
 import NutritionView from "./components/NutritionView";
 import FeedingLogView from "./components/FeedingLogView";
 import HealthView from "./components/HealthView";
+import CareCoordinationView from "./components/CareCoordinationView";
 
 export default function App() {
   const { email, name, logout } = useAuth();
@@ -71,14 +72,14 @@ export default function App() {
   const [weeklyMealPlan, setWeeklyMealPlan] = useState<WeeklyMealPlan | null>(null);
   const [isGeneratingWeeklyPlan, setIsGeneratingWeeklyPlan] = useState(false);
   const [isAcceptingWeeklyPlan, setIsAcceptingWeeklyPlan] = useState(false);
-  const [threads, setThreads] = useState<Array<{ id: string; title: string; lastMessagePreview?: string }>>([]);
+  const [threads, setThreads] = useState<Array<{ id: string; title: string }>>([]);
   const [activeThreadId, setActiveThreadId] = useState<string>("thread_default");
   const [nutritionSafety, setNutritionSafety] = useState<NutritionSafety | null>(null);
   const [safetyHandbook, setSafetyHandbook] = useState<SafetyHandbook | null>(null);
   const [isLoadingSafetyHandbook, setIsLoadingSafetyHandbook] = useState(false);
 
   // App UI state
-  const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health" | "log">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "growth" | "ai" | "profile" | "nutrition" | "health" | "log" | "coordination">("dashboard");
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -266,7 +267,7 @@ export default function App() {
   // Tự động lắng nghe Event baby-data-updated để sync dữ liệu em bé tức thì (< 100ms)
   useBabyDataListener(() => {
     if (activeBaby?.id) {
-      refreshActiveBabyData(activeBaby.id);
+      fetchBabyData(activeBaby.id);
     }
   });
 
@@ -296,18 +297,15 @@ export default function App() {
     }
   };
 
-  // Fetch all chat threads for the user, scoped to the currently active baby - nếu không
-  // truyền baby_id, danh sách hội thoại sẽ bị lẫn giữa các bé và không đổi khi chuyển bé active.
-  const loadThreads = async (babyId: string) => {
-    if (!babyId) return;
+  // Fetch all chat threads for the user
+  const loadThreads = async () => {
     try {
-      const res = await apiFetch(`/api/v1/ai/threads?baby_id=${babyId}`);
+      const res = await apiFetch("/api/v1/ai/threads");
       if (res.ok) {
         const data = await res.json();
         setThreads(data.map((t: any) => ({
           id: t.id,
-          title: t.title,
-          lastMessagePreview: t.last_message_preview
+          title: t.title
         })));
         if (data.length > 0) {
           const threadIds = data.map((t: any) => t.id);
@@ -383,11 +381,49 @@ export default function App() {
     loadInitialBabies();
   }, []);
 
+  // Check URL query parameters for invitation acceptance link
+  useEffect(() => {
+    const handleAcceptInviteFromUrl = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const inviteId = searchParams.get("accept_invite");
+      if (inviteId) {
+        try {
+          const res = await apiFetch(`/api/v1/guardians/accept/${inviteId}`, {
+            method: "POST"
+          });
+          if (res.ok) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            const resBabies = await apiFetch("/api/v1/babies");
+            if (resBabies.ok) {
+              const dataBabies = await resBabies.json();
+              if (Array.isArray(dataBabies) && dataBabies.length > 0) {
+                setBabies(dataBabies.map((b: any) => ({
+                  id: b.id,
+                  name: b.name,
+                  birthDate: b.birth_date,
+                  gender: mapBackendGender(b.gender),
+                  avatarUrl: b.avatar_url || "/static/img/leo.png",
+                  isActive: Boolean(b.is_active),
+                  bloodType: b.blood_type,
+                  pediatricianName: b.pediatrician_name,
+                  allergies: b.allergies || []
+                })));
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error accepting invitation from URL:", e);
+        }
+      }
+    };
+    handleAcceptInviteFromUrl();
+  }, []);
+
   // Sync active baby details
   useEffect(() => {
     if (activeBaby?.id) {
       refreshActiveBabyData(activeBaby.id);
-      loadThreads(activeBaby.id);
+      loadThreads();
     }
   }, [activeBaby?.id]);
 
@@ -668,13 +704,9 @@ export default function App() {
     }
   };
 
-  // Ném lỗi thay vì chỉ console.error khi thất bại - cùng lý do với handleUpdateBaby: nếu nuốt
-  // lỗi âm thầm, ProfileView không có cách nào báo cho người dùng biết vì sao lời mời không
-  // được gửi (vd. email đã là thành viên, đã có lời mời đang chờ xử lý cho email đó).
   const handleAddGuardian = async (newG: Omit<Guardian, "id">) => {
-    let res: Response;
     try {
-      res = await apiFetch(`/api/v1/guardians/invite?baby_id=${activeBaby.id}`, {
+      const res = await apiFetch(`/api/v1/guardians/invite?baby_id=${activeBaby.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -683,30 +715,12 @@ export default function App() {
           role: newG.role
         })
       });
+      if (res.ok) {
+        refreshActiveBabyData(activeBaby.id);
+      }
     } catch (e) {
       console.error(e);
-      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
     }
-    if (!res.ok) {
-      throw new Error(await parseErrorMessage(res));
-    }
-    await refreshActiveBabyData(activeBaby.id);
-  };
-
-  const handleResendGuardian = async (id: string) => {
-    let res: Response;
-    try {
-      res = await apiFetch(`/api/v1/guardians/${id}/resend?baby_id=${activeBaby.id}`, {
-        method: "POST"
-      });
-    } catch (e) {
-      console.error(e);
-      throw new Error("Không thể kết nối tới máy chủ, vui lòng kiểm tra mạng và thử lại.");
-    }
-    if (!res.ok) {
-      throw new Error(await parseErrorMessage(res));
-    }
-    await refreshActiveBabyData(activeBaby.id);
   };
 
   const handleDeleteGuardian = async (id: string) => {
@@ -857,6 +871,21 @@ export default function App() {
     }
   };
 
+  // AbortController cho luồng AI streaming
+  const aiAbortControllerRef = useRef<AbortController | null>(null);
+
+  const handleStopGeneration = () => {
+    if (aiAbortControllerRef.current) {
+      try {
+        aiAbortControllerRef.current.abort();
+      } catch (e) {
+        // Ignore abort error
+      }
+      aiAbortControllerRef.current = null;
+    }
+    setIsAiLoading(false);
+  };
+
   // AI assistant messaging với W3C SSE streaming + Idempotency Protection
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
@@ -880,19 +909,28 @@ export default function App() {
     setChats((prev) => [...prev, userMsg, initialAiMsg]);
     setIsAiLoading(true);
 
+    const abortController = new AbortController();
+    aiAbortControllerRef.current = abortController;
+
     try {
-      const response = await apiFetch(`/api/v1/ai/threads/${activeThreadId}/stream`, {
+      const threadToUse = activeThreadId || "thread_default";
+      const response = await apiFetch(`/api/v1/ai/threads/${threadToUse}/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Idempotency-Key": idempotencyKey
         },
+        signal: abortController.signal,
         body: JSON.stringify({
           content: userMsg.content,
+          message: userMsg.content,
           type: "text",
-          baby_id: activeBaby.id
+          baby_id: activeBaby?.id
         })
       });
+
+
+
 
       if (!response.ok || !response.body) {
         throw new Error(`Stream fallback, status ${response.status}`);
@@ -909,7 +947,8 @@ export default function App() {
         if (done) break;
 
         sseBuffer += decoder.decode(value, { stream: true });
-        const blocks = sseBuffer.split("\n\n");
+        const normalized = sseBuffer.replace(/\r\n/g, "\n");
+        const blocks = normalized.split("\n\n");
         sseBuffer = blocks.pop() || "";
 
         for (const rawBlock of blocks) {
@@ -922,8 +961,12 @@ export default function App() {
             const trimmed = line.trim();
             if (trimmed.startsWith("event: ")) {
               eventType = trimmed.slice(7).trim();
+            } else if (trimmed.startsWith("event:")) {
+              eventType = trimmed.slice(6).trim();
             } else if (trimmed.startsWith("data: ")) {
               rawDataStr = trimmed.slice(6).trim();
+            } else if (trimmed.startsWith("data:")) {
+              rawDataStr = trimmed.slice(5).trim();
             }
           }
 
@@ -948,18 +991,18 @@ export default function App() {
               setChats((prev) =>
                 prev.map((msg) => (msg.id === aiMsgId ? { ...msg, activeStepName: stepName } : msg))
               );
-            } else if (eventType === "response.token" || eventType === "token") {
+            } else if (eventType === "response.token" || eventType === "token" || (typeof payload === "object" && payload?.delta !== undefined)) {
               const tokenText = typeof payload === "object" ? (payload.delta || "") : String(payload);
               streamContent += tokenText;
               setChats((prev) =>
-                prev.map((msg) => (msg.id === aiMsgId ? { ...msg, content: streamContent } : msg))
+                prev.map((msg) => (msg.id === aiMsgId ? { ...msg, content: streamContent, activeStepName: undefined } : msg))
               );
             } else if (eventType === "tool_step" && typeof payload === "object") {
               toolStepsCollected.push(payload);
               setChats((prev) =>
                 prev.map((msg) => (msg.id === aiMsgId ? { ...msg, toolSteps: [...toolStepsCollected] } : msg))
               );
-            } else if (eventType === "response.completed" || eventType === "end") {
+            } else if (eventType === "response.completed" || eventType === "end" || (typeof payload === "object" && payload?.status === "completed")) {
               const finalContent = (typeof payload === "object" && payload.content) ? payload.content : streamContent;
               if (typeof payload === "object" && payload.extracted_data) {
                 notifyBabyDataUpdated();
@@ -971,7 +1014,8 @@ export default function App() {
                     ? {
                         ...msg,
                         content: finalContent || "Tôi đã ghi nhận thông tin theo dõi sức khỏe cho bé.",
-                        citations: endCitations
+                        citations: endCitations,
+                        activeStepName: undefined
                       }
                     : msg
                 )
@@ -982,7 +1026,8 @@ export default function App() {
           }
         }
       }
-      loadThreads(activeBaby.id);
+
+      loadThreads();
     } catch (error) {
       console.warn("Streaming connection notice:", error);
       setChats((prev) =>
@@ -1002,12 +1047,9 @@ export default function App() {
 
 
   const handleCreateThread = async () => {
-    if (!activeBaby) return;
     try {
       const res = await apiFetch("/api/v1/ai/threads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ baby_id: activeBaby.id })
+        method: "POST"
       });
       if (res.ok) {
         const data = await res.json();
@@ -1023,9 +1065,32 @@ export default function App() {
     }
   };
 
+  const handleDeleteThread = async (threadId: string) => {
+    try {
+      const res = await apiFetch(`/api/v1/ai/threads/${threadId}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        setThreads((prev) => prev.filter((t) => t.id !== threadId));
+        if (activeThreadId === threadId) {
+          const remaining = threads.filter((t) => t.id !== threadId);
+          if (remaining.length > 0) {
+            setActiveThreadId(remaining[0].id);
+          } else {
+            setActiveThreadId("");
+            setChats([]);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to delete thread:", e);
+    }
+  };
+
   const handleSelectThread = (threadId: string) => {
     setActiveThreadId(threadId);
   };
+
 
   const handleConfirmExtraction = (ext: SmartExtraction) => {
     // Convert smart extraction to its actual logger counterpart
@@ -1233,6 +1298,24 @@ export default function App() {
 
           <button
             onClick={() => {
+              setActiveTab("coordination");
+              setIsMobileMenuOpen(false);
+            }}
+            disabled={!hasBaby}
+            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
+            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${!hasBaby
+              ? "text-slate-300 cursor-not-allowed"
+              : activeTab === "coordination"
+                ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
+                : "text-slate-500 hover:text-primary hover:bg-primary/5"
+              }`}
+          >
+            <ClipboardList className="w-4 h-4 text-emerald-600" />
+            Sổ bàn giao & Lịch trình
+          </button>
+
+          <button
+            onClick={() => {
               setActiveTab("nutrition");
               setIsMobileMenuOpen(false);
             }}
@@ -1332,7 +1415,6 @@ export default function App() {
                   onDeleteBaby={handleDeleteBaby}
                   onUploadAvatar={handleUploadAvatar}
                   onAddGuardian={handleAddGuardian}
-                  onResendGuardian={handleResendGuardian}
                   onDeleteGuardian={handleDeleteGuardian}
                 />
               ) : (
@@ -1385,6 +1467,7 @@ export default function App() {
                       onSelectBaby={handleSelectBaby}
                       chats={chats}
                       onSendMessage={handleSendMessage}
+                      onStopGeneration={handleStopGeneration}
                       onConfirmExtraction={handleConfirmExtraction}
                       isAiLoading={isAiLoading}
                       onStartNapTimer={handleStartNapTimer}
@@ -1394,8 +1477,11 @@ export default function App() {
                       activeThreadId={activeThreadId}
                       onSelectThread={handleSelectThread}
                       onCreateThread={handleCreateThread}
+                      onDeleteThread={handleDeleteThread}
                     />
+
                   )}
+
 
                   {activeTab === "profile" && (
                     <ProfileView
@@ -1407,7 +1493,6 @@ export default function App() {
                       onDeleteBaby={handleDeleteBaby}
                       onUploadAvatar={handleUploadAvatar}
                       onAddGuardian={handleAddGuardian}
-                      onResendGuardian={handleResendGuardian}
                       onDeleteGuardian={handleDeleteGuardian}
                     />
                   )}
@@ -1439,6 +1524,13 @@ export default function App() {
                       safetyHandbook={safetyHandbook}
                       isLoadingSafetyHandbook={isLoadingSafetyHandbook}
                       onOpenSafetyHandbook={handleOpenSafetyHandbook}
+                    />
+                  )}
+
+                  {activeTab === "coordination" && (
+                    <CareCoordinationView
+                      activeBaby={activeBaby}
+                      userName={name}
                     />
                   )}
                 </>

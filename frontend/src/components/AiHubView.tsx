@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "motion/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
-import { apiFetch } from "../lib/authClient";
 import {
   MessageSquare,
   Sparkles,
@@ -30,7 +29,9 @@ import {
   XCircle,
   Loader2,
   Terminal,
-  FileText
+  FileText,
+  Trash2,
+  Square
 } from "lucide-react";
 import { BabyProfile, ChatMessage, SmartExtraction, ToolStep } from "../types";
 
@@ -40,15 +41,17 @@ interface AiHubViewProps {
   onSelectBaby: (id: string) => void;
   chats: ChatMessage[];
   onSendMessage: (text: string) => Promise<void>;
+  onStopGeneration?: () => void;
   onConfirmExtraction: (ext: SmartExtraction) => void;
   isAiLoading: boolean;
   onStartNapTimer: () => void;
   isNapTimerRunning: boolean;
   napElapsedTime: number; // seconds
-  threads: Array<{ id: string; title: string; lastMessagePreview?: string }>;
+  threads: Array<{ id: string; title: string }>;
   activeThreadId: string;
   onSelectThread: (id: string) => void;
   onCreateThread: () => Promise<void>;
+  onDeleteThread?: (id: string) => Promise<void> | void;
 }
 
 export default function AiHubView({
@@ -57,6 +60,7 @@ export default function AiHubView({
   onSelectBaby,
   chats,
   onSendMessage,
+  onStopGeneration,
   onConfirmExtraction,
   isAiLoading,
   onStartNapTimer,
@@ -65,8 +69,11 @@ export default function AiHubView({
   threads,
   activeThreadId,
   onSelectThread,
-  onCreateThread
+  onCreateThread,
+  onDeleteThread
 }: AiHubViewProps) {
+
+
   const [inputText, setInputText] = useState("");
   const [activeThread, setActiveThread] = useState("sitting");
   const [showCitationDropdown, setShowCitationDropdown] = useState(false);
@@ -92,7 +99,15 @@ export default function AiHubView({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploadingChatFile, setIsUploadingChatFile] = useState(false);
 
-  const { isListening, transcript, startListening, stopListening } = useSpeechRecognition();
+  const { isListening, transcript, startListening, stopListening } = useSpeechRecognition({
+    silenceTimeoutMs: 1500,
+    onSilence: (finalText) => {
+      if (finalText && finalText.trim()) {
+        setInputText("");
+        onSendMessage(finalText.trim());
+      }
+    }
+  });
 
   const handleFileUploadInChat = async (file: File) => {
     setIsUploadingChatFile(true);
@@ -100,8 +115,12 @@ export default function AiHubView({
       const formData = new FormData();
       formData.append("audio_file", file);
 
-      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/cry-prediction`, {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      const token = localStorage.getItem("token") || "mock-token";
+
+      const res = await fetch(`${baseUrl}/api/v1/babies/${activeBaby.id}/cry-prediction`, {
         method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
 
@@ -127,6 +146,7 @@ export default function AiHubView({
       setInputText(transcript);
     }
   }, [transcript]);
+
 
   // Voice Memo Simulation State
   const [isVoicePlaying, setIsVoicePlaying] = useState(false);
@@ -205,27 +225,42 @@ export default function AiHubView({
         <div className="flex-1 overflow-y-auto space-y-1">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2.5 mb-2">Cuộc trò chuyện gần đây</p>
 
-          {threads.map((thread) => (
-            <button
-              key={thread.id}
-              onClick={() => onSelectThread(thread.id)}
-              className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${activeThreadId === thread.id
-                  ? "bg-[#e0f2fe]/70 text-[#1c648e]"
-                  : "text-slate-500 hover:bg-white/40"
-                }`}
-            >
-              <span className="flex items-center gap-2.5 w-full min-w-0">
-                <MessageSquare className="w-4 h-4 shrink-0 text-[#1c648e]" />
-                <span className="truncate">{thread.title}</span>
-              </span>
-              {thread.lastMessagePreview && (
-                <span className="pl-6.5 text-[10px] font-medium text-slate-400 truncate">
-                  {thread.lastMessagePreview}
-                </span>
-              )}
-            </button>
-          ))}
+          {threads.length === 0 ? (
+            <p className="text-[11px] text-slate-400 text-center py-6">Chưa có cuộc trò chuyện nào</p>
+          ) : (
+            threads.map((thread) => (
+              <div
+                key={thread.id}
+                onClick={() => onSelectThread(thread.id)}
+                className={`w-full group text-left p-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-2 cursor-pointer ${activeThreadId === thread.id
+                    ? "bg-[#e0f2fe]/70 text-[#1c648e]"
+                    : "text-slate-500 hover:bg-white/40"
+                  }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <MessageSquare className="w-4 h-4 shrink-0 text-[#1c648e]" />
+                  <span className="truncate">{thread.title}</span>
+                </div>
+                {onDeleteThread && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`Bạn có chắc muốn xóa cuộc trò chuyện "${thread.title}"?`)) {
+                        onDeleteThread(thread.id);
+                      }
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-rose-100/80 rounded-lg text-slate-400 hover:text-rose-600 transition-all cursor-pointer shrink-0"
+                    title="Xóa cuộc trò chuyện này"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ))
+          )}
         </div>
+
 
         {/* User Mini-Profile panel */}
         <div className="relative">
@@ -354,8 +389,8 @@ export default function AiHubView({
                 >
                   {msg.role === "assistant" ? (
                     <div>
-                      {/* Live Progress Badge khi đang chạy tác vụ phức tạp */}
-                      {msg.activeStepName && (!msg.content || isAiLoading) && (
+                      {/* Live Progress Badge khi đang nạp context & gọi tool */}
+                      {msg.activeStepName && !msg.content && (
                         <div className="flex items-center gap-2 text-xs font-bold text-[#1c648e] bg-[#e0f2fe]/80 border border-[#1c648e]/20 px-3 py-2 rounded-2xl animate-pulse mb-2 shadow-2xs">
                           <Loader2 className="w-4 h-4 animate-spin text-[#1c648e]" />
                           <span>{msg.activeStepName}</span>
@@ -366,7 +401,11 @@ export default function AiHubView({
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {msg.content}
                         </ReactMarkdown>
+                        {isAiLoading && msg.content && (
+                          <span className="inline-block w-2 h-4 ml-1 bg-[#1c648e] animate-pulse rounded-xs align-middle" />
+                        )}
                       </div>
+
 
                       {/* Mục "Đã làm gì" (Tool Steps Timeline Accordion) */}
                       {((msg.toolSteps && msg.toolSteps.length > 0) || (msg.tool_steps && msg.tool_steps.length > 0)) && (
@@ -563,12 +602,22 @@ export default function AiHubView({
               <Mic className="w-4 h-4" />
             </button>
             <button
-              onClick={handleSend}
-              disabled={!inputText.trim() || isAiLoading}
-              className="w-8 h-8 rounded-full bg-[#1c648e] hover:bg-[#154c6d] text-white flex items-center justify-center disabled:bg-slate-200 disabled:text-slate-400 transition-all cursor-pointer shadow-xs"
+              onClick={isAiLoading ? onStopGeneration : handleSend}
+              disabled={!isAiLoading && !inputText.trim()}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs ${
+                isAiLoading
+                  ? "bg-rose-500 hover:bg-rose-600 text-white animate-pulse"
+                  : "bg-[#1c648e] hover:bg-[#154c6d] text-white disabled:bg-slate-200 disabled:text-slate-400"
+              }`}
+              title={isAiLoading ? "Dừng phản hồi" : "Gửi tin nhắn"}
             >
-              <Send className="w-3.5 h-3.5 fill-white" />
+              {isAiLoading ? (
+                <Square className="w-3.5 h-3.5 fill-white" />
+              ) : (
+                <Send className="w-3.5 h-3.5 fill-white" />
+              )}
             </button>
+
           </div>
 
           <div className="text-center mt-2.5">

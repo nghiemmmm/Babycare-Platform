@@ -1,0 +1,139 @@
+name: BabyCare AI CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ==============================================================================
+  # Stage 1: Code Quality & Unit Tests
+  # ==============================================================================
+  lint-and-test:
+    name: Lint & Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest pytest-anyio
+          pip install -r requirements.txt
+
+      - name: Code Linting with Ruff
+        run: |
+          ruff check app/ tests/
+
+      - name: Run Unit Tests with Pytest
+        run: |
+          pytest tests/unit/ -v
+
+  # ==============================================================================
+  # Stage 2: AI Model Integrity & Configs Validation
+  # ==============================================================================
+  validate-model:
+    name: Validate AI Models & Prompts
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate AI Prompt Templates & Constants
+        run: |
+          python -c "
+          from app.AI_agents.core.constant import load_prompt_file, PROMPTS_DIR
+          import os
+          print(f'Checking prompts directory: {PROMPTS_DIR}')
+          assert os.path.exists(PROMPTS_DIR), 'Prompts directory missing!'
+          print('Prompt templates verification passed successfully!')
+          "
+
+      - name: Validate AST Cry Architecture & Model Loadability
+        run: |
+          python -c "
+          import torch
+          from app.ai.CRY.models.ast_models import ASTModel
+          model = ASTModel(label_dim=5, input_fdim=128, input_tdim=704, verbose=False)
+          dummy_input = torch.randn(1, 704, 128)
+          output = model(dummy_input)
+          assert output.shape[-1] == 5, f'Expected 5 classes, got {output.shape[-1]}'
+          print('AST Cry Classification model architecture validated successfully!')
+          "
+
+  # ==============================================================================
+  # Stage 3: Build & Push Docker Images (CPU & GPU)
+  # ==============================================================================
+  build-and-push:
+    name: Build & Push Docker Images
+    needs: validate-model
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lowercase image name for GHCR compatibility
+        id: image_tag
+        run: |
+          echo "IMAGE_LOWER=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      # Build & Push CPU Version (Default)
+      - name: Build and push CPU Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          build-args: |
+            PYTHON_VERSION=3.11.9-slim
+            MODEL_VERSION=${{ github.sha }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.image_tag.outputs.IMAGE_LOWER }}:latest
+            ${{ env.REGISTRY }}/${{ steps.image_tag.outputs.IMAGE_LOWER }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
