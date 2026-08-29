@@ -3,15 +3,13 @@ name: BabyCare AI CI
 on:
   push:
     branches:
-      - master
       - production
       - main
       - develop
       - "feature/**"
-      - refactor
+      - "experiment/**"
   pull_request:
     branches:
-      - master
       - production
       - main
       - develop
@@ -111,7 +109,7 @@ jobs:
     name: Build & Push Docker Images
     needs: validate-model
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production' || github.ref == 'refs/heads/develop')
 
     permissions:
       contents: read
