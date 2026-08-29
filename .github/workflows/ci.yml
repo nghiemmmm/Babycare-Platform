@@ -3,11 +3,25 @@ name: BabyCare AI CI
 on:
   push:
     branches:
+      - master
+      - production
       - main
       - develop
+      - "feature/**"
+      - refactor
   pull_request:
     branches:
+      - master
+      - production
       - main
+      - develop
+
+# ==============================================================================
+# Tối ưu tài nguyên: Hủy pipeline cũ khi có commit mới đẩy lên cùng nhánh
+# ==============================================================================
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
@@ -71,11 +85,11 @@ jobs:
       - name: Validate AI Prompt Templates & Constants
         run: |
           python -c "
-          from app.AI_agents.core.constant import load_prompt_file, PROMPTS_DIR
+          from app.AI_agents.core.constant import PROMPTS_DIR
           import os
           print(f'Checking prompts directory: {PROMPTS_DIR}')
-          assert os.path.exists(PROMPTS_DIR), 'Prompts directory missing!'
-          print('Prompt templates verification passed successfully!')
+          assert os.path.exists(PROMPTS_DIR), 'Thư mục Prompts y tế không tồn tại!'
+          print('✅ Xác thực mẫu Prompt Templates thành công!')
           "
 
       - name: Validate AST Cry Architecture & Model Loadability
@@ -86,8 +100,8 @@ jobs:
           model = ASTModel(label_dim=5, input_fdim=128, input_tdim=704, verbose=False)
           dummy_input = torch.randn(1, 704, 128)
           output = model(dummy_input)
-          assert output.shape[-1] == 5, f'Expected 5 classes, got {output.shape[-1]}'
-          print('AST Cry Classification model architecture validated successfully!')
+          assert output.shape[-1] == 5, f'Kỳ vọng 5 classes phân loại tiếng khóc, nhận được {output.shape[-1]}'
+          print('✅ Xác thực kiến trúc AST Cry Classification Model thành công!')
           "
 
   # ==============================================================================
@@ -97,7 +111,7 @@ jobs:
     name: Build & Push Docker Images
     needs: validate-model
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
 
     permissions:
       contents: read
