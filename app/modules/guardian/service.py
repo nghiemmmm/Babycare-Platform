@@ -84,6 +84,19 @@ class GuardianService:
 
         pending = self.repo.list_pending_invitations_by_baby(baby_id)
 
+        # De-duplicate active guardians by email / user_id
+        seen_emails = set()
+        deduped_active = []
+        for g in active:
+            em = (g.get("email") or "").strip().lower()
+            uid = g.get("user_id") or ""
+            key = em or uid
+            if key and key in seen_emails:
+                continue
+            if key:
+                seen_emails.add(key)
+            deduped_active.append(g)
+
         results = [
             GuardianResponse(
                 id=g["id"],
@@ -92,18 +105,25 @@ class GuardianService:
                 role=g.get("role", "GUARDIAN"),
                 status=g.get("status", "Synced")
             )
-            for g in active
+            for g in deduped_active
         ]
-        results += [
-            GuardianResponse(
-                id=inv["id"],
-                name=inv.get("name", ""),
-                email=inv.get("email", ""),
-                role=inv.get("role", "GUARDIAN"),
-                status="Invited"
+        
+        # Also filter out pending invitations if the email is already in active guardians
+        for inv in pending:
+            em = (inv.get("email") or "").strip().lower()
+            if em and em in seen_emails:
+                continue
+            if em:
+                seen_emails.add(em)
+            results.append(
+                GuardianResponse(
+                    id=inv["id"],
+                    name=inv.get("name", ""),
+                    email=inv.get("email", ""),
+                    role=inv.get("role", "GUARDIAN"),
+                    status="Invited"
+                )
             )
-            for inv in pending
-        ]
         return results
 
     # ─── Mời ────────────────────────────────────────────────────────────────

@@ -106,10 +106,25 @@ class WeeklyMealPlanResponse(BaseModel):
     based_on_conditions: list[str]
 
 class GenerateWeeklyMealPlanRequest(BaseModel):
-    baby_id: str
-    feedback: Optional[str] = Field(
-        None, description="Phản hồi của phụ huynh khi tạo lại (vd: bé không thích cá, tránh món cay)"
+    baby_id: str = Field(
+        ...,
+        description="ID của em bé (Bắt buộc)",
+        examples=["bEofmoFl3Sc1rhbwzvqi"]
     )
+    feedback: Optional[str] = Field(
+        None,
+        description="Góp ý / yêu cầu điều chỉnh từ phụ huynh (Tùy chọn, vd: 'Bé không thích bí đỏ, đổi sang cháo yến mạch')",
+        examples=["Bé không thích bí đỏ, hãy đổi sang cháo yến mạch và thêm thịt gà mềm"]
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "baby_id": "bEofmoFl3Sc1rhbwzvqi",
+                "feedback": "Bé không thích bí đỏ, hãy đổi sang cháo yến mạch và thêm thịt gà mềm"
+            }
+        }
+    }
 
 
 # Schemas cho hướng dẫn an toàn dinh dưỡng & cẩm nang y khoa (dữ liệu tĩnh + Firestore, không dùng RAG)

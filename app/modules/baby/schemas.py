@@ -29,9 +29,11 @@ class BabyBase(BaseModel):
     is_active: bool = True
     blood_type: Optional[str] = None  # A+, A-, B+, B-, AB+, AB-, O+, O-
     pediatrician_name: Optional[str] = None
-    allergies: list[str] = Field(default_factory=list)  # Danh sách dị ứng
+    allergies: list[str] = Field(default_factory=list)  # Danh sách dị ứng chung (legacy)
+    food_allergies: list[str] = Field(default_factory=list)  # Dị ứng thực phẩm & sữa
+    medication_allergies: list[str] = Field(default_factory=list)  # Dị ứng thuốc & dược chất
 
-    @field_validator("allergies", mode="before")
+    @field_validator("allergies", "food_allergies", "medication_allergies", mode="before")
     @classmethod
     def validate_allergies(cls, v):
         normalized = _normalize_allergies(v)
@@ -52,19 +54,38 @@ class BabyUpdate(BaseModel):
     blood_type: Optional[str] = None
     pediatrician_name: Optional[str] = None
     allergies: Optional[list[str]] = None
+    food_allergies: Optional[list[str]] = None
+    medication_allergies: Optional[list[str]] = None
 
-    @field_validator("allergies", mode="before")
+    @field_validator("allergies", "food_allergies", "medication_allergies", mode="before")
     @classmethod
     def validate_allergies(cls, v):
         return _normalize_allergies(v)
 
 
-class BabyResponse(BabyBase):
+class BabyResponse(BaseModel):
     id: Optional[str] = None
+    name: str
+    birth_date: str  # Định dạng YYYY-MM-DD
+    gender: str = "unknown"  # boy, girl, unknown
+    avatar_url: Optional[str] = None
+    is_active: bool = True
+    blood_type: Optional[str] = None
+    pediatrician_name: Optional[str] = None
+    allergies: list[str] = Field(default_factory=list)
+    food_allergies: list[str] = Field(default_factory=list)
+    medication_allergies: list[str] = Field(default_factory=list)
     guardians: list[str] = []
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
+    @field_validator("allergies", "food_allergies", "medication_allergies", mode="before")
+    @classmethod
+    def validate_allergies(cls, v):
+        normalized = _normalize_allergies(v)
+        return normalized if normalized is not None else []
+
 
 class AvatarUploadResponse(BaseModel):
     avatar_url: str
+

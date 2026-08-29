@@ -39,6 +39,8 @@ import {
 import { useAuth } from "./auth/AuthContext";
 import { apiFetch, pollJobStatus } from "./lib/authClient";
 import { notifyBabyDataUpdated, useBabyDataListener } from "./lib/events";
+import { DEFAULT_AVATAR_URL } from "./data";
+
 
 import DashboardView from "./components/DashboardView";
 
@@ -178,7 +180,7 @@ export default function App() {
           weight: m.weight,
           height: m.height,
           headCircumference: m.head_circumference,
-          status: "Normal",
+          status: m.status || "Normal",
           notes: ""
         })));
       }
@@ -267,7 +269,7 @@ export default function App() {
   // Tự động lắng nghe Event baby-data-updated để sync dữ liệu em bé tức thì (< 100ms)
   useBabyDataListener(() => {
     if (activeBaby?.id) {
-      fetchBabyData(activeBaby.id);
+      refreshActiveBabyData(activeBaby.id);
     }
   });
 
@@ -358,11 +360,13 @@ export default function App() {
               name: b.name,
               birthDate: b.birth_date,
               gender: mapBackendGender(b.gender),
-              avatarUrl: b.avatar_url || "/static/img/leo.png",
+              avatarUrl: b.avatar_url || DEFAULT_AVATAR_URL,
               isActive: Boolean(b.is_active),
               bloodType: b.blood_type,
               pediatricianName: b.pediatrician_name,
-              allergies: b.allergies || []
+              allergies: b.allergies || [],
+              foodAllergies: b.food_allergies || (b.allergies ? b.allergies.filter((a: string) => !a.toLowerCase().includes("cillin") && !a.toLowerCase().includes("thuốc") && !a.toLowerCase().includes("kháng sinh")) : []),
+              medicationAllergies: b.medication_allergies || (b.allergies ? b.allergies.filter((a: string) => a.toLowerCase().includes("cillin") || a.toLowerCase().includes("thuốc") || a.toLowerCase().includes("kháng sinh")) : [])
             }));
             // Fallback phòng dữ liệu cũ/hỏng chưa có bé nào active - chỉ áp dụng khi THỰC SỰ
             // không có bé nào active, không phải mặc định luôn ép bé đầu tiên.
@@ -402,7 +406,7 @@ export default function App() {
                   name: b.name,
                   birthDate: b.birth_date,
                   gender: mapBackendGender(b.gender),
-                  avatarUrl: b.avatar_url || "/static/img/leo.png",
+                  avatarUrl: b.avatar_url || DEFAULT_AVATAR_URL,
                   isActive: Boolean(b.is_active),
                   bloodType: b.blood_type,
                   pediatricianName: b.pediatrician_name,
@@ -538,7 +542,9 @@ export default function App() {
           is_active: updated.isActive,
           blood_type: updated.bloodType,
           pediatrician_name: updated.pediatricianName,
-          allergies: updated.allergies
+          allergies: updated.allergies,
+          food_allergies: updated.foodAllergies || [],
+          medication_allergies: updated.medicationAllergies || []
         })
       });
     } catch (e) {
@@ -565,7 +571,9 @@ export default function App() {
           is_active: true,
           blood_type: newBaby.bloodType,
           pediatrician_name: newBaby.pediatricianName,
-          allergies: newBaby.allergies
+          allergies: newBaby.allergies,
+          food_allergies: newBaby.foodAllergies || [],
+          medication_allergies: newBaby.medicationAllergies || []
         })
       });
     } catch (e) {
@@ -584,11 +592,13 @@ export default function App() {
         name: b.name,
         birthDate: b.birth_date,
         gender: mapBackendGender(b.gender),
-        avatarUrl: b.avatar_url || "/static/img/leo.png",
+        avatarUrl: b.avatar_url || DEFAULT_AVATAR_URL,
         isActive: b.id === data.id,
         bloodType: b.blood_type,
         pediatricianName: b.pediatrician_name,
-        allergies: b.allergies
+        allergies: b.allergies || [],
+        foodAllergies: b.food_allergies || (b.allergies ? b.allergies.filter((a: string) => !a.toLowerCase().includes("cillin") && !a.toLowerCase().includes("thuốc") && !a.toLowerCase().includes("kháng sinh")) : []),
+        medicationAllergies: b.medication_allergies || (b.allergies ? b.allergies.filter((a: string) => a.toLowerCase().includes("cillin") || a.toLowerCase().includes("thuốc") || a.toLowerCase().includes("kháng sinh")) : [])
       }));
       setBabies(mapped);
     }
@@ -673,18 +683,22 @@ export default function App() {
 
   const handleAddMedication = async (newMed: Omit<MedicationLog, "id">) => {
     try {
-      const res = await apiFetch("/api/v1/health/medications/administer", {
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const timeIso = newMed.time ? `${todayIso}T${newMed.time}:00` : new Date().toISOString();
+      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/medication`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          baby_id: activeBaby.id,
           medication_name: newMed.name,
-          amount: newMed.dosage,
-          administered_at: new Date().toISOString()
+          dosage: newMed.dosage,
+          logged_at: timeIso,
+          prescribed_by: newMed.prescribedBy || "Phụ huynh ghi nhận",
+          notes: newMed.notes || ""
         })
       });
       if (res.ok) {
         refreshActiveBabyData(activeBaby.id);
+        window.dispatchEvent(new CustomEvent("baby-data-updated", { detail: { babyId: activeBaby.id } }));
       }
     } catch (e) {
       console.error(e);
@@ -733,6 +747,22 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleResendGuardian = async (id: string) => {
+    try {
+      const res = await apiFetch(`/api/v1/guardians/${id}/resend?baby_id=${activeBaby.id}`, {
+        method: "POST"
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Gửi lại lời mời thất bại, vui lòng thử lại.");
+      }
+      refreshActiveBabyData(activeBaby.id);
+    } catch (e) {
+      console.error(e);
+      throw e;
     }
   };
 
@@ -1242,23 +1272,7 @@ export default function App() {
             Phòng Chat AI
           </button>
 
-          <button
-            onClick={() => {
-              setActiveTab("log");
-              setIsMobileMenuOpen(false);
-            }}
-            disabled={!hasBaby}
-            title={!hasBaby ? "Hãy tạo hồ sơ bé trước" : undefined}
-            className={`w-full flex items-center gap-3 px-5 py-2.5 text-xs font-semibold transition-all ${!hasBaby
-              ? "text-slate-300 cursor-not-allowed"
-              : activeTab === "log"
-                ? "text-primary font-bold border-r-4 border-primary bg-primary/10"
-                : "text-slate-500 hover:text-primary hover:bg-primary/5"
-              }`}
-          >
-            <ClipboardList className="w-4 h-4" />
-            Nhật ký
-          </button>
+
 
           <button
             onClick={() => {
@@ -1360,13 +1374,13 @@ export default function App() {
         {/* Top bar header */}
         <header className="hidden md:flex bg-white border-b border-slate-100 px-8 py-3.5 items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600 flex items-center gap-1">
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-600 flex items-center gap-1.5 border border-indigo-100/60">
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
-              Family Server Online
+              Đang kết nối trực tuyến
             </span>
             {isNapTimerRunning && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600 animate-pulse">
-                Nap Active Ticking...
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-600 animate-pulse border border-indigo-100/60">
+                Đang ghi nhận giấc ngủ...
               </span>
             )}
           </div>
@@ -1415,6 +1429,7 @@ export default function App() {
                   onDeleteBaby={handleDeleteBaby}
                   onUploadAvatar={handleUploadAvatar}
                   onAddGuardian={handleAddGuardian}
+                  onResendGuardian={handleResendGuardian}
                   onDeleteGuardian={handleDeleteGuardian}
                 />
               ) : (
@@ -1493,6 +1508,7 @@ export default function App() {
                       onDeleteBaby={handleDeleteBaby}
                       onUploadAvatar={handleUploadAvatar}
                       onAddGuardian={handleAddGuardian}
+                      onResendGuardian={handleResendGuardian}
                       onDeleteGuardian={handleDeleteGuardian}
                     />
                   )}
@@ -1531,6 +1547,7 @@ export default function App() {
                     <CareCoordinationView
                       activeBaby={activeBaby}
                       userName={name}
+                      guardians={guardians}
                     />
                   )}
                 </>

@@ -1,12 +1,18 @@
 import { BabyProfile, Gender, Measurement, MedicationLog, Guardian, FeedLog, IngredientLog, ChatMessage } from "./types";
 
+export const DEFAULT_AVATAR_URL = "https://res.cloudinary.com/dtdkqzqvo/image/upload/babycare/img/leo.png";
+export const DEFAULT_SOOTHING_SOUND_URL = "https://res.cloudinary.com/dtdkqzqvo/video/upload/babycare/sounds/lullabies/classic_lullaby.mp3";
+export const DEFAULT_SAMPLE_CRY_URL = "https://res.cloudinary.com/dtdkqzqvo/video/upload/babycare/samples/cry_samples/sample_baby_cry.wav";
+
+
 export const INITIAL_BABIES: BabyProfile[] = [
+
   {
     id: "baby-leo",
     name: "Leo",
     birthDate: "2023-04-20",
     gender: Gender.Boy,
-    avatarUrl: "/static/img/leo.png",
+    avatarUrl: "https://res.cloudinary.com/dtdkqzqvo/image/upload/babycare/img/leo.png",
     isActive: true,
     allergies: []
   },
@@ -15,11 +21,12 @@ export const INITIAL_BABIES: BabyProfile[] = [
     name: "Bo",
     birthDate: "2023-11-15",
     gender: Gender.Girl,
-    avatarUrl: "/static/img/bo.png",
+    avatarUrl: "https://res.cloudinary.com/dtdkqzqvo/image/upload/babycare/img/bo.png",
     isActive: false,
     allergies: []
   }
 ];
+
 
 export const INITIAL_MEASUREMENTS: Measurement[] = [
   {

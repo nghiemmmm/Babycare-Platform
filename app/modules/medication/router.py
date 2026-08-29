@@ -1,17 +1,138 @@
 """
 Medication Tracking Router Module
 
-Defines HTTP API endpoints for logging and viewing baby medication history.
+Defines HTTP API endpoints for managing baby structured medication plans, dose checklist, and legacy logs.
 """
-from fastapi import APIRouter, Depends, status
+from typing import Optional, List
+from fastapi import APIRouter, Depends, status, Query
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.schemas import UserRecord
-from app.modules.medication.schemas import MedicationLogCreate, MedicationLogResponse
+from app.modules.medication.schemas import (
+    MedicationLogCreate,
+    MedicationLogResponse,
+    MedicationPlanCreate,
+    MedicationPlanUpdate,
+    MedicationPlanResponse,
+    MedicationDoseLogCreate,
+    MedicationDoseLogResponse,
+    TodayDoseItem
+)
 from app.modules.medication.service import MedicationService
 from app.shared.schemas import Message
 
-router = APIRouter(prefix="/babies", tags=["Medication Tracking"])
+router = APIRouter(prefix="/babies", tags=["Medication Tracking & Management"])
 med_service = MedicationService()
+
+
+# ============================================================================
+# 1. STRUCTURED MEDICATION PLANS (Đơn thuốc / Phác đồ)
+# ============================================================================
+
+@router.post("/{baby_id}/medication-plans", response_model=MedicationPlanResponse, status_code=status.HTTP_201_CREATED)
+async def create_baby_medication_plan(
+    baby_id: str,
+    plan_in: MedicationPlanCreate,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Tạo một đơn thuốc mới có cấu trúc 12 trường y khoa cho bé (Yêu cầu quyền giám hộ).
+    """
+    return med_service.create_medication_plan(baby_id, plan_in, user_id=current_user.uid)
+
+
+@router.get("/{baby_id}/medication-plans", response_model=List[MedicationPlanResponse])
+async def get_baby_medication_plans(
+    baby_id: str,
+    status_filter: Optional[str] = Query(None, description="Lọc theo trạng thái: active | completed | paused"),
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Lấy danh sách các đơn thuốc của bé (Yêu cầu quyền giám hộ).
+    """
+    return med_service.get_medication_plans(baby_id, user_id=current_user.uid, status_filter=status_filter)
+
+
+@router.get("/{baby_id}/medication-plans/{plan_id}", response_model=MedicationPlanResponse)
+async def get_baby_medication_plan_detail(
+    baby_id: str,
+    plan_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Lấy chi tiết một đơn thuốc của bé.
+    """
+    return med_service.get_medication_plan_by_id(baby_id, plan_id, user_id=current_user.uid)
+
+
+@router.patch("/{baby_id}/medication-plans/{plan_id}", response_model=MedicationPlanResponse)
+async def update_baby_medication_plan(
+    baby_id: str,
+    plan_id: str,
+    update_in: MedicationPlanUpdate,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Cập nhật thông tin hoặc trạng thái đơn thuốc (active / completed / paused).
+    """
+    return med_service.update_medication_plan(baby_id, plan_id, update_in, user_id=current_user.uid)
+
+
+@router.delete("/{baby_id}/medication-plans/{plan_id}", response_model=Message)
+async def delete_baby_medication_plan(
+    baby_id: str,
+    plan_id: str,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Xóa một đơn thuốc khỏi tủ thuốc của bé.
+    """
+    med_service.delete_medication_plan(baby_id, plan_id, user_id=current_user.uid)
+    return Message(message="Đã xóa đơn thuốc thành công")
+
+
+# ============================================================================
+# 2. TODAY'S DOSE CHECKLIST & LOGGING (Checklist cữ uống hôm nay)
+# ============================================================================
+
+@router.get("/{baby_id}/medication-doses/today", response_model=List[TodayDoseItem])
+async def get_baby_today_doses(
+    baby_id: str,
+    target_date: Optional[str] = Query(None, description="Ngày cần xem cữ thuốc (YYYY-MM-DD), mặc định là hôm nay"),
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Lấy checklist các cữ thuốc hôm nay, phân chia theo buổi (Sáng, Trưa, Tối, Khi cần).
+    """
+    return med_service.get_today_doses(baby_id, user_id=current_user.uid, target_date_str=target_date)
+
+
+@router.post("/{baby_id}/medication-doses/log", response_model=MedicationDoseLogResponse, status_code=status.HTTP_201_CREATED)
+async def log_baby_dose_action(
+    baby_id: str,
+    log_in: MedicationDoseLogCreate,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Ghi nhận phụ huynh đã cho bé uống thuốc hoặc bỏ qua cữ thuốc (1-Tap Mark Taken/Skipped).
+    """
+    return med_service.log_dose_action(baby_id, log_in, user_id=current_user.uid)
+
+
+@router.get("/{baby_id}/medication-doses/history", response_model=List[MedicationDoseLogResponse])
+async def get_baby_dose_history(
+    baby_id: str,
+    limit: int = Query(200, ge=1, le=500),
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """
+    Lấy toàn bộ lịch sử các cữ uống thuốc đã ghi nhận.
+    """
+    return med_service.get_dose_history(baby_id, user_id=current_user.uid, limit=limit)
+
+
+# ============================================================================
+# 3. LEGACY ENDPOINTS (Tương thích ngược)
+# ============================================================================
 
 @router.post("/{baby_id}/medication", response_model=MedicationLogResponse, status_code=status.HTTP_201_CREATED)
 async def add_medication_log(
@@ -24,6 +145,7 @@ async def add_medication_log(
     """
     return med_service.add_medication_log(baby_id, log_in, user_id=current_user.uid)
 
+
 @router.get("/{baby_id}/medication", response_model=list[MedicationLogResponse])
 async def get_medication_history(
     baby_id: str,
@@ -33,6 +155,7 @@ async def get_medication_history(
     Lấy toàn bộ lịch sử dùng thuốc/vitamin của bé (Yêu cầu quyền giám hộ).
     """
     return med_service.get_medication_history(baby_id, user_id=current_user.uid)
+
 
 @router.delete("/{baby_id}/medication/{log_id}", response_model=Message)
 async def delete_medication_log(
@@ -45,6 +168,7 @@ async def delete_medication_log(
     """
     med_service.delete_medication_log(baby_id, log_id, user_id=current_user.uid)
     return Message(message="Xóa nhật ký dùng thuốc thành công")
+
 
 
 # Router mới cho Sức khoẻ & Thuốc theo giao diện Frontend

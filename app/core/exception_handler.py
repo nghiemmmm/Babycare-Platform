@@ -104,7 +104,7 @@ def init_app(app: FastAPI) -> None:
         logger.warning(f"Meal plan locked: {exc.message} on path {request.url.path}")
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            content={"message": exc.message}
+            content={"detail": exc.message, "message": exc.message}
         )
 
     @app.exception_handler(AppException)

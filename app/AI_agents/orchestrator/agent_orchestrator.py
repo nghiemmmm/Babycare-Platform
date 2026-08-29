@@ -96,7 +96,8 @@ class AgentOrchestrator:
         # ── TIER 0 FAST-PATH: Pure Code Fast Greeting & Read (< 50ms, 0 Token) ──
         fast_extracted = FastTrackingExtractor.try_extract(message)
         if fast_extracted:
-            activity_type = fast_extracted.get("activity_type")
+            activity_type = getattr(fast_extracted, "activity_type", None) or (fast_extracted.get("activity_type") if isinstance(fast_extracted, dict) else None)
+            extracted_dict = fast_extracted.model_dump(exclude_none=True) if hasattr(fast_extracted, "model_dump") else (fast_extracted if isinstance(fast_extracted, dict) else {})
             if activity_type == "greeting":
                 logger.info("[Tier 0 Fast Greeting] Phản hồi câu chào hỏi xã giao bằng Pure Code (< 30ms)!")
                 baby_name = ""
@@ -124,7 +125,7 @@ class AgentOrchestrator:
                 }
                 return {
                     "messages": [AIMessage(content=greeting_content)],
-                    "extracted_data": fast_extracted,
+                    "extracted_data": extracted_dict,
                     "next_step": "greeting",
                     "tool_steps": [greeting_step]
                 }
@@ -134,7 +135,7 @@ class AgentOrchestrator:
                     "messages": [HumanMessage(content=message)],
                     "baby_id": baby_id,
                     "current_user_id": user_id,
-                    "extracted_data": fast_extracted,
+                    "extracted_data": extracted_dict,
                     "next_step": activity_type
                 }
                 write_res = await self._voice_graph.write_to_db_node(fast_state)
@@ -143,7 +144,7 @@ class AgentOrchestrator:
 
                 return {
                     "messages": [fast_msg],
-                    "extracted_data": fast_extracted,
+                    "extracted_data": extracted_dict,
                     "next_step": activity_type,
                     "tool_steps": fast_steps
                 }
@@ -240,13 +241,13 @@ class AgentOrchestrator:
 
             # Lưu vào Response Cache nếu query hợp lệ
             if ResponseFormatter.is_cacheable_query(message, baby_id=baby_id):
-                asyncio.create_task(ResponseFormatter.set_cached_response(
+                await ResponseFormatter.set_cached_response(
                     query=message,
                     response_dict={
                         "content": native_answer,
                         "rag_context": state.get("rag_context", "")
                     }
-                ))
+                )
 
             self._attach_financial_observability(state, t0)
             return state
@@ -355,6 +356,18 @@ class AgentOrchestrator:
         if "context_bundle" in tier2_result:
             state["context_bundle"] = tier2_result["context_bundle"]
 
+        # Lưu vào Response Cache cho kết quả của Specialist Agent
+        if ResponseFormatter.is_cacheable_query(message, baby_id=baby_id):
+            last_content = tier2_result.get("messages", [])[-1].content if tier2_result.get("messages") else ""
+            if last_content:
+                await ResponseFormatter.set_cached_response(
+                    query=message,
+                    response_dict={
+                        "content": last_content,
+                        "rag_context": state.get("rag_context", "")
+                    }
+                )
+
         self._attach_financial_observability(state, t0)
         return state
 
@@ -416,6 +429,7 @@ class AgentOrchestrator:
         )
         state["financial_observability"] = obs_schema.to_dict()
 
+    @traceable(name="AgentOrchestrator.stream_agent")
     async def stream_agent(
         self,
         message: str,
@@ -480,7 +494,8 @@ class AgentOrchestrator:
         fast_extracted = FastTrackingExtractor.try_extract(message)
 
         if fast_extracted:
-            activity_type = fast_extracted.get("activity_type")
+            activity_type = getattr(fast_extracted, "activity_type", None) or (fast_extracted.get("activity_type") if isinstance(fast_extracted, dict) else None)
+            extracted_dict = fast_extracted.model_dump(exclude_none=True) if hasattr(fast_extracted, "model_dump") else (fast_extracted if isinstance(fast_extracted, dict) else {})
             if activity_type == "greeting":
                 logger.info(f"[Tier 0 Stream Greeting] Run {run_id} | Trace {trace_id}: Phản hồi câu chào qua SSE (< 30ms)!")
                 baby_name = ""
@@ -520,7 +535,7 @@ class AgentOrchestrator:
                     "messages": [HumanMessage(content=message)],
                     "baby_id": baby_id,
                     "current_user_id": user_id,
-                    "extracted_data": fast_extracted,
+                    "extracted_data": extracted_dict,
                     "next_step": activity_type
                 }
                 write_res = await self._voice_graph.write_to_db_node(fast_state)

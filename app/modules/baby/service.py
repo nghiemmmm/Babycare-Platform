@@ -112,36 +112,16 @@ class BabyService:
                 raise EntityNotFoundError("Không tìm thấy hồ sơ của bé")
             set_json(cache_key, baby.model_dump(), ttl_seconds=settings.BABY_CACHE_TTL_SECONDS)
 
-        if user_id not in baby.guardians:
-            import os
-            app_env = os.getenv("APP_ENV", "local")
-            if app_env.lower() in ["local", "development", "dev"] or user_id == "mock-user-id":
-                logger.info(f"[Dev Bypass] User {user_id} accessing baby {baby_id}")
-            else:
-                raise PermissionDeniedError("Bạn không có quyền truy cập hồ sơ bé này")
+        if user_id not in getattr(baby, "guardians", []):
+            raise PermissionDeniedError("Bạn không có quyền truy cập hồ sơ bé này")
             
         return baby
 
     def get_my_babies(self, user_id: str) -> list[BabyResponse]:
         """
         Lấy danh sách các bé thuộc quyền giám hộ của người dùng.
-        Nếu chưa có bé nào, tự động tạo bé mặc định để UI có dữ liệu hiển thị.
         """
-        babies = self.repository.get_babies_by_guardian_id(user_id)
-        
-        if not babies:
-            logger.info(f"No babies found for user {user_id}, seeding default baby 'Leo'")
-            default_baby = BabyCreate(
-                name="Leo",
-                birth_date="2023-04-20",
-                gender="Boy",
-                avatar_url="/static/img/leo.png",
-                is_active=True
-            )
-            seeded = self.create_baby(default_baby, user_id)
-            babies = [seeded]
-            
-        return babies
+        return self.repository.get_babies_by_guardian_id(user_id)
 
     def update_baby(self, baby_id: str, baby_update: BabyUpdate, user_id: str) -> BabyResponse:
         """

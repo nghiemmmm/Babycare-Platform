@@ -28,7 +28,7 @@ def get_role_for_user(baby_id: str, user_id: str) -> str:
         return guardian.get("role", GUARDIAN)
 
     baby = _baby_repo.get(baby_id)
-    if baby and user_id in baby.guardians:
+    if baby and user_id in getattr(baby, "guardians", []):
         return ADMIN
 
     raise PermissionDeniedError("Bạn không có quyền truy cập hồ sơ bé này")

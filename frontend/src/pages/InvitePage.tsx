@@ -15,9 +15,9 @@ interface InvitationPublicInfo {
 }
 
 const ROLE_LABELS: Record<InvitationPublicInfo["role"], { label: string; icon: ReactNode }> = {
-  ADMIN: { label: "Đồng quản trị (Toàn quyền quản lý)", icon: <UserCog className="w-4 h-4" /> },
-  GUARDIAN: { label: "Người chăm sóc (Được chỉnh sửa nhật ký)", icon: <ShieldCheck className="w-4 h-4" /> },
-  VIEWER: { label: "Người xem (Chỉ xem dữ liệu)", icon: <Eye className="w-4 h-4" /> },
+  ADMIN: { label: "Đồng quản trị", icon: <UserCog className="w-4 h-4" /> },
+  GUARDIAN: { label: "Người chăm sóc", icon: <ShieldCheck className="w-4 h-4" /> },
+  VIEWER: { label: "Người xem", icon: <Eye className="w-4 h-4" /> },
 };
 
 export default function InvitePage() {

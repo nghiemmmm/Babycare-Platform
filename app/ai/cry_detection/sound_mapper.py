@@ -1,3 +1,5 @@
+from app.infrastructure.storage.cloudinary_service import resolve_asset_url
+
 CRY_REASONS = ["hungry", "tired", "pain", "discomfort", "burp", "lonely", "scared", "cold_hot", "unknown"]
 
 AST_LABEL_MAPPING = {
@@ -23,3 +25,8 @@ SOUND_MAPPING = {
     "cold_hot":    "/static/voices/mom/ai_voice_mom.mp3",
     "unknown":     "/static/sounds/white_noise/white_noise_fan.mp3"
 }
+
+def get_soothing_sound_url(reason: str) -> str:
+    path = SOUND_MAPPING.get(reason, SOUND_MAPPING["unknown"])
+    return resolve_asset_url(path, resource_type="video")
+

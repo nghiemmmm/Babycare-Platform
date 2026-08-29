@@ -148,23 +148,29 @@ export default function NutritionView({
               Kiểm tra dị ứng & an toàn
             </h3>
 
-            {/* High Alert Box - dựa trên hồ sơ dị ứng thật của bé */}
-            {activeBaby.allergies && activeBaby.allergies.length > 0 ? (
-              <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-r-2xl space-y-1.5 animate-pulse">
-                <span className="text-[10px] font-bold text-red-800 uppercase tracking-wider flex items-center gap-1">
-                  ⚠️ Dị ứng đã ghi nhận
-                </span>
-                <p className="text-[11px] text-red-700 leading-relaxed font-semibold">
-                  {activeBaby.name} có dị ứng với: {activeBaby.allergies.join(", ")}. Tránh các món chứa thành phần này và tham khảo ý kiến bác sĩ.
-                </p>
-              </div>
-            ) : (
-              <div className="p-4 bg-slate-50 border-l-4 border-slate-200 rounded-r-2xl">
-                <p className="text-[11px] text-slate-500 leading-relaxed font-semibold">
-                  Chưa ghi nhận dị ứng nào cho {activeBaby.name}.
-                </p>
-              </div>
-            )}
+            {/* High Alert Box - dựa trên hồ sơ Dị ứng Thực phẩm của bé */}
+            {(() => {
+              const foodAllergies = activeBaby.foodAllergies && activeBaby.foodAllergies.length > 0
+                ? activeBaby.foodAllergies
+                : (activeBaby.allergies ? activeBaby.allergies.filter((a) => !a.toLowerCase().includes("cillin") && !a.toLowerCase().includes("thuốc") && !a.toLowerCase().includes("kháng sinh")) : []);
+
+              return foodAllergies.length > 0 ? (
+                <div className="p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-2xl space-y-1.5 animate-pulse">
+                  <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1">
+                    🥗 Dị ứng thực phẩm đã ghi nhận
+                  </span>
+                  <p className="text-[11px] text-amber-800 leading-relaxed font-semibold">
+                    Bé {activeBaby.name} có dị ứng với thực phẩm: <span className="font-bold">{foodAllergies.join(", ")}</span>. AI đã tự động loại bỏ các món chứa thành phần này khỏi thực đơn ăn dặm.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-4 bg-slate-50 border-l-4 border-slate-200 rounded-r-2xl">
+                  <p className="text-[11px] text-slate-500 leading-relaxed font-semibold">
+                    🌿 Chưa ghi nhận dị ứng thực phẩm nào cho bé {activeBaby.name}.
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* Foods to Avoid - lấy từ backend, tính đúng theo tuổi thật của bé */}
             {!nutritionSafety ? (

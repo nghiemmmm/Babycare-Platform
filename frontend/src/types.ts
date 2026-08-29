@@ -14,6 +14,8 @@ export interface BabyProfile {
   bloodType?: string;
   pediatricianName?: string;
   allergies: string[];
+  foodAllergies?: string[];
+  medicationAllergies?: string[];
 }
 
 export interface NutritionRecommendationItem {
@@ -105,6 +107,79 @@ export interface Measurement {
   notes?: string;
 }
 
+export type MedicationRoute =
+  | "Oral (Đường uống)"
+  | "Nasal Spray (Xịt mũi)"
+  | "Eye/Ear Drops (Nhỏ mắt/tai)"
+  | "Topical (Bôi da)"
+  | "Inhalation (Khí dung)";
+
+export type MealTiming =
+  | "before_food"
+  | "after_food"
+  | "with_food"
+  | "empty_stomach"
+  | "anytime"
+  | "when_fever";
+
+export type PlanStatus = "active" | "completed" | "paused";
+
+export interface MedicationPlan {
+  id: string;
+  babyId?: string;
+  name: string;
+  alternative_name?: string;
+  strength?: string;
+  dose: string;
+  unit: string;
+  route: string;
+  frequency: string;
+  schedule_times: string[];
+  meal_timing: string;
+  start_date: string;
+  end_date?: string;
+  duration_days?: number;
+  purpose?: string;
+  instructions?: string;
+  prescribed_by?: string;
+  status: PlanStatus;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MedicationDoseLog {
+  id?: string;
+  baby_id?: string;
+  plan_id?: string;
+  medication_name: string;
+  scheduled_date: string;
+  scheduled_time: string;
+  taken_at?: string;
+  dose_taken: string;
+  status: "taken" | "skipped" | "snoozed" | "pending";
+  administered_by: string;
+  notes?: string;
+  created_at?: string;
+}
+
+export interface TodayDoseItem {
+  dose_id: string;
+  plan_id?: string;
+  medication_name: string;
+  alternative_name?: string;
+  strength?: string;
+  dose_display: string;
+  route: string;
+  meal_timing: string;
+  scheduled_time: string;
+  session: "morning" | "afternoon" | "evening" | "night" | "prn";
+  status: "pending" | "taken" | "skipped" | "snoozed";
+  taken_at?: string;
+  administered_by?: string;
+  instructions?: string;
+  purpose?: string;
+}
+
 export interface MedicationLog {
   id: string;
   babyId: string;
@@ -113,14 +188,18 @@ export interface MedicationLog {
   time: string;
   date: string;
   prescribedBy?: string;
+  givenBy?: string;
+  given_by?: string;
+  notes?: string;
 }
 
 export interface Guardian {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "GUARDIAN" | "VIEWER";
-  status: "Synced" | "Pending" | "Invited";
+  role: "ADMIN" | "GUARDIAN" | "VIEWER" | "dad" | "mom" | "grandparent" | string;
+  relationship?: string;
+  status: "Synced" | "Pending" | "Invited" | string;
 }
 
 export interface FeedLog {

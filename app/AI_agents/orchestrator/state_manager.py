@@ -1,8 +1,11 @@
+import logging
 from typing import Optional, Annotated
 import operator
 from typing_extensions import TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
+
+logger = logging.getLogger(__name__)
 
 class OverallState(TypedDict):
     """
@@ -114,17 +117,20 @@ class FirestoreCheckpointer(BaseCheckpointSaver):
                 )
         else:
             # Không có checkpoint_id cụ thể nghĩa là caller muốn checkpoint MỚI NHẤT (vd. aget_state
-            # khi load lại trang) - phải order_by checkpoint_id giảm dần trước khi limit(1), nếu
-            # không Firestore trả về bất kỳ document nào khớp filter (thứ tự không xác định), có thể
-            # trúng một checkpoint cũ/rỗng từ đầu phiên thay vì checkpoint chứa đủ lịch sử chat mới
-            # nhất - đây là lý do lịch sử chat biến mất ngẫu nhiên sau khi reload trang.
-            docs = (
-                col.where(filter=FieldFilter("thread_id", "==", thread_id))
-                .where(filter=FieldFilter("checkpoint_ns", "==", checkpoint_ns))
-                .order_by("checkpoint_id", direction=Query.DESCENDING)
-                .limit(1)
-                .get()
-            )
+            # khi load lại trang). Thử query order_by index, nếu chưa có index thì fallback query in-memory sort.
+            docs = []
+            try:
+                docs = (
+                    col.where(filter=FieldFilter("thread_id", "==", thread_id))
+                    .where(filter=FieldFilter("checkpoint_ns", "==", checkpoint_ns))
+                    .order_by("checkpoint_id", direction=Query.DESCENDING)
+                    .limit(1)
+                    .get()
+                )
+            except Exception as e:
+                logger.debug(f"[FirestoreCheckpointer] Query index fallback to in-memory filter: {e}")
+                docs = col.where(filter=FieldFilter("thread_id", "==", thread_id)).get()
+
             if docs:
                 sorted_docs = sorted(docs, key=lambda x: x.to_dict().get("checkpoint_id", ""), reverse=True)
                 d = sorted_docs[0].to_dict()

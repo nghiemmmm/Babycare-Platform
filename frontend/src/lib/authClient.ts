@@ -44,6 +44,7 @@ const STORAGE_KEYS = {
   refreshToken: "bc_refresh_token",
   uid: "bc_uid",
   email: "bc_email",
+  name: "bc_name",
 } as const;
 
 export const AUTH_EXPIRED_EVENT = "bc:auth-expired";
@@ -61,6 +62,9 @@ export const authStorage = {
   get email(): string | null {
     return localStorage.getItem(STORAGE_KEYS.email);
   },
+  get name(): string | null {
+    return localStorage.getItem(STORAGE_KEYS.name);
+  },
   save(tokens: AuthTokenResponse) {
     localStorage.setItem(STORAGE_KEYS.idToken, tokens.id_token);
     localStorage.setItem(STORAGE_KEYS.refreshToken, tokens.refresh_token);
@@ -69,11 +73,19 @@ export const authStorage = {
   saveEmail(email: string) {
     localStorage.setItem(STORAGE_KEYS.email, email);
   },
+  saveName(name: string | null) {
+    if (name) {
+      localStorage.setItem(STORAGE_KEYS.name, name);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.name);
+    }
+  },
   clear() {
     localStorage.removeItem(STORAGE_KEYS.idToken);
     localStorage.removeItem(STORAGE_KEYS.refreshToken);
     localStorage.removeItem(STORAGE_KEYS.uid);
     localStorage.removeItem(STORAGE_KEYS.email);
+    localStorage.removeItem(STORAGE_KEYS.name);
   },
 };
 

@@ -22,8 +22,10 @@ export default function AuthLayout({ title, subtitle, children }: AuthLayoutProp
         </div>
 
         <div className="bg-white/70 backdrop-blur-xl border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.06)] rounded-[32px] p-8">
-          <h1 className="text-2xl font-extrabold text-slate-800 mb-1.5">{title}</h1>
-          <p className="text-sm text-slate-500 mb-6">{subtitle}</p>
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight mb-1.5">{title}</h1>
+            <p className="text-sm text-slate-500">{subtitle}</p>
+          </div>
           {children}
         </div>
       </div>

@@ -17,16 +17,17 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function readState(): Omit<AuthState, "isLoading" | "name"> {
+function readState(): Omit<AuthState, "isLoading"> {
   return {
     isAuthenticated: Boolean(authStorage.idToken),
     uid: authStorage.uid,
     email: authStorage.email,
+    name: authStorage.name,
   };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({ ...readState(), isLoading: true, name: null });
+  const [state, setState] = useState<AuthState>({ ...readState(), isLoading: true });
 
   useEffect(() => {
     const handleExpired = () => setState((s) => ({ ...s, ...readState(), name: null }));
@@ -45,11 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       try {
         const me = await authApi.me();
+        const resolvedName = me.name ?? me.profile?.name ?? authStorage.name ?? null;
+        if (resolvedName) {
+          authStorage.saveName(resolvedName);
+        }
         if (!cancelled) {
-          setState({ ...readState(), isLoading: false, name: me.name ?? me.profile?.name ?? null });
+          setState({ ...readState(), isLoading: false, name: resolvedName });
         }
       } catch {
-        if (!cancelled) setState({ ...readState(), isLoading: false, name: null });
+        if (!cancelled) setState({ ...readState(), isLoading: false });
       }
     })();
     return () => {
@@ -61,13 +66,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const tokens = await authApi.login(email, password);
     authStorage.save(tokens);
     authStorage.saveEmail(email);
-    setState({ ...readState(), isLoading: false, name: null });
+
+    let resolvedName: string | null = null;
+    try {
+      const me = await authApi.me();
+      resolvedName = me.name ?? me.profile?.name ?? null;
+      if (resolvedName) {
+        authStorage.saveName(resolvedName);
+      }
+    } catch {
+      // ignore
+    }
+
+    setState({ ...readState(), isLoading: false, name: resolvedName });
   }, []);
 
   const register = useCallback(async (email: string, password: string, name?: string) => {
     const tokens = await authApi.register(email, password, name);
     authStorage.save(tokens);
     authStorage.saveEmail(email);
+    if (name) {
+      authStorage.saveName(name);
+    }
     setState({ ...readState(), isLoading: false, name: name ?? null });
   }, []);
 

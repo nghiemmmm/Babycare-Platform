@@ -13,6 +13,8 @@ from app.modules.care_coordination.schemas import (
     CareTaskUpdate,
     CareTaskCompleteRequest,
     TaskEscalateRequest,
+    CareTaskHandoffRequest,
+    CareTaskClaimRequest,
     CareTaskResponse,
     CareEventCreate,
     CareEventResponse,
@@ -99,6 +101,33 @@ async def escalate_task(
     )
 
 
+@router.patch("/tasks/{task_id}/handoff", response_model=CareTaskResponse)
+async def handoff_task(
+    task_id: str = Path(..., description="Mã ID việc cần chuyển giao"),
+    req: CareTaskHandoffRequest = CareTaskHandoffRequest(new_assignee_name="Người chăm sóc"),
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """Chuyển giao việc chăm sóc (Nhờ làm hộ tạm thời hoặc Đổi người phụ trách)."""
+    return service.handoff_task(
+        task_id=task_id,
+        user_id=current_user.uid,
+        new_assignee_name=req.new_assignee_name,
+        is_temporary=req.is_temporary,
+        reason=req.reason
+    )
+
+
+@router.patch("/tasks/{task_id}/claim", response_model=CareTaskResponse)
+async def claim_task(
+    task_id: str = Path(..., description="Mã ID việc cần nhận"),
+    req: CareTaskClaimRequest = CareTaskClaimRequest(),
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """Người chăm sóc nhận một việc từ danh sách 'Ai rảnh'."""
+    user_name = req.claimed_by_name or current_user.name or "Người chăm sóc"
+    return service.claim_task(task_id, current_user.uid, user_name)
+
+
 @router.delete("/tasks/{task_id}")
 async def delete_task(
     task_id: str = Path(..., description="Mã ID việc cần xóa"),
@@ -111,6 +140,7 @@ async def delete_task(
 
 # ─── 3. TIMELINE & SUMMARY ───────────────────────────────────────────────────
 
+@router.get("/overview", response_model=CareTimelineSummary)
 @router.get("/summary/daily", response_model=CareTimelineSummary)
 async def get_daily_timeline_summary(
     baby_id: str = Query(..., description="Mã ID của bé"),

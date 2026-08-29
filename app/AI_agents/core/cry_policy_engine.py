@@ -14,7 +14,7 @@ from app.modules.cry.schemas import (
     CryContextBundle,
     CryDecision
 )
-from app.ai.cry_detection.sound_mapper import SOUND_MAPPING
+from app.ai.cry_detection.sound_mapper import get_soothing_sound_url
 
 from app.AI_agents.core.constant import CRY_ACTION_WHITELIST as ACTION_WHITELIST
 
@@ -60,7 +60,7 @@ class CryPolicyEngine:
                 primary_cause="pain" if cause in ["pain", "discomfort"] else cause,
                 adjusted_confidence=confidence,
                 action_plan=["CHECK_TEMPERATURE", "CONTACT_DOCTOR", "SOOTHE"],
-                soothing_sound=SOUND_MAPPING.get("pain", "/static/sounds/white_noise/pink_noise_rain.mp3"),
+                soothing_sound=get_soothing_sound_url("pain"),
                 safety_message="⚠️ LƯU Ý Y TẾ: Bé đang có triệu chứng sốt. Ba mẹ hãy kiểm tra thân nhiệt và chuẩn bị hạ sốt theo hướng dẫn của bác sĩ.",
                 applied_policies=applied_policies
             )
@@ -72,43 +72,44 @@ class CryPolicyEngine:
         if cause == "hungry":
             applied_policies.append("POLICY_NUTRITION_FEEDING")
             action_plan = ["FEED", "SOOTHE"]
-            sound = SOUND_MAPPING.get("hungry", "/static/voices/mom/ai_voice_mom.mp3")
+            sound = get_soothing_sound_url("hungry")
 
         elif cause == "burp":
             applied_policies.append("POLICY_DIGESTIVE_BURP_RELIEF")
             action_plan = ["BURP", "SOOTHE"]
-            sound = SOUND_MAPPING.get("burp", "/static/sounds/lullabies/classic_lullaby.mp3")
+            sound = get_soothing_sound_url("burp")
 
         elif cause == "tired":
             applied_policies.append("POLICY_SLEEP_HYGIENE_SOOTHING")
             action_plan = ["REDUCE_STIMULI", "SOOTHE"]
-            sound = SOUND_MAPPING.get("tired", "/static/sounds/lullabies/classic_lullaby.mp3")
+            sound = get_soothing_sound_url("tired")
 
         elif cause == "discomfort":
             applied_policies.append("POLICY_COMFORT_CHECK")
             action_plan = ["CHECK_TEMPERATURE", "BURP", "SOOTHE"]
-            sound = SOUND_MAPPING.get("discomfort", "/static/sounds/white_noise/pink_noise_rain.mp3")
+            sound = get_soothing_sound_url("discomfort")
 
         elif cause == "pain":
             applied_policies.append("POLICY_PAIN_ASSESSMENT")
             risk_level = "MEDIUM"
             action_plan = ["CHECK_TEMPERATURE", "SOOTHE"]
-            sound = SOUND_MAPPING.get("pain", "/static/sounds/white_noise/pink_noise_rain.mp3")
+            sound = get_soothing_sound_url("pain")
 
         elif cause == "scared":
             applied_policies.append("POLICY_CALMING_ENVIRONMENT")
             action_plan = ["SOOTHE", "REDUCE_STIMULI"]
-            sound = SOUND_MAPPING.get("scared", "/static/sounds/white_noise/white_noise_fan.mp3")
+            sound = get_soothing_sound_url("scared")
 
         elif cause == "lonely":
             applied_policies.append("POLICY_AFFECTION_CLOSENESS")
             action_plan = ["SOOTHE"]
-            sound = SOUND_MAPPING.get("lonely", "/static/voices/mom/ai_voice_mom.mp3")
+            sound = get_soothing_sound_url("lonely")
 
         else:
             applied_policies.append("POLICY_DEFAULT_OBSERVATION")
             action_plan = ["SOOTHE", "CHECK_TEMPERATURE"]
-            sound = SOUND_MAPPING.get("unknown", "/static/sounds/white_noise/white_noise_fan.mp3")
+            sound = get_soothing_sound_url("unknown")
+
 
         # Đảm bảo 100% action nằm trong whitelist
         validated_actions = [act for act in action_plan if act in ACTION_WHITELIST]

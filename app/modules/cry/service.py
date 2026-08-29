@@ -142,8 +142,12 @@ class CryService:
         else:
             audio_url = f"/static/cry/{saved_filename}"
 
-        sound_conditioned = True
-        sound_played = classifier.get_soothing_sound(prediction)
+        if not sound_played:
+            try:
+                classifier_inst = CryClassifier()
+                sound_played = classifier_inst.get_soothing_sound(prediction)
+            except Exception:
+                sound_played = "/static/sounds/soothing_lullaby.mp3"
 
         now = datetime.now(timezone.utc).isoformat()
         log_obj = CryLogResponse(

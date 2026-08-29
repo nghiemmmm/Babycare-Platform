@@ -17,19 +17,11 @@ async def get_current_user(
     """
     FastAPI dependency to extract and verify the Firebase ID Token.
     Returns the verified UserRecord if successful, otherwise raises 401.
-    Supports a mock token bypass in local development environment.
     """
-    if not credentials or credentials.credentials == "mock-token":
-        if settings.APP_ENV == "local":
-            return UserRecord(
-                uid="mock-user-id",
-                email="mock@family.com",
-                name="Elena Parent",
-                picture=None
-            )
+    if not credentials or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization credentials are required",
+            detail="Yêu cầu xác thực tài khoản (Authorization header missing)",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -45,16 +37,8 @@ async def get_current_user(
         )
     except Exception as e:
         logger.warning(f"Token verification failed: {e}")
-        if settings.APP_ENV.lower() in ["local", "development", "dev"]:
-            logger.info("[Dev Bypass] Token verification error bypassed in local mode.")
-            return UserRecord(
-                uid="mock-user-id",
-                email="nghiem@babycare.com",
-                name="Minh Anh (Mẹ bé Leo)",
-                picture=None
-            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token verification failed",
+            detail="Phiên đăng nhập không hợp lệ hoặc đã hết hạn",
             headers={"WWW-Authenticate": "Bearer"},
         )

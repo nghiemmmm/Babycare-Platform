@@ -11,6 +11,9 @@ class TaskTypeEnum(str, Enum):
     HYGIENE = "hygiene"
     ACTIVITY = "activity"
     HEALTH_CHECK = "health_check"
+    BREAK = "break"
+    SHIFT = "shift"
+    DIAPER = "diaper"
     CUSTOM = "custom"
 
 
@@ -36,6 +39,7 @@ class HandoverNoteCreate(BaseModel):
     baby_id: str
     content: str
     date: Optional[str] = None  # YYYY-MM-DD
+    recipient_name: Optional[str] = "Tất cả mọi người"
     voice_note_url: Optional[str] = None
     photo_urls: Optional[List[str]] = Field(default_factory=list)
 
@@ -47,6 +51,7 @@ class HandoverNoteResponse(BaseModel):
     created_by: str
     author_name: str
     content: str
+    recipient_name: Optional[str] = "Tất cả mọi người"
     voice_note_url: Optional[str] = None
     photo_urls: List[str] = Field(default_factory=list)
     acknowledged_by: List[str] = Field(default_factory=list)
@@ -59,28 +64,54 @@ class CareTaskCreate(BaseModel):
     baby_id: str
     task_type: TaskTypeEnum = TaskTypeEnum.CUSTOM
     title: str
-    scheduled_time: str  # ISO string or HH:MM
+    scheduled_time: Optional[str] = None  # ISO string or HH:MM
+    time_mode: Optional[str] = "fixed"    # "fixed" | "time_window" | "when_needed" | "flexible"
+    time_window_start: Optional[str] = None
+    time_window_end: Optional[str] = None
+    estimated_duration_minutes: Optional[int] = None
     assigned_to: Optional[str] = None
     assigned_name: Optional[str] = None
+    is_unassigned: Optional[bool] = False
     backup_assigned_to: Optional[str] = None
     backup_assigned_name: Optional[str] = None
+    shift_name: Optional[str] = None  # e.g. "Ca Sáng", "Ca Chiều", "Ca Đêm"
+    original_assigned_name: Optional[str] = None
+    is_temporary_handoff: bool = False
+    handoff_notes: Optional[str] = None
     instructions: Optional[str] = None
     target_value: Optional[Dict[str, Any]] = None  # {"amount": 150, "unit": "ml"}
     priority: PriorityEnum = PriorityEnum.NORMAL
     is_recurring: bool = False
+    is_shift: Optional[bool] = False
+    shift_activities: Optional[List[str]] = Field(default_factory=list)
+    break_caregiver_name: Optional[str] = None
+    break_covering_name: Optional[str] = None
 
 
 class CareTaskUpdate(BaseModel):
     title: Optional[str] = None
     scheduled_time: Optional[str] = None
+    time_mode: Optional[str] = None
+    time_window_start: Optional[str] = None
+    time_window_end: Optional[str] = None
+    estimated_duration_minutes: Optional[int] = None
     assigned_to: Optional[str] = None
     assigned_name: Optional[str] = None
+    is_unassigned: Optional[bool] = None
     backup_assigned_to: Optional[str] = None
     backup_assigned_name: Optional[str] = None
+    shift_name: Optional[str] = None
+    original_assigned_name: Optional[str] = None
+    is_temporary_handoff: Optional[bool] = None
+    handoff_notes: Optional[str] = None
     instructions: Optional[str] = None
     target_value: Optional[Dict[str, Any]] = None
     status: Optional[TaskStatusEnum] = None
     priority: Optional[PriorityEnum] = None
+    is_shift: Optional[bool] = None
+    shift_activities: Optional[List[str]] = None
+    break_caregiver_name: Optional[str] = None
+    break_covering_name: Optional[str] = None
 
 
 class CareTaskCompleteRequest(BaseModel):
@@ -96,17 +127,36 @@ class TaskEscalateRequest(BaseModel):
     reason: Optional[str] = "Người phụ trách chính không phản hồi sau 30 phút"
 
 
+class CareTaskHandoffRequest(BaseModel):
+    new_assignee_name: str
+    is_temporary: bool = True
+    reason: Optional[str] = "Nhờ chăm sóc hộ tạm thời"
+
+
+class CareTaskClaimRequest(BaseModel):
+    claimed_by_name: Optional[str] = None
+
+
 class CareTaskResponse(BaseModel):
     id: str
     baby_id: str
     template_id: Optional[str] = None
     task_type: str
     title: str
-    scheduled_time: str
+    scheduled_time: Optional[str] = None
+    time_mode: Optional[str] = "fixed"
+    time_window_start: Optional[str] = None
+    time_window_end: Optional[str] = None
+    estimated_duration_minutes: Optional[int] = None
     assigned_to: Optional[str] = None
     assigned_name: Optional[str] = None
+    is_unassigned: Optional[bool] = False
     backup_assigned_to: Optional[str] = None
     backup_assigned_name: Optional[str] = None
+    shift_name: Optional[str] = None
+    original_assigned_name: Optional[str] = None
+    is_temporary_handoff: bool = False
+    handoff_notes: Optional[str] = None
     instructions: Optional[str] = None
     target_value: Optional[Dict[str, Any]] = None
     status: str
@@ -119,6 +169,10 @@ class CareTaskResponse(BaseModel):
     completion_notes: Optional[str] = None
     escalated_at: Optional[str] = None
     escalation_reason: Optional[str] = None
+    is_shift: Optional[bool] = False
+    shift_activities: Optional[List[str]] = Field(default_factory=list)
+    break_caregiver_name: Optional[str] = None
+    break_covering_name: Optional[str] = None
 
 
 # ─── 3. CARE EVENT SCHEMAS ───────────────────────────────────────────────────

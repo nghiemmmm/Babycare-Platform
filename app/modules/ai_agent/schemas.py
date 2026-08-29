@@ -15,7 +15,8 @@ class MessageCreateRequest(BaseModel):
 
 class Citation(BaseModel):
     title: str
-    source: str
+    source: Optional[str] = None
+    uri: Optional[str] = None
     content: Optional[str] = None
 
 class ExtractedLog(BaseModel):

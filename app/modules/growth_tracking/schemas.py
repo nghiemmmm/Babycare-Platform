@@ -54,3 +54,4 @@ class MeasurementResponse(BaseModel):
     height: float
     head_circumference: Optional[float] = None
     date: str
+    status: Optional[str] = "Normal"

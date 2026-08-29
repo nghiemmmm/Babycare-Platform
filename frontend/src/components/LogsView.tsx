@@ -190,9 +190,9 @@ export default function LogsView({
       {/* 1. Header & Time Range Selection Buttons */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-primary font-bold text-2xl tracking-tight">Nhật ký Hoạt động Toàn diện</h1>
-          <p className="text-xs text-slate-500 font-semibold mt-0.5">
-            Dòng thời gian tổng hợp cữ bú, giấc ngủ, thay tã và dùng thuốc của {activeBaby.name}.
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Nhật ký hoạt động toàn diện</h1>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Dòng thời gian tổng hợp cữ bú, giấc ngủ, thay tã và dùng thuốc của bé {activeBaby.name}.
           </p>
         </div>
 

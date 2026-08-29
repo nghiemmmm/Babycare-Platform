@@ -92,3 +92,72 @@ def resolve_asset_url(static_path: str, resource_type: str = "video") -> str:
     public_id = f"babycare/{public_id_no_ext}"
     format_suffix = f".{ext.lstrip('.')}" if ext else ""
     return f"https://res.cloudinary.com/{settings.CLOUDINARY_CLOUD_NAME}/{resource_type}/upload/{public_id}{format_suffix}"
+
+
+def delete_asset(public_id_or_url: str, resource_type: Optional[str] = None) -> bool:
+    """
+    Xóa tài nguyên lưu trữ trên Cloudinary theo public_id hoặc Cloudinary URL.
+    Tự động bóc tách public_id từ URL và thử các biến thể đuôi tệp và resource_type.
+    """
+    if not _ensure_configured() or not public_id_or_url:
+        return False
+
+    # 1. Nếu là URL Cloudinary -> Bóc tách public_id và resource_type
+    target_id = public_id_or_url
+    detected_type = resource_type
+
+    if public_id_or_url.startswith("http://") or public_id_or_url.startswith("https://"):
+        try:
+            # Ví dụ URL: https://res.cloudinary.com/dtdkqzqvo/raw/upload/v1787680000/babycare/documents/doc_123.pdf
+            parts = public_id_or_url.split("/")
+            if "upload" in parts:
+                idx = parts.index("upload")
+                # resource_type nằm trước /upload/ (ví dụ: raw, image, video)
+                if idx > 0 and not detected_type:
+                    detected_type = parts[idx - 1]
+                
+                # Phần sau v12345/ chính là public_id
+                sub_parts = parts[idx + 1:]
+                if sub_parts and sub_parts[0].startswith("v") and sub_parts[0][1:].isdigit():
+                    sub_parts = sub_parts[1:]
+                target_id = "/".join(sub_parts)
+        except Exception as e:
+            logger.debug(f"Không thể parse Cloudinary URL: {e}")
+
+    # 2. Thử xóa với các resource_types khác nhau (raw, image) và các biến thể đuôi file
+    types_to_try = [detected_type] if detected_type else ["raw", "image", "video"]
+    id_variants = [target_id]
+    if "." in target_id:
+        id_variants.append(os.path.splitext(target_id)[0])
+    else:
+        id_variants.append(f"{target_id}.pdf")
+
+    success = False
+    for rtype in types_to_try:
+        for pid in id_variants:
+            try:
+                res = cloudinary.uploader.destroy(pid, resource_type=rtype, invalidate=True)
+                if res.get("result") == "ok":
+                    logger.info(f"[Cloudinary] Đã xóa thành công asset {pid} (type={rtype})")
+                    success = True
+                    break
+            except Exception as ex:
+                logger.debug(f"[Cloudinary] Thử xóa {pid} ({rtype}) thất bại: {ex}")
+        if success:
+            break
+
+    # 3. Thử thêm bằng Admin API delete_resources nếu destroy chưa thành công
+    if not success:
+        try:
+            import cloudinary.api
+            for rtype in types_to_try:
+                del_res = cloudinary.api.delete_resources(id_variants, resource_type=rtype)
+                deleted_dict = del_res.get("deleted", {})
+                if any(v == "deleted" for v in deleted_dict.values()):
+                    logger.info(f"[Cloudinary Admin API] Đã xóa thành công: {deleted_dict}")
+                    success = True
+                    break
+        except Exception as ex_admin:
+            logger.debug(f"[Cloudinary Admin API] {ex_admin}")
+
+    return success

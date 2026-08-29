@@ -152,6 +152,8 @@ def seed_database():
         leo_id = f"baby_{user_uid}_leo"
         bo_id = f"baby_{user_uid}_bo"
 
+        from app.infrastructure.storage.cloudinary_service import resolve_asset_url
+
         babies = [
             {
                 "id": leo_id,
@@ -161,7 +163,7 @@ def seed_database():
                 "birth_date": "2023-04-20",
                 "gender": "boy",
                 "allergies": ["Đậu nành"],
-                "avatar_url": "/static/img/leo.png",
+                "avatar_url": resolve_asset_url("/static/img/leo.png", resource_type="image"),
                 "is_active": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat()
@@ -174,12 +176,13 @@ def seed_database():
                 "birth_date": "2023-11-15",
                 "gender": "girl",
                 "allergies": [],
-                "avatar_url": "/static/img/bo.png",
+                "avatar_url": resolve_asset_url("/static/img/bo.png", resource_type="image"),
                 "is_active": False,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }
         ]
+
         for b in babies:
             db.collection("babies").document(b["id"]).set(b, merge=True)
             # Also seed simplified fallback ID for static frontend queries if needed

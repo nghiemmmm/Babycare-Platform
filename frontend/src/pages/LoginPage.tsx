@@ -102,33 +102,6 @@ export default function LoginPage() {
         >
           {submitting ? "Đang đăng nhập…" : "Đăng nhập"}
         </button>
-
-        <div className="relative my-3 flex items-center justify-center">
-          <div className="border-t border-slate-200 w-full"></div>
-          <span className="bg-white px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider absolute">HOẶC</span>
-        </div>
-
-        <button
-          type="button"
-          disabled={submitting}
-          onClick={async () => {
-            setEmail("nghiem@babycare.com");
-            setPassword("Nghiem1234");
-            setError(null);
-            setSubmitting(true);
-            try {
-              await login("nghiem@babycare.com", "Nghiem1234");
-              navigate("/", { replace: true });
-            } catch (err) {
-              setError(err instanceof ApiClientError ? err.message : "Không thể đăng nhập tài khoản Demo.");
-            } finally {
-              setSubmitting(false);
-            }
-          }}
-          className="w-full py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-bold hover:bg-emerald-100 transition-all disabled:opacity-60 cursor-pointer flex items-center justify-center gap-2"
-        >
-          <span>🚀 Đăng nhập nhanh (Tài khoản Demo)</span>
-        </button>
       </form>
 
       <div className="mt-4 text-center">

@@ -29,7 +29,12 @@ import {
   Upload,
   RefreshCw,
   CheckCircle2,
-  Coffee
+  Coffee,
+  Sun,
+  Pin,
+  CheckCheck,
+  FileText,
+  Heart
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -42,10 +47,11 @@ import {
   Legend
 } from "recharts";
 import { BabyProfile, MedicationLog, FeedLog, Measurement, ChatMessage, SmartExtraction, NotificationItem } from "../types";
-import { apiFetch } from "../lib/authClient";
+import { DEFAULT_AVATAR_URL, DEFAULT_SOOTHING_SOUND_URL, DEFAULT_SAMPLE_CRY_URL } from "../data";
+import { apiFetch, authStorage } from "../lib/authClient";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { useBabyDataListener } from "../lib/events";
-import { apiFetch } from "../lib/authClient";
+
 
 
 interface DashboardViewProps {
@@ -172,14 +178,8 @@ export default function DashboardView({
   const [isRecording, setIsRecording] = useState(false);
 
   // Local state for tracking Diaper logs and Temperature
-  const [diaperLogs, setDiaperLogs] = useState<Array<{ id: string; time: string; type: "Wet" | "Dirty" | "Both"; status: string }>>([
-    { id: "d1", time: "10:45 AM", type: "Wet", status: "Normal" },
-    { id: "d2", time: "07:30 AM", type: "Dirty", status: "Soft" },
-    { id: "d3", time: "06:15 AM", type: "Wet", status: "Normal" }
-  ]);
-  const [temperatureLogs, setTemperatureLogs] = useState<Array<{ id: string; time: string; temp: number; status: string }>>([
-    { id: "t1", time: "09:00 AM", temp: 36.8, status: "Optimal" }
-  ]);
+  const [diaperLogs, setDiaperLogs] = useState<Array<{ id: string; time: string; type: "Wet" | "Dirty" | "Both"; status: string }>>([]);
+  const [temperatureLogs, setTemperatureLogs] = useState<Array<{ id: string; time: string; temp: number; status: string }>>([]);
 
   // Notifications State & Fetching from Backend
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
@@ -196,14 +196,21 @@ export default function DashboardView({
   // Backend Aggregated Dashboard Data
   const [dashboardData, setDashboardData] = useState<any>(null);
 
+  // Handover Note State (Giấy Nhớ Lời Dặn Đầu Ngày)
+  const [handoverNote, setHandoverNote] = useState<{
+    id?: string;
+    author_name?: string;
+    recipient_name?: string;
+    content?: string;
+    date?: string;
+    acknowledged_by?: string[];
+  } | null>(null);
+  const [isAcknowledgedLocally, setIsAcknowledgedLocally] = useState(false);
+
   useEffect(() => {
     const fetchDashboardSummary = async () => {
       try {
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-        const token = localStorage.getItem("token") || "mock-token";
-        const res = await fetch(`${baseUrl}/api/v1/dashboard?baby_id=${activeBaby.id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await apiFetch(`/api/v1/dashboard?baby_id=${activeBaby.id}`);
         if (res.ok) {
           const data = await res.json();
           setDashboardData(data);
@@ -212,16 +219,35 @@ export default function DashboardView({
         console.log("Dashboard fetch fallback", err);
       }
     };
+
+    const fetchHandoverNote = async () => {
+      try {
+        const res = await apiFetch(`/api/v1/care-coordination/handover/today?baby_id=${activeBaby.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setHandoverNote(data);
+          setIsAcknowledgedLocally(false);
+        }
+      } catch {
+        setHandoverNote(null);
+      }
+    };
+
     fetchDashboardSummary();
+    fetchHandoverNote();
   }, [activeBaby.id]);
 
   // Tự động lắng nghe Event baby-data-updated để sync dữ liệu Dashboard tức thì (< 100ms)
   useBabyDataListener(useCallback(() => {
-    const token = localStorage.getItem("token") || "mock-token";
-    const baseUrl = window.location.origin;
-    fetch(`${baseUrl}/api/v1/dashboard?baby_id=${activeBaby.id}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    }).then(res => res.ok && res.json()).then(data => data && setDashboardData(data)).catch(() => {});
+    apiFetch(`/api/v1/dashboard?baby_id=${activeBaby.id}`)
+      .then(res => res.ok && res.json())
+      .then(data => data && setDashboardData(data))
+      .catch(() => {});
+
+    apiFetch(`/api/v1/care-coordination/handover/today?baby_id=${activeBaby.id}`)
+      .then(res => res.ok && res.json())
+      .then(data => data && setHandoverNote(data))
+      .catch(() => {});
   }, [activeBaby.id]));
 
 
@@ -272,7 +298,10 @@ export default function DashboardView({
       } else {
         // Lấy tệp âm thanh WAV mẫu hợp lệ từ static server để chạy thử nghiệm
         try {
-          const sampleRes = await fetch("/static/samples/cry_samples/sample_baby_cry.wav");
+          let sampleRes = await fetch(DEFAULT_SAMPLE_CRY_URL);
+          if (!sampleRes.ok) {
+            sampleRes = await fetch("/static/samples/cry_samples/sample_baby_cry.wav");
+          }
           if (sampleRes.ok) {
             const sampleBlob = await sampleRes.blob();
             formData.append("audio_file", sampleBlob, "sample_baby_cry.wav");
@@ -286,11 +315,8 @@ export default function DashboardView({
         }
       }
 
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-      const token = localStorage.getItem("token") || "mock-token";
-      const res = await fetch(`${baseUrl}/api/v1/babies/${activeBaby.id}/cry-prediction`, {
+      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/cry-prediction`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
 
@@ -307,7 +333,7 @@ export default function DashboardView({
           lonely: "Khóc do Cần bế/Cô đơn 🫂",
           scared: "Khóc do Giật mình/Sợ hãi 😨"
         };
-        const soundPath = data.sound_played || "/static/sounds/lullabies/classic_lullaby.mp3";
+        const soundPath = data.sound_played || DEFAULT_SOOTHING_SOUND_URL;
 
         setCryResult({
           prediction: pred,
@@ -335,11 +361,8 @@ export default function DashboardView({
     setCryFeedback(accurate ? "accurate" : "inaccurate");
     if (cryResult?.logId) {
       try {
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-        const token = localStorage.getItem("token");
-        await fetch(`${baseUrl}/api/v1/babies/${activeBaby.id}/cry-prediction/${cryResult.logId}/feedback?feedback_accurate=${accurate}`, {
-          method: "PATCH",
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        await apiFetch(`/api/v1/babies/${activeBaby.id}/cry-prediction/${cryResult.logId}/feedback?feedback_accurate=${accurate}`, {
+          method: "PATCH"
         });
       } catch (e) {
         console.error("Error submitting cry feedback:", e);
@@ -728,6 +751,18 @@ export default function DashboardView({
     return "67 cm";
   };
 
+  const getRecentFeedStatus = () => {
+    const babyFeeds = feeds.filter(f => f.babyId === activeBaby.id);
+    if (!babyFeeds || babyFeeds.length === 0) {
+      return "Sẵn sàng cho cữ bú mới";
+    }
+    const lastFeed = babyFeeds[0];
+    const amountStr = lastFeed.amount ? `${lastFeed.amount}ml` : "";
+    const typeStr = lastFeed.type === "Solids" ? "Ăn dặm" : (lastFeed.type === "Formula" ? "Sữa công thức" : "Sữa mẹ");
+    return `Cữ bú gần nhất: ${lastFeed.time} (${amountStr ? `${amountStr} ` : ""}${typeStr})`;
+  };
+
+
   // Compile Growth Trajectory Chart Data
   const isBoy = activeBaby.gender !== "Girl";
   const weightStandards = isBoy ? WHO_BOY_WEIGHT_STANDARDS : WHO_GIRL_WEIGHT_STANDARDS;
@@ -784,9 +819,9 @@ export default function DashboardView({
         date: "Today"
       });
       setActiveModal("none");
-      showToast("success", "Thành công!", "Đã lưu nhật ký cữ bú thành công! 🍼");
+      showToast("success", "Thành công", "Đã lưu nhật ký cữ bú cho bé 🍼");
     } catch (err) {
-      showToast("error", "Thất bại!", "Không thể lưu nhật ký cữ bú. Vui lòng thử lại.");
+      showToast("error", "Chưa thể lưu", "Không thể lưu nhật ký cữ bú. Vui lòng thử lại.");
     }
   };
 
@@ -800,9 +835,9 @@ export default function DashboardView({
         ...prev
       ]);
       setActiveModal("none");
-      showToast("success", "Thành công!", "Đã ghi nhận thay tã thành công! 💩");
+      showToast("success", "Thành công", "Đã ghi nhận thay tã cho bé 💩");
     } catch (err) {
-      showToast("error", "Thất bại!", "Không thể lưu thông tin thay tã.");
+      showToast("error", "Chưa thể lưu", "Không thể lưu thông tin thay tã.");
     }
   };
 
@@ -820,9 +855,9 @@ export default function DashboardView({
         prescribedBy: prescribedBy || "Self Logged"
       });
       setActiveModal("none");
-      showToast("success", "Thành công!", "Đã lưu nhật ký dùng thuốc thành công! 💊");
+      showToast("success", "Thành công", "Đã lưu nhật ký dùng thuốc cho bé 💊");
     } catch (err) {
-      showToast("error", "Thất bại!", "Không thể lưu thông tin thuốc.");
+      showToast("error", "Chưa thể lưu", "Không thể lưu thông tin thuốc.");
     }
   };
 
@@ -839,9 +874,9 @@ export default function DashboardView({
         status: "Normal"
       });
       setActiveModal("none");
-      showToast("success", "Thành công!", "Đã cập nhật chỉ số tăng trưởng thành công! 📈");
+      showToast("success", "Thành công", "Đã cập nhật chỉ số tăng trưởng cho bé 📈");
     } catch (err) {
-      showToast("error", "Thất bại!", "Không thể lưu chỉ số tăng trưởng.");
+      showToast("error", "Chưa thể lưu", "Không thể lưu chỉ số tăng trưởng.");
     }
   };
 
@@ -929,7 +964,7 @@ export default function DashboardView({
                   src={activeBaby.avatarUrl}
                   alt={activeBaby.name}
                   className="w-16 h-16 rounded-full object-cover border-2 border-white/40 shadow-sm group-hover:scale-105 transition-transform"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/static/img/leo.png"; }}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR_URL; }}
                 />
                 <span className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center">
                   <Check className="w-2.5 h-2.5 text-white" />
@@ -944,19 +979,26 @@ export default function DashboardView({
                   {calculateAgeStr(activeBaby.birthDate) === "0 ngày" ? "Mới sinh" : calculateAgeStr(activeBaby.birthDate)} • {getLatestWeight()}
                 </p>
                 {/* Clean Serene Current Status Badge */}
-                <div className="mt-2.5">
+                <div className="mt-2.5 flex items-center flex-wrap gap-2">
                   {isNapTimerRunning ? (
-                    <span className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50/80 border border-indigo-100 rounded-full text-xs font-bold text-indigo-700">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full text-xs font-semibold text-indigo-700 shadow-2xs">
                       <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse shrink-0" />
-                      <span>💤 Đang ngủ ({Math.floor(napElapsedTime / 60)} phút)</span>
+                      <Moon className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span className="leading-none">
+                        Đang ngủ ({Math.floor(napElapsedTime / 60)} phút{napElapsedTime % 60 > 0 && Math.floor(napElapsedTime / 60) < 5 ? ` ${napElapsedTime % 60}s` : ""})
+                      </span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50/80 border border-emerald-100 rounded-full text-xs font-bold text-emerald-700">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-100 rounded-full text-xs font-semibold text-emerald-800 shadow-2xs">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                      <span>🟢 Đang thức • Lần bú cuối 2h 40m trước</span>
+                      <Sun className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span className="font-bold text-emerald-900 leading-none">Đang thức</span>
+                      <span className="text-emerald-300 font-normal select-none">•</span>
+                      <span className="text-emerald-700 font-medium leading-none">{getRecentFeedStatus()}</span>
                     </span>
                   )}
                 </div>
+
               </div>
             </div>
 
@@ -986,10 +1028,10 @@ export default function DashboardView({
                       >
                         <div className="flex items-center gap-3">
                           <img
-                            src={b.avatarUrl || "/static/img/leo.png"}
+                            src={b.avatarUrl || DEFAULT_AVATAR_URL}
                             alt={b.name}
                             className="w-8 h-8 rounded-full object-cover"
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/static/img/leo.png"; }}
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR_URL; }}
                           />
                           <div>
                             <p className="text-xs font-bold">{displayName}</p>
@@ -1232,33 +1274,52 @@ export default function DashboardView({
 
           return (
             <>
-              {/* 1. Adaptive Illness & AI Medication Reminder Banner on Dashboard */}
-              {isBabySick && (
-                <div className="mt-6 p-4 bg-rose-50/90 border border-rose-200/80 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-bold text-rose-900 shadow-2xs">
+              {/* 1. Nhắc lịch uống thuốc khi bé có đơn thuốc, hoặc thông báo bé khỏe mạnh khi đã xong đợt điều trị */}
+              {medications.length > 0 ? (
+                <div className="mt-6 p-4 bg-purple-50/90 border border-purple-200/80 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-bold text-purple-900 shadow-2xs">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping shrink-0" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-ping shrink-0" />
                     <div>
-                      <span className="block font-black text-rose-950">🤒 BÉ ĐANG TRONG ĐỢT ĐIỀU TRỊ: Hapacol 150mg đã uống 10:00 AM</span>
-                      <span className="text-[11px] text-rose-700 font-medium">Giữ khoảng cách an toàn 4 - 6 tiếng giữa các liều hạ sốt</span>
+                      <span className="block font-black text-purple-950">
+                        💊 NHẮC LỊCH UỐNG THUỐC: {medications[0].name} ({medications[0].dosage}) lúc {medications[0].time}
+                      </span>
+                      <span className="text-[11px] text-purple-700 font-medium">Nhắc nhở cho bé {activeBaby.name} uống thuốc đúng giờ & đồng bộ người chăm sóc</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
-                      onClick={() => alert("🔔 AI đã bật thông báo nhắc nhở khi đủ 4 tiếng an toàn!")}
-                      className="text-[11px] font-extrabold bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs flex items-center gap-1"
+                      onClick={() => onNavigateTab?.("health")}
+                      className="text-[11px] font-extrabold bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
                     >
                       <Pill className="w-3.5 h-3.5" />
-                      🔔 AI Nhắc Lịch Uống Thuốc
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onNavigateTab?.("health")}
-                      className="text-[11px] font-extrabold bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-                    >
-                      Xem chi tiết
+                      Xem chi tiết đơn thuốc
                     </button>
                   </div>
+                </div>
+              ) : (
+                <div className="mt-6 p-4 bg-emerald-50/90 border border-emerald-200/80 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-bold text-emerald-950 shadow-2xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0">
+                      🌿
+                    </div>
+                    <div>
+                      <span className="block font-black text-emerald-950">
+                        Bé {activeBaby.name} đã khỏe mạnh & hoàn thành đợt theo dõi điều trị
+                      </span>
+                      <span className="text-[11px] text-emerald-700 font-medium">
+                        Bé đang sinh hoạt vui vẻ, ăn ngủ tốt. Ba mẹ tiếp tục duy trì chế độ dinh dưỡng hàng ngày nhé!
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigateTab?.("health")}
+                    className="text-[11px] font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-2xs flex items-center gap-1.5 shrink-0"
+                  >
+                    <Heart className="w-3.5 h-3.5" />
+                    Sổ sức khỏe của bé
+                  </button>
                 </div>
               )}
 
@@ -1282,26 +1343,100 @@ export default function DashboardView({
                 </div>
               )}
 
-              {/* Care Coordination & Handover Quick Widget Banner */}
-              <div className="mt-4 p-4 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200/80 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-bold text-teal-950 shadow-xs">
-                <div className="flex items-center gap-2.5">
-                  <span className="p-2 bg-teal-100 rounded-xl text-teal-800 text-xs font-bold shrink-0">
-                    📋 Lịch Trình Chăm Sóc
-                  </span>
-                  <div>
-                    <span className="block font-black text-teal-950">Sổ Bàn Giao & Lịch Trình Hôm Nay Cho Bé {activeBaby.name}</span>
-                    <span className="text-[11px] text-teal-800 font-medium">Xem lời dặn của mẹ & danh sách việc cần làm cho người ở nhà</span>
+              {/* 📝 Pinned Daily Handover Sticky Note Widget - Chỉ hiển thị cho người nhận được chỉ định, người gửi hoặc cả nhà */}
+              {(() => {
+                const currentUserName = (authStorage.name || "").trim().toLowerCase();
+                const recipient = (handoverNote?.recipient_name || "").toLowerCase();
+                const author = (handoverNote?.author_name || "").toLowerCase();
+
+                const isForEveryone = !recipient || recipient.includes("tất cả") || recipient.includes("cả nhà");
+                const isCreatedByMe = Boolean(currentUserName && author && author.includes(currentUserName));
+                const isTargetedToMe = Boolean(
+                  currentUserName && (
+                    recipient.includes(currentUserName) ||
+                    (currentUserName.includes("hoài") && (recipient.includes("mẹ") || recipient.includes("hoài"))) ||
+                    (currentUserName.includes("vinh") && (recipient.includes("bố") || recipient.includes("vinh"))) ||
+                    (currentUserName.includes("minh anh") && (recipient.includes("mẹ") || recipient.includes("minh anh")))
+                  )
+                );
+
+                const shouldShowHandover = isForEveryone || isCreatedByMe || isTargetedToMe;
+                if (!shouldShowHandover || !handoverNote?.content) return null;
+
+                return (
+                  <div className="mt-4 p-5 bg-linear-to-r from-amber-50/90 via-orange-50/60 to-yellow-50/70 border border-amber-200/90 rounded-3xl shadow-xs space-y-3 relative overflow-hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-700 shadow-2xs -rotate-12 shrink-0">
+                          <Pin className="w-4 h-4 text-amber-600 fill-amber-500/20" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-amber-950 uppercase tracking-wide">
+                              Lời Dặn Đầu Ngày
+                            </span>
+                            <span className="text-[9px] font-bold bg-amber-200/60 text-amber-900 border border-amber-300/50 px-2 py-0.5 rounded-full">
+                              {handoverNote?.author_name || "Mẹ Hoài"} ghim
+                            </span>
+                            {handoverNote?.recipient_name && (
+                              <span className="text-[9px] font-bold bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded-full">
+                                🎯 Gửi đến: {handoverNote.recipient_name}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-amber-800/80 font-medium">
+                            Dành cho người chăm sóc & theo dõi hôm nay ({handoverNote?.date || "Hôm nay"})
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                        {/* Trạng thái / Nút xác nhận */}
+                        {(handoverNote?.acknowledged_by && handoverNote.acknowledged_by.length > 0) || isAcknowledgedLocally ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100/90 text-emerald-800 font-bold text-[11px] rounded-xl border border-emerald-200 shadow-2xs">
+                            <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            Đã xác nhận đã đọc
+                          </span>
+                        ) : handoverNote?.content ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAcknowledgedLocally(true);
+                              setToast({
+                                title: "Lời Dặn Bàn Giao",
+                                message: "✅ Bạn đã xác nhận đã đọc và tiếp nhận lời dặn hôm nay!",
+                                type: "success"
+                              });
+                              setTimeout(() => setToast(null), 3000);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] rounded-xl shadow-xs transition-all cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            Tôi đã đọc & Nhận việc
+                          </button>
+                        ) : null}
+
+                        <button
+                          type="button"
+                          onClick={() => onNavigateTab?.("coordination")}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-100/80 hover:bg-amber-200/80 text-amber-900 text-[11px] font-bold rounded-xl transition-all cursor-pointer"
+                          title="Mở toàn bộ sổ bàn giao và lịch trình"
+                        >
+                          <span>Sổ bàn giao</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Nội dung giấy nhớ */}
+                    <div className="p-3.5 bg-white/70 backdrop-blur-xs border border-amber-200/60 rounded-2xl">
+                      <p className="text-xs text-amber-950 font-medium leading-relaxed italic">
+                        "{handoverNote.content}"
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onNavigateTab?.("coordination")}
-                  className="text-[11px] font-extrabold bg-teal-700 hover:bg-teal-800 text-white px-4 py-2 rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
-                >
-                  <span>Mở Sổ Bàn Giao (1-Chạm)</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+                );
+              })()}
 
               {/* Age Stage Banner Indicator */}
               <div className="mt-4 flex items-center justify-between px-1">
@@ -1401,70 +1536,63 @@ export default function DashboardView({
 
       {/* 2. Real-time Status Card Grid - Unified 100% Style */}
       {(() => {
-        const milkCurrent = dashboardData?.milk_intake?.current || (feeds.reduce((acc, f) => acc + (f.amount || 0), 0) || 750);
+        const calculatedMilk = feeds.reduce((acc, f) => acc + (f.amount || 0), 0);
+        const milkCurrent = dashboardData?.milk_intake?.current ?? calculatedMilk;
         const milkTarget = dashboardData?.milk_intake?.target || 800;
 
         const lastFeed = feeds.length > 0 ? feeds[0] : null;
-        const lastFeedTimeAgo = dashboardData?.last_feed_time_str || "2h 40m trước";
-        const lastFeedDetail = lastFeed ? lastFeed.details : "Sữa công thức 150ml";
+        const lastFeedTimeAgo = dashboardData?.last_feed_time_str || (lastFeed ? lastFeed.time : "Chưa ghi nhận");
+        const lastFeedDetail = lastFeed ? lastFeed.details : "Chưa có cữ bú nào";
         const isBabySick = notifications.some((n) => n.type === "health_check" || n.type === "medication");
+
+        const bDate = activeBaby?.birthDate ? new Date(activeBaby.birthDate) : new Date();
+        const ageMonths = Math.max(0, Math.floor((new Date().getTime() - bDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)));
+        const vaxStage = ageMonths < 2 ? "Mốc Sơ sinh" : ageMonths < 4 ? "Mốc 2 - 3 tháng" : ageMonths < 6 ? "Mốc 4 - 5 tháng" : ageMonths < 9 ? "Mốc 6 tháng" : "Mốc 9 - 12 tháng";
+        const vaxDetail = ageMonths < 2 ? "Lao (BCG) & Viêm gan B" : ageMonths < 4 ? "6-trong-1 & Uống Rota" : ageMonths < 6 ? "6-trong-1 mũi 2 & Phế cầu" : ageMonths < 9 ? "Cúm mùa & Phế cầu" : "Sởi đơn & Viêm não NB";
 
         const allStatCards = [
           {
             title: "LẦN BÚ CUỐI",
             value: lastFeedTimeAgo,
-            subtitle: `${lastFeedDetail.replace("Formula Milk", "Sữa công thức").replace("Breastmilk", "Sữa mẹ")} • Bú mỗi 3h`,
+            subtitle: lastFeed ? `${lastFeedDetail.replace("Formula Milk", "Sữa công thức").replace("Breastmilk", "Sữa mẹ")} • Bú mỗi 3h` : "Chưa có nhật ký cữ bú",
             icon: Droplet,
-            badge: "💡 Bé có thể sắp đói",
+            badge: lastFeed ? "💡 Bé có thể sắp đói" : "🌱 Ghi nhận cữ bú đầu tiên",
             color: "text-accent-blue bg-accent-blue/10 border-accent-blue/20",
             show: true
           },
           {
             title: "GIẤC NGỦ HÔM NAY",
-            value: isNapTimerRunning ? "Đang ngủ..." : "12.5 giờ",
-            subtitle: "Mục tiêu: 14 giờ • 4 giấc ngủ",
+            value: isNapTimerRunning ? "Đang ngủ..." : (dashboardData?.sleep_summary?.total_sleep_hours ? `${dashboardData.sleep_summary.total_sleep_hours} giờ` : "Chưa ghi nhận"),
+            subtitle: "Mục tiêu: 14 giờ • Theo dõi theo ngày",
             icon: Moon,
-            badge: "💡 Cửa sổ thức 2h 15m",
+            badge: "💡 Đo giấc ngủ bằng Đồng hồ bấm giờ",
             color: "text-accent-purple bg-accent-purple/10 border-accent-purple/20",
             show: true
           },
           {
             title: "LƯỢNG SỮA TRONG NGÀY",
             value: `${milkCurrent} / ${milkTarget} ml`,
-            subtitle: milkCurrent >= milkTarget ? "Đã đạt mục tiêu" : `Đã bú 4 cữ • Thiếu ${milkTarget - milkCurrent}ml`,
+            subtitle: feeds.length === 0 ? "Chưa có cữ bú nào hôm nay" : milkCurrent >= milkTarget ? "Đã đạt mục tiêu" : `Đã bú ${feeds.length} cữ • Thiếu ${milkTarget - milkCurrent}ml`,
             icon: Coffee,
-            badge: milkCurrent >= milkTarget ? "🎉 Đã đủ cữ bú" : `💡 Bổ sung cữ nhẹ trước khi ngủ`,
+            badge: feeds.length === 0 ? "🍼 Bắt đầu ghi cữ sữa" : milkCurrent >= milkTarget ? "🎉 Đã đủ cữ bú" : "💡 Bổ sung cữ nhẹ trước khi ngủ",
             color: "text-sky-600 bg-sky-50 border-sky-100",
             show: true
           },
-          ...(isBabySick
-            ? [
-                {
-                  title: "💊 GIÃN CÁCH UỐNG THUỐC",
-                  value: "Giữ cách 4 - 6 tiếng",
-                  subtitle: "Đang trong đợt uống thuốc điều trị",
-                  icon: Pill,
-                  badge: "🛡️ Chú ý an toàn liều hạ sốt",
-                  color: "text-purple-600 bg-purple-50 border-purple-200",
-                  show: true
-                }
-              ]
-            : []),
           {
             title: "DỰ ĐOÁN CỮ NGỦ",
-            value: "02:30 PM (85% xác suất)",
-            subtitle: "Cửa sổ thức 2.5h theo thói quen",
+            value: dashboardData?.nap_prediction || "Cần thêm dữ liệu",
+            subtitle: "Tính toán nhịp thức (Wake Window)",
             icon: Clock,
-            badge: "💡 Bé thường gắt ngủ sau 2h15m",
+            badge: "💡 Dự đoán theo thói quen sinh học",
             color: "text-amber-600 bg-amber-50 border-amber-100",
             show: true
           },
           {
             title: "LỊCH TIÊM NGỪA",
-            value: activeBaby.name.includes("Leo") ? "Mốc 6 tháng" : "Mốc 3 tháng",
-            subtitle: activeBaby.name.includes("Leo") ? "Cúm mùa & Phế cầu" : "6-trong-1 & Rota",
+            value: vaxStage,
+            subtitle: vaxDetail,
             icon: Activity,
-            badge: "📅 Nhắc tiêm trong tuần",
+            badge: "📅 Theo lịch tiêm chủng Quốc gia",
             color: "text-emerald-600 bg-emerald-50 border-emerald-100",
             show: true
           }
@@ -1517,7 +1645,7 @@ export default function DashboardView({
                   src={activeBaby.avatarUrl}
                   alt={activeBaby.name}
                   className="w-4 h-4 rounded-full object-cover"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/static/img/leo.png"; }}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR_URL; }}
                 />
                 <span>Hồ sơ: {activeBaby.name} ({calculateAgeStr(activeBaby.birthDate)})</span>
               </div>
@@ -2051,7 +2179,7 @@ export default function DashboardView({
                     { label: "🍼 Cữ ăn/uống", modal: "feed" },
                     { label: "💤 Giấc ngủ", modal: "sleep" },
                     { label: "💊 Uống thuốc", modal: "medication" },
-                    { label: "🏥 Bệnh trạng", modal: "health" }
+                    { label: "🩺 Theo dõi sức khỏe", modal: "health" }
                   ].map((item, idx) => (
                     <button
                       key={idx}
@@ -2246,20 +2374,87 @@ export default function DashboardView({
               className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4"
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
-                  💊 Ghi nhận dùng thuốc
-                </h3>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setActiveModal("add-entry")} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
-                    Danh mục
-                  </button>
-                  <button onClick={() => setActiveModal("none")} className="text-xs font-bold text-[#1c648e] bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-lg cursor-pointer">
-                    ✕ Đóng
-                  </button>
+                <div>
+                  <h3 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                    💊 Uống thuốc cữ hiện tại
+                  </h3>
+                  <p className="text-[11px] text-slate-400 font-medium">Bé {activeBaby.name}</p>
                 </div>
+                <button
+                  onClick={() => setActiveModal("none")}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg cursor-pointer transition-all"
+                >
+                  ✕ Đóng
+                </button>
               </div>
 
-              <form onSubmit={handleAddMedicationSubmit} className="space-y-4 text-xs font-bold text-slate-600">
+              {/* 1. DANH SÁCH THUỐC CẦN UỐNG TẠI THỜI ĐIỂM HIỆN TẠI (1-CHẠM XÁC NHẬN) */}
+              {medications.length > 0 ? (
+                <div className="space-y-3">
+                  <p className="text-[11px] font-bold text-slate-500">
+                    Bấm để xác nhận đã cho bé uống tại thời điểm này:
+                  </p>
+                  <div className="space-y-2 max-h-56 overflow-y-auto">
+                    {medications.map((med) => (
+                      <div
+                        key={med.id}
+                        className="p-3.5 bg-purple-50/80 border border-purple-200/80 rounded-2xl flex items-center justify-between gap-3 shadow-2xs"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-purple-950 truncate">{med.name}</p>
+                          <p className="text-[11px] text-purple-700 font-semibold mt-0.5">
+                            Liều: {med.dosage} {med.prescribedBy ? `• ${med.prescribedBy}` : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nowStr = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+                            onAddMedication({
+                              babyId: activeBaby.id,
+                              name: med.name,
+                              dosage: med.dosage,
+                              time: nowStr,
+                              date: new Date().toISOString().split("T")[0],
+                              prescribedBy: med.prescribedBy || "Bác sĩ",
+                              givenBy: authStorage.name || "Người chăm sóc"
+                            });
+                            showToast("success", "Đã ghi nhận cữ thuốc", `Đã lưu bé ${activeBaby.name} uống ${med.name} (${med.dosage}) lúc ${nowStr}`);
+                            setActiveModal("none");
+                          }}
+                          className="text-[11px] font-black bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer"
+                        >
+                          ✓ Đã cho uống
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMedName("");
+                        setMedDosage("");
+                        setPrescribedBy("");
+                        // Show raw form fallback
+                        const el = document.getElementById("manual-med-form");
+                        if (el) el.classList.toggle("hidden");
+                      }}
+                      className="text-[11px] font-bold text-slate-500 hover:text-primary transition-colors cursor-pointer"
+                    >
+                      + Thêm thuốc khác ngoài đơn...
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* 2. FORM NHẬP THỦ CÔNG (Nếu chưa có đơn thuốc hoặc muốn thêm thuốc mới) */}
+              <form
+                id="manual-med-form"
+                onSubmit={handleAddMedicationSubmit}
+                className={`space-y-4 text-xs font-bold text-slate-600 ${medications.length > 0 ? "hidden pt-2 border-t border-slate-100" : ""}`}
+              >
                 <div className="space-y-2">
                   <label className="block">Tên thuốc</label>
                   <input
@@ -2331,7 +2526,7 @@ export default function DashboardView({
                   type="submit"
                   className="w-full bg-primary hover:bg-primary/95 text-white py-2.5 rounded-xl font-bold transition-all shadow-md cursor-pointer"
                 >
-                  Lưu nhật ký uống thuốc
+                  Lưu cữ thuốc
                 </button>
               </form>
             </motion.div>

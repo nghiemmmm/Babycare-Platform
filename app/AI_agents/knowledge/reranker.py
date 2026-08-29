@@ -2,6 +2,7 @@ import logging
 from typing import List
 from langchain_core.documents import Document
 from sentence_transformers import CrossEncoder
+from langsmith import traceable
 from app.AI_agents.core.constant import RERANKER_MODEL_NAME, MODEL_CACHE_DIR
 
 import torch
@@ -38,6 +39,7 @@ class LocalReranker:
     def __init__(self):
         self.model = _get_cross_encoder()
 
+    @traceable(name="LocalReranker.rerank")
     def rerank(self, query: str, documents: list[Document], top_k: int = 3) -> list[Document]:
         """
         Reranks candidate documents using CrossEncoder or fast RRF pass-through.

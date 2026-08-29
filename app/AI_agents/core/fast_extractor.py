@@ -164,7 +164,12 @@ class FastTrackingExtractor:
             return FastExtractionData(activity_type=ActivityTypeEnum.READ_LAST_MEDICATION.value)
         if any(k in text for k in ["tổng sữa hôm nay", "hôm nay bú bao nhiêu", "bú được bao nhiêu sữa"]):
             return FastExtractionData(activity_type=ActivityTypeEnum.READ_TODAY_MILK.value)
-        if any(k in text for k in ["cân nặng bao nhiêu", "nặng bao nhiêu kg", "nặng bao kg", "chiều cao bao nhiêu", "cao bao nhiêu cm", "được mấy tháng tuổi rồi"]):
+        if any(k in text for k in [
+            "cân nặng bao nhiêu", "nặng bao nhiêu", "nặng bao kg", "nặng mấy kg", "bao nhiêu kg",
+            "chiều cao bao nhiêu", "cao bao nhiêu", "cao mấy phân", "bao nhiêu cm",
+            "cân nặng hiện tại", "chiều cao hiện tại", "cân nặng của bé", "chiều cao của bé",
+            "được mấy tháng tuổi", "mấy tháng tuổi rồi", "bao nhiêu tháng tuổi"
+        ]):
             return FastExtractionData(activity_type=ActivityTypeEnum.READ_GROWTH_PROFILE.value)
         if any(k in text for k in ["lịch hôm nay", "lịch chăm sóc", "việc hôm nay", "sổ bàn giao", "hôm nay dặn gì", "lịch trình hôm nay"]):
             return FastExtractionData(activity_type=ActivityTypeEnum.READ_CARE_SCHEDULE.value)

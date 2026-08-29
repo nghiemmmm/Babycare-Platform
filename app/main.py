@@ -22,7 +22,7 @@ from app.infrastructure.database import get_firestore_db
 from app.modules.auth import auth_router
 from app.modules.baby import baby_router
 from app.modules.guardian import guardian_router
-from app.modules.dashboard import dashboard_router
+from app.modules.dashboard.router import router as dashboard_router
 from app.modules.growth_tracking import growth_router
 from app.modules.growth_tracking.router import measurements_router
 from app.modules.health_records import health_records_router
@@ -35,6 +35,8 @@ from app.modules.ai_agent.router import ai_agent_router
 from app.modules.jobs.router import jobs_router
 from app.modules.care_coordination import care_coordination_router
 from app.modules.sleep import sleep_router
+from app.modules.notification.router import router as notification_router
+from app.modules.knowledge import knowledge_router
 
 
 # Configure logging
@@ -97,6 +99,8 @@ api_router.include_router(cry_router)
 api_router.include_router(ai_agent_router)
 api_router.include_router(jobs_router)
 api_router.include_router(sleep_router)
+api_router.include_router(notification_router)
+api_router.include_router(knowledge_router)
 
 app.include_router(api_router, prefix="/api/v1")
 
@@ -115,37 +119,34 @@ async def root():
 async def health_check():
     return {"status": "ok"}
 
-@app.post("/test-db")
-async def test_db_connection(db: Client = Depends(get_firestore_db)):
+@app.get("/cleanup-user-babies")
+async def cleanup_user_babies_endpoint(db: Client = Depends(get_firestore_db)):
     """
-    Temporary endpoint to test reading and writing to Firebase Firestore.
+    Dọn dẹp các bé tự sinh (auto-seeded) gắn với tài khoản người dùng mới (ngoại trừ demo Leo/Bo của Nghiem).
     """
     try:
-        # Write to a test collection
-        doc_ref = db.collection("test_connections").document("status")
-        doc_ref.set({
-            "message": "Connection successful!",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        })
-        
-        # Read back from the collection
-        doc = doc_ref.get()
-        if doc.exists:
-            return {
-                "status": "success",
-                "data_written": doc.to_dict()
-            }
-        else:
-            return {
-                "status": "failed",
-                "message": "Document was written but could not be retrieved."
-            }
+        users = {}
+        for u in db.collection("users").stream():
+            users[u.id] = u.to_dict()
+
+        deleted = []
+        for b_doc in db.collection("babies").stream():
+            b_data = b_doc.to_dict()
+            guardians = b_data.get("guardians", [])
+            # Nếu bé không phải thuộc tài khoản demo chính thức mà là bé auto-seed cho user khác
+            for g_uid in guardians:
+                user_info = users.get(g_uid, {})
+                email = str(user_info.get("email", "")).lower()
+                name = str(user_info.get("name", "")).lower()
+                if "hoai" in email or "hoài" in name or "hoai" in name:
+                    db.collection("babies").document(b_doc.id).delete()
+                    deleted.append({"baby_id": b_doc.id, "name": b_data.get("name"), "user_email": email})
+                    break
+
+        return {"status": "success", "deleted_babies": deleted}
     except Exception as e:
-        logger.error(f"Error testing database connection: {e}")
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        logger.error(f"Error cleaning up user babies: {e}")
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

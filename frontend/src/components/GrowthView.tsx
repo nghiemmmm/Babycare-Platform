@@ -67,16 +67,11 @@ export default function GrowthView({
     };
   });
 
-  const latestMeasure = measurements
+  const babyMeasurements = measurements
     .filter((m) => m.babyId === activeBaby.id)
-    .sort((a, b) => b.ageInMonths - a.ageInMonths)[0] || {
-      weight: 7.2,
-      height: 66,
-      headCircumference: 42.5,
-      status: "Height Alert (Risk of Stunting)",
-      ageInMonths: 6,
-      notes: "Default active measurements"
-    };
+    .sort((a, b) => b.ageInMonths - a.ageInMonths);
+
+  const latestMeasure = babyMeasurements[0] || null;
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,10 +108,10 @@ export default function GrowthView({
       {/* View Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-primary font-bold text-2xl tracking-tight">
-            Theo dõi Tăng trưởng WHO
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+            Theo dõi tăng trưởng WHO
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
             So sánh bách phân vị cân nặng, chiều cao và vòng đầu của bé với chuẩn Tổ chức Y tế Thế giới (WHO).
           </p>
         </div>
@@ -126,7 +121,7 @@ export default function GrowthView({
             setDate(today);
             setShowAddModal(true);
           }}
-          className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-full text-sm font-bold transition-all shadow-md shadow-primary/20 cursor-pointer"
+          className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-full text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer"
           id="btn-add-measurement"
         >
           <Plus className="w-4 h-4" />
@@ -141,17 +136,20 @@ export default function GrowthView({
           whileHover={{ y: -2 }}
           className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-5 flex items-center gap-4 relative overflow-hidden"
         >
-          <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600">
+          <div className={`p-3 rounded-xl ${latestMeasure?.status?.includes("Weight Alert") ? "bg-rose-50 text-rose-500" : "bg-emerald-50 text-emerald-600"}`}>
             <Scale className="w-6 h-6" />
           </div>
           <div className="space-y-0.5">
-            <span className="text-xs text-slate-500 font-medium uppercase tracking-wide">Cân nặng hiện tại</span>
+            <span className="text-xs text-slate-500 font-bold">Cân nặng hiện tại</span>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-xl font-semibold text-primary">{latestMeasure.weight} kg</span>
-              <span className="text-xs text-emerald-600 font-semibold">+0.4kg so với tháng trước</span>
+              <span className="text-xl sm:text-2xl font-black text-slate-900">{latestMeasure ? `${latestMeasure.weight} kg` : "-- kg"}</span>
+              <span className={`text-xs font-semibold ${latestMeasure?.status?.includes("Weight Alert") ? "text-rose-500" : "text-emerald-600"}`}>
+                {latestMeasure ? (latestMeasure.status.includes("Weight Alert") ? "Dưới chuẩn WHO" : "Chuẩn WHO") : "Chưa có số đo"}
+              </span>
             </div>
-            <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-full mt-1">
-              <Check className="w-2.5 h-2.5" /> Bình thường (bách phân vị 50)
+            <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full mt-1 ${latestMeasure?.status?.includes("Weight Alert") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+              {latestMeasure?.status?.includes("Weight Alert") ? <AlertCircle className="w-2.5 h-2.5" /> : <Check className="w-2.5 h-2.5" />}
+              {latestMeasure ? (latestMeasure.status.includes("Weight Alert") ? "Cảnh báo Cân nặng (Nhẹ cân)" : "Bình thường (bách phân vị 50)") : "🌱 Bắt đầu theo dõi"}
             </span>
           </div>
         </motion.div>
@@ -161,17 +159,20 @@ export default function GrowthView({
           whileHover={{ y: -2 }}
           className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-5 flex items-center gap-4 relative overflow-hidden"
         >
-          <div className="p-3 bg-rose-50 rounded-xl text-rose-500">
+          <div className={`p-3 rounded-xl ${latestMeasure?.status?.includes("Height Alert") ? "bg-rose-50 text-rose-500" : "bg-sky-50 text-sky-600"}`}>
             <Ruler className="w-6 h-6" />
           </div>
           <div className="space-y-0.5">
-            <span className="text-xs text-slate-500 font-medium uppercase tracking-wide">Chiều cao hiện tại</span>
+            <span className="text-xs text-slate-500 font-bold">Chiều cao hiện tại</span>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-xl font-semibold text-primary">{latestMeasure.height} cm</span>
-              <span className="text-xs text-rose-500 font-semibold">Dưới bách phân vị thứ 15</span>
+              <span className="text-xl sm:text-2xl font-black text-slate-900">{latestMeasure ? `${latestMeasure.height} cm` : "-- cm"}</span>
+              <span className={`text-xs font-semibold ${latestMeasure?.status?.includes("Height Alert") ? "text-rose-500" : "text-slate-400"}`}>
+                {latestMeasure ? (latestMeasure.status.includes("Height Alert") ? "Dưới chuẩn WHO" : "Chuẩn WHO") : "Chưa có số đo"}
+              </span>
             </div>
-            <span className="inline-flex items-center gap-1 text-[10px] bg-rose-50 text-rose-700 font-semibold px-2 py-0.5 rounded-full mt-1">
-              <AlertCircle className="w-2.5 h-2.5" /> Nguy cơ thấp còi
+            <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full mt-1 ${latestMeasure?.status?.includes("Height Alert") ? "bg-rose-50 text-rose-700" : "bg-sky-50 text-sky-700"}`}>
+              {latestMeasure?.status?.includes("Height Alert") ? <AlertCircle className="w-2.5 h-2.5" /> : <Check className="w-2.5 h-2.5" />}
+              {latestMeasure ? (latestMeasure.status.includes("Height Alert") ? "Cảnh báo Chiều cao (Nguy cơ thấp còi)" : "Phát triển tốt") : "🌱 Bắt đầu theo dõi"}
             </span>
           </div>
         </motion.div>
@@ -185,13 +186,13 @@ export default function GrowthView({
             <Brain className="w-6 h-6" />
           </div>
           <div className="space-y-0.5">
-            <span className="text-xs text-slate-500 font-medium uppercase tracking-wide">Vòng đầu hiện tại</span>
+            <span className="text-xs text-slate-500 font-bold">Vòng đầu hiện tại</span>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-xl font-semibold text-primary">{latestMeasure.headCircumference} cm</span>
-              <span className="text-xs text-[#1c648e] font-semibold">Tăng trưởng đều đặn</span>
+              <span className="text-xl sm:text-2xl font-black text-slate-900">{latestMeasure ? `${latestMeasure.headCircumference} cm` : "-- cm"}</span>
+              <span className="text-xs text-[#1c648e] font-semibold">{latestMeasure ? "Tăng trưởng đều đặn" : "Chưa có số đo"}</span>
             </div>
-            <span className="inline-flex items-center gap-1 text-[10px] bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded-full mt-1">
-              <Check className="w-2.5 h-2.5" /> Bình thường
+            <span className="inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 font-bold px-2.5 py-0.5 rounded-full mt-1">
+              <Check className="w-2.5 h-2.5" /> {latestMeasure ? "Bình thường" : "🌱 Bắt đầu theo dõi"}
             </span>
           </div>
         </motion.div>
@@ -204,11 +205,11 @@ export default function GrowthView({
         <div className="lg:col-span-2 bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
                 <Activity className="w-4 h-4 text-primary" />
-                Phân tích Biểu đồ Tăng trưởng
+                Phân tích biểu đồ tăng trưởng
               </h3>
-              <p className="text-xs text-slate-400">So sánh kết quả của {activeBaby.name} với chuẩn WHO cho {activeBaby.gender === "Girl" ? "bé gái" : "bé trai"} (0-12 Tháng)</p>
+              <p className="text-xs text-slate-500 font-medium">So sánh kết quả của {activeBaby.name} với chuẩn WHO cho {activeBaby.gender === "Girl" ? "bé gái" : "bé trai"} (0-12 Tháng)</p>
             </div>
 
             {/* Metric Toggle Buttons */}
@@ -293,13 +294,15 @@ export default function GrowthView({
           
           {/* List of measurements */}
           <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-5 space-y-4">
-            <h3 className="text-primary font-bold text-xs uppercase tracking-wide text-slate-500">Lịch sử Đo đạc</h3>
+            <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">Lịch sử đo đạc</h3>
             
             <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-              {measurements
-                .filter((m) => m.babyId === activeBaby.id)
-                .sort((a, b) => b.ageInMonths - a.ageInMonths)
-                .map((log) => (
+              {babyMeasurements.length === 0 ? (
+                <div className="text-center text-slate-400 py-8 text-xs font-medium">
+                  Chưa có nhật ký đo đạc nào. Hãy bấm "Thêm số đo mới" ở trên để theo dõi biểu đồ!
+                </div>
+              ) : (
+                babyMeasurements.map((log) => (
                   <div
                     key={log.id}
                     onClick={() => setSelectedLog(log)}
@@ -328,7 +331,8 @@ export default function GrowthView({
                       <ChevronRight className="w-4 h-4 text-slate-400" />
                     </div>
                   </div>
-                ))}
+                ))
+              )}
             </div>
           </div>
 

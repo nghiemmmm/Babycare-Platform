@@ -1,5 +1,6 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch } from "../lib/authClient";
 import {
   UserPlus,
   Mail,
@@ -18,9 +19,12 @@ import {
   Edit3,
   CheckCircle,
   Eye,
-  MessageSquare
+  MessageSquare,
+  LogOut
 } from "lucide-react";
 import { BabyProfile, Gender, Guardian } from "../types";
+import { DEFAULT_AVATAR_URL } from "../data";
+import { useAuth } from "../auth/AuthContext";
 
 interface ProfileViewProps {
   babies: BabyProfile[];
@@ -47,6 +51,8 @@ export default function ProfileView({
   onResendGuardian,
   onDeleteGuardian,
 }: ProfileViewProps) {
+  const auth = useAuth();
+  const userEmail = auth?.email ?? "";
   const activeBaby = babies.find((b) => b.isActive) || babies[0];
 
   // UI state toggles: viewing dashboard, editing existing, or creating new.
@@ -54,6 +60,7 @@ export default function ProfileView({
   // demographic bên dưới đọc trực tiếp activeBaby.* nên sẽ crash nếu không có bé nào cả.
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(!activeBaby);
+  const [isCaregiverMode, setIsCaregiverMode] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -65,15 +72,29 @@ export default function ProfileView({
   const [avatarUrl, setAvatarUrl] = useState(activeBaby?.avatarUrl ?? "");
   const [bloodType, setBloodType] = useState(activeBaby?.bloodType ?? "");
   const [pediatricianName, setPediatricianName] = useState(activeBaby?.pediatricianName ?? "");
-  const [allergies, setAllergies] = useState<string[]>(activeBaby?.allergies ?? []);
-  const [allergyInputText, setAllergyInputText] = useState("");
+  const [foodAllergies, setFoodAllergies] = useState<string[]>(
+    activeBaby?.foodAllergies ?? (activeBaby?.allergies ? activeBaby.allergies.filter((a) => !a.toLowerCase().includes("cillin") && !a.toLowerCase().includes("thuốc") && !a.toLowerCase().includes("kháng sinh")) : [])
+  );
+  const [medicationAllergies, setMedicationAllergies] = useState<string[]>(
+    activeBaby?.medicationAllergies ?? (activeBaby?.allergies ? activeBaby.allergies.filter((a) => a.toLowerCase().includes("cillin") || a.toLowerCase().includes("thuốc") || a.toLowerCase().includes("kháng sinh")) : [])
+  );
+  const [foodInputText, setFoodInputText] = useState("");
+  const [medInputText, setMedInputText] = useState("");
 
-  const addAllergyFromInput = () => {
-    const value = allergyInputText.trim();
-    if (value && !allergies.includes(value)) {
-      setAllergies((prev) => [...prev, value]);
+  const addFoodAllergy = (val?: string) => {
+    const value = (val || foodInputText).trim();
+    if (value && !foodAllergies.includes(value)) {
+      setFoodAllergies((prev) => [...prev, value]);
     }
-    setAllergyInputText("");
+    setFoodInputText("");
+  };
+
+  const addMedAllergy = (val?: string) => {
+    const value = (val || medInputText).trim();
+    if (value && !medicationAllergies.includes(value)) {
+      setMedicationAllergies((prev) => [...prev, value]);
+    }
+    setMedInputText("");
   };
 
   // Avatar upload: chọn file hoặc kéo thả (thay cho dán URL thủ công - dễ dán nhầm đường dẫn
@@ -122,28 +143,88 @@ export default function ProfileView({
       setAvatarUrl(activeBaby.avatarUrl || "");
       setBloodType(activeBaby.bloodType || "");
       setPediatricianName(activeBaby.pediatricianName || "");
-      setAllergies(activeBaby.allergies || []);
-      setAllergyInputText("");
+      const fAllergies = activeBaby.foodAllergies ?? (activeBaby.allergies ? activeBaby.allergies.filter((a) => !a.toLowerCase().includes("cillin") && !a.toLowerCase().includes("thuốc") && !a.toLowerCase().includes("kháng sinh")) : []);
+      const mAllergies = activeBaby.medicationAllergies ?? (activeBaby.allergies ? activeBaby.allergies.filter((a) => a.toLowerCase().includes("cillin") || a.toLowerCase().includes("thuốc") || a.toLowerCase().includes("kháng sinh")) : []);
+      setFoodAllergies(fAllergies);
+      setMedicationAllergies(mAllergies);
+      setFoodInputText("");
+      setMedInputText("");
     }
   }, [activeBaby, isCreating]);
+
+  // Real-time Activity Stream state
+  const [recentActivities, setRecentActivities] = useState<Array<{ id: string; user: string; action: string; time: string; color: string }>>([]);
+
+  useEffect(() => {
+    if (!activeBaby?.id) return;
+    let isMounted = true;
+    apiFetch(`/api/v1/care-coordination/overview?baby_id=${activeBaby.id}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isMounted || !data) return;
+        const events = data.recent_events || [];
+        const mapped = events.map((ev: any, idx: number) => {
+          const timeStr = ev.occurred_at ? new Date(ev.occurred_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "";
+          let action = "đã ghi nhận hoạt động";
+          let color = "bg-teal-50 text-teal-600";
+          if (ev.event_type === "feeding") {
+            const amt = ev.actual_value?.amount ? `${ev.actual_value.amount}ml ` : "";
+            const feedType = ev.actual_value?.feed_type === "Formula" ? "Sữa công thức" : (ev.actual_value?.feed_type === "Breast" ? "Sữa mẹ" : "");
+            action = `đã ghi nhận cữ bú ${amt}${feedType}`.trim();
+            color = "bg-sky-50 text-sky-600";
+          } else if (ev.event_type === "sleep") {
+            const dur = ev.actual_value?.duration_minutes ? ` (${ev.actual_value.duration_minutes} phút)` : "";
+            action = `đã ghi nhận giấc ngủ${dur}`;
+            color = "bg-purple-50 text-purple-600";
+          } else if (ev.event_type === "medication") {
+            const med = ev.actual_value?.medicine ? ` (${ev.actual_value.medicine})` : "";
+            action = `đã cho bé uống vi chất/thuốc${med}`;
+            color = "bg-rose-50 text-rose-600";
+          } else if (ev.event_type === "diaper") {
+            action = "đã thay tã sạch sẽ cho bé";
+            color = "bg-amber-50 text-amber-600";
+          } else if (ev.notes) {
+            action = ev.notes;
+          }
+          return {
+            id: ev.id || `act_${idx}`,
+            user: ev.recorded_by_name || ev.logged_by_name || "Người chăm sóc",
+            action,
+            time: timeStr || "Hôm nay",
+            color
+          };
+        });
+        setRecentActivities(mapped);
+      })
+      .catch((err) => {
+        console.error("Failed to load profile activities:", err);
+        if (isMounted) setRecentActivities([]);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeBaby?.id]);
 
   const handleSaveBaby = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveError(null);
     setIsSaving(true);
+    const combinedAllergies = Array.from(new Set([...foodAllergies, ...medicationAllergies]));
     try {
       if (isCreating) {
-        // Adding a brand new profile - chỉ thoát khỏi form khi API xác nhận thành công, tránh
-        // race lật sang view "xem hồ sơ" trước khi activeBaby thực sự tồn tại (từng crash app).
+        // Adding a brand new profile
         await onAddBaby({
           name: babyName || "Newborn Baby",
           birthDate: birthDate || new Date().toISOString().split("T")[0],
           gender: gender,
-          avatarUrl: avatarUrl || "/static/img/leo.png",
+          avatarUrl: avatarUrl || DEFAULT_AVATAR_URL,
           isActive: true,
           bloodType: bloodType || undefined,
           pediatricianName: pediatricianName || undefined,
-          allergies
+          allergies: combinedAllergies,
+          foodAllergies,
+          medicationAllergies
         });
         setIsCreating(false);
         setIsEditing(false);
@@ -157,7 +238,9 @@ export default function ProfileView({
           avatarUrl,
           bloodType,
           pediatricianName,
-          allergies
+          allergies: combinedAllergies,
+          foodAllergies,
+          medicationAllergies
         });
         setIsEditing(false);
       }
@@ -176,8 +259,10 @@ export default function ProfileView({
     setAvatarUrl("");
     setBloodType("");
     setPediatricianName("");
-    setAllergies([]);
-    setAllergyInputText("");
+    setFoodAllergies([]);
+    setMedicationAllergies([]);
+    setFoodInputText("");
+    setMedInputText("");
     setIsCreating(true);
     setIsEditing(false);
   };
@@ -227,7 +312,17 @@ export default function ProfileView({
   const handleResendInvite = async (id: string) => {
     setResendingId(id);
     try {
-      await onResendGuardian(id);
+      if (typeof onResendGuardian === "function") {
+        await onResendGuardian(id);
+      } else if (activeBaby?.id) {
+        const res = await apiFetch(`/api/v1/guardians/${id}/resend?baby_id=${activeBaby.id}`, {
+          method: "POST"
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || "Gửi lại lời mời thất bại, vui lòng thử lại.");
+        }
+      }
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Gửi lại lời mời thất bại, vui lòng thử lại.");
     } finally {
@@ -266,32 +361,53 @@ export default function ProfileView({
                 onSelectBaby(baby.id);
                 setIsEditing(false);
                 setIsCreating(false);
+                setIsCaregiverMode(false);
               }}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                baby.isActive && !isCreating
+                baby.isActive && !isCreating && !isCaregiverMode
                   ? "bg-primary text-white shadow-xs"
                   : "bg-white/60 text-slate-500 border border-white/20 hover:bg-white/80"
               }`}
             >
-              {baby.name} {baby.isActive && !isCreating && "• Đang chọn"}
+              {baby.name} {baby.isActive && !isCreating && !isCaregiverMode && "• Đang chọn"}
             </button>
           ))}
 
           <button
-            onClick={handleStartCreation}
+            onClick={() => {
+              handleStartCreation();
+              setIsCaregiverMode(false);
+            }}
             className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-              isCreating
+              isCreating && !isCaregiverMode
                 ? "bg-primary text-white border-primary"
                 : "border-dashed border-slate-300 text-slate-500 hover:text-slate-800"
             }`}
           >
             <UserPlus className="w-3.5 h-3.5" />
-            Thêm bé mới
+            {babies.length === 0 ? "Tạo hồ sơ bé mới" : "Thêm bé mới"}
           </button>
+
+          {!activeBaby && (
+            <button
+              onClick={() => {
+                setIsCreating(false);
+                setIsCaregiverMode(true);
+              }}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                isCaregiverMode
+                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                  : "border-dashed border-emerald-300 text-emerald-700 bg-emerald-50/50 hover:bg-emerald-100/50"
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              Chế độ Người chăm sóc
+            </button>
+          )}
         </div>
 
         {/* Global edit toggle button */}
-        {!isCreating && (
+        {!isCreating && !isCaregiverMode && activeBaby && (
           <button
             onClick={() => setIsEditing(!isEditing)}
             className="inline-flex items-center gap-1.5 bg-white/60 hover:bg-white/80 border border-white/30 px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-600 transition-all cursor-pointer"
@@ -328,7 +444,7 @@ export default function ProfileView({
                   {/* Avatar circular frame with soft double border */}
                   <div className="w-24 h-24 rounded-full p-1 border-2 border-white/40 ring-4 ring-primary/10 overflow-hidden shrink-0">
                     <img
-                      src={activeBaby.avatarUrl || "/static/img/leo.png"}
+                      src={activeBaby.avatarUrl || DEFAULT_AVATAR_URL}
                       alt={activeBaby.name}
                       className="w-full h-full rounded-full object-cover"
                     />
@@ -382,25 +498,60 @@ export default function ProfileView({
                   </div>
                 </div>
 
-                {/* Allergies and medical history block */}
-                <div className="p-4 bg-red-50/50 border border-red-100 rounded-2xl space-y-2">
-                  <span className="text-[10px] font-bold text-red-800 uppercase tracking-wider flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    Dị ứng & Cảnh báo Y khoa
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {activeBaby.allergies && activeBaby.allergies.length > 0 ? (
-                      activeBaby.allergies.map((item) => (
-                        <span
-                          key={item}
-                          className="px-3 py-1 bg-red-100 border border-red-200 text-red-700 font-bold rounded-full text-[10px] cursor-default"
-                        >
-                          {item}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-[11px] text-slate-400 font-semibold">Chưa ghi nhận dị ứng nào.</span>
-                    )}
+                {/* Allergies Split Block: Food & Medication */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Food Allergies */}
+                  <div className="p-3.5 bg-amber-50/60 border border-amber-200/70 rounded-2xl space-y-2">
+                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                      🥗 Dị ứng Thực phẩm & Sữa (Dinh dưỡng)
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(() => {
+                        const fList = activeBaby.foodAllergies && activeBaby.foodAllergies.length > 0
+                          ? activeBaby.foodAllergies
+                          : (activeBaby.allergies ? activeBaby.allergies.filter((a) => !a.toLowerCase().includes("cillin") && !a.toLowerCase().includes("thuốc") && !a.toLowerCase().includes("kháng sinh")) : []);
+                        
+                        return fList.length > 0 ? (
+                          fList.map((item) => (
+                            <span
+                              key={item}
+                              className="px-2.5 py-0.5 bg-amber-100/90 border border-amber-200 text-amber-800 font-semibold rounded-full text-[10px]"
+                            >
+                              ⚠️ {item}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-normal">Chưa ghi nhận dị ứng thực phẩm.</span>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Medication Allergies */}
+                  <div className="p-3.5 bg-rose-50/60 border border-rose-200/70 rounded-2xl space-y-2">
+                    <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider flex items-center gap-1.5">
+                      💊 Dị ứng Thuốc & Kháng sinh (Sức khỏe)
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(() => {
+                        const mList = activeBaby.medicationAllergies && activeBaby.medicationAllergies.length > 0
+                          ? activeBaby.medicationAllergies
+                          : (activeBaby.allergies ? activeBaby.allergies.filter((a) => a.toLowerCase().includes("cillin") || a.toLowerCase().includes("thuốc") || a.toLowerCase().includes("kháng sinh")) : []);
+
+                        return mList.length > 0 ? (
+                          mList.map((item) => (
+                            <span
+                              key={item}
+                              className="px-2.5 py-0.5 bg-rose-100/90 border border-rose-200 text-rose-800 font-semibold rounded-full text-[10px]"
+                            >
+                              🚨 {item}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-normal">Chưa ghi nhận dị ứng thuốc.</span>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -408,36 +559,35 @@ export default function ProfileView({
               {/* Real-time Activity stream */}
               <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
                 <div className="flex items-center justify-between border-b border-white/20 pb-2">
-                  <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
+                  <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
                     <Clock className="w-4.5 h-4.5 text-slate-400" />
                     Dòng hoạt động thời gian thực
                   </h3>
-                  <a href="#activity-log" className="text-[10px] font-bold text-primary hover:underline">
-                    Xem lịch sử
-                  </a>
                 </div>
 
-                <div className="space-y-3">
-                  {[
-                    { user: "Mẹ Elena", action: "đã ghi nhận cữ sữa công thức 180ml", time: "5 phút trước", color: "bg-sky-50 text-sky-500" },
-                    { user: "Bố David", action: "đã bắt đầu tính giờ ngủ", time: "20 phút trước", color: "bg-purple-50 text-purple-500" },
-                    { user: "Bảo mẫu Maria", action: "đã ghi nhận giọt Vitamin D3", time: "1 giờ trước", color: "bg-emerald-50 text-emerald-500" }
-                  ].map((act, idx) => (
-                    <div key={idx} className="p-3 bg-white/40 border border-white/20 rounded-2xl flex items-center justify-between gap-3 text-xs">
-                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${act.color}`}>
-                          {act.user.charAt(0)}
+                {recentActivities.length > 0 ? (
+                  <div className="space-y-3">
+                    {recentActivities.map((act) => (
+                      <div key={act.id} className="p-3 bg-white/40 border border-white/20 rounded-2xl flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${act.color}`}>
+                            {act.user.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-700">
+                              <span className="font-bold text-slate-800">{act.user}</span> {act.action}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold text-slate-700">
-                            <span className="font-bold text-slate-800">{act.user}</span> {act.action}
-                          </p>
-                        </div>
+                        <span className="text-[10px] font-medium text-slate-400">{act.time}</span>
                       </div>
-                      <span className="text-[9px] font-bold text-slate-400">{act.time}</span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-slate-400 text-xs font-medium">
+                    Chưa có hoạt động nào được ghi nhận hôm nay cho bé {activeBaby.name}.
+                  </div>
+                )}
               </div>
 
             </div>
@@ -448,7 +598,7 @@ export default function ProfileView({
               {/* Caregivers panel */}
               <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
                 <div className="flex items-center justify-between border-b border-white/20 pb-2">
-                  <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
+                  <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
                     <Users className="w-4.5 h-4.5 text-primary" />
                     Vòng kết nối người chăm sóc
                   </h3>
@@ -537,6 +687,79 @@ export default function ProfileView({
             </div>
 
           </motion.div>
+        ) : isCaregiverMode && !activeBaby ? (
+          // VIEW 3: Caregiver Waiting mode when user has no babies yet
+          <motion.div
+            key="caregiver-waiting-view"
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-8 max-w-xl mx-auto space-y-6 text-center"
+          >
+            <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center mx-auto shadow-xs">
+              <Users className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold text-slate-800">
+                Vòng kết nối Người chăm sóc bé
+              </h3>
+              <p className="text-xs text-slate-500 font-medium max-w-md mx-auto leading-relaxed">
+                Chào mừng bạn đến với BabyCare! Nếu bạn là người thân, bảo mẫu hoặc người giám hộ phụ, bạn không cần phải tự tạo hồ sơ bé mới.
+              </p>
+            </div>
+
+            <div className="p-4 bg-emerald-50/70 border border-emerald-100 rounded-2xl text-left space-y-2.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-800">
+                <Heart className="w-4 h-4 text-emerald-600 animate-pulse" />
+                Hướng dẫn kết nối với gia đình:
+              </div>
+              <ul className="text-xs text-slate-600 space-y-2 list-disc list-inside font-medium leading-relaxed">
+                <li>Nhờ phụ huynh mở ứng dụng và vào mục <b>Hồ sơ em bé</b>.</li>
+                <li>
+                  Bấm <b>"Mời thành viên gia đình"</b> và nhập địa chỉ email của bạn:{" "}
+                  <span className="font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-lg border border-emerald-200 inline-block mt-0.5">
+                    {userEmail || "email tài khoản của bạn"}
+                  </span>
+                </li>
+                <li>Kiểm tra hộp thư đến để chấp nhận lời mời, hoặc bấm nút kiểm tra bên dưới.</li>
+              </ul>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-full font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Kiểm tra & Làm mới dữ liệu
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCaregiverMode(false);
+                  setIsCreating(true);
+                }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white/80 hover:bg-white border border-slate-200 text-slate-700 px-5 py-2.5 rounded-full font-bold text-xs shadow-xs transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4 text-primary" />
+                Tự tạo hồ sơ bé
+              </button>
+
+              {auth?.logout && (
+                <button
+                  type="button"
+                  onClick={() => auth.logout()}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 px-5 py-2.5 rounded-full font-bold text-xs transition-all cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Đăng xuất / Thoát
+                </button>
+              )}
+            </div>
+          </motion.div>
         ) : (
 
           // VIEW 2: Edit or Create Baby Profile view
@@ -582,7 +805,7 @@ export default function ProfileView({
                   }`}
                 >
                   <img
-                    src={avatarUrl || "/static/img/leo.png"}
+                    src={avatarUrl || DEFAULT_AVATAR_URL}
                     alt={babyName || "Preview"}
                     className="w-20 h-20 rounded-full object-cover border-2 border-white/40 shadow-sm"
                   />
@@ -700,67 +923,161 @@ export default function ProfileView({
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block">Dị ứng & Cảnh báo Y khoa</label>
-                {allergies.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pb-1">
-                    {allergies.map((item) => (
-                      <span
-                        key={item}
-                        className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 border border-red-200 text-red-700 font-bold rounded-full text-[10px]"
+              {/* SEPARATED ALLERGIES INPUTS */}
+              <div className="space-y-4 pt-1">
+                {/* 1. Food Allergies */}
+                <div className="space-y-2 p-3.5 bg-amber-50/40 border border-amber-200/60 rounded-2xl">
+                  <label className="block text-xs font-bold text-amber-900">
+                    🥗 Dị ứng Thực Phẩm & Sữa (Áp dụng cho Dinh dưỡng)
+                  </label>
+                  
+                  {/* Preset quick buttons */}
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    <span className="text-[11px] text-slate-500 font-medium">Gợi ý nhanh:</span>
+                    {["Đậu nành", "Sữa bò", "Lòng trắng trứng", "Hải sản", "Đậu phộng", "Gluten / Bột mì"].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => addFoodAllergy(preset)}
+                        className="text-[11px] px-2 py-0.5 bg-white hover:bg-amber-100 text-slate-700 border border-amber-200 rounded-lg cursor-pointer transition-all"
                       >
-                        {item}
-                        <button
-                          type="button"
-                          onClick={() => setAllergies((prev) => prev.filter((a) => a !== item))}
-                          className="text-red-500 hover:text-red-700 cursor-pointer"
-                          aria-label={`Xoá ${item}`}
-                        >
-                          ×
-                        </button>
-                      </span>
+                        + {preset}
+                      </button>
                     ))}
                   </div>
-                )}
-                <input
-                  type="text"
-                  value={allergyInputText}
-                  onChange={(e) => setAllergyInputText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === ",") {
-                      e.preventDefault();
-                      addAllergyFromInput();
-                    }
-                  }}
-                  onBlur={addAllergyFromInput}
-                  placeholder="Nhập tên dị ứng rồi nhấn Enter (vd: Sữa bò, Đậu phộng)"
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-primary/40 focus:bg-white focus:outline-hidden rounded-xl px-3.5 py-2 text-sm text-slate-800 font-medium"
-                />
+
+                  {foodAllergies.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {foodAllergies.map((item) => (
+                        <span
+                          key={item}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 border border-amber-200 text-amber-800 font-semibold rounded-full text-xs"
+                        >
+                          ⚠️ {item}
+                          <button
+                            type="button"
+                            onClick={() => setFoodAllergies((prev) => prev.filter((a) => a !== item))}
+                            className="text-amber-600 hover:text-amber-900 cursor-pointer ml-0.5 font-bold"
+                            aria-label={`Xoá ${item}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <input
+                    type="text"
+                    value={foodInputText}
+                    onChange={(e) => setFoodInputText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        addFoodAllergy();
+                      }
+                    }}
+                    onBlur={() => addFoodAllergy()}
+                    placeholder="Nhập món dị ứng rồi nhấn Enter (vd: Thịt bò, Tôm, Hạt phỉ...)"
+                    className="w-full bg-white border border-slate-200 focus:border-primary/40 focus:outline-hidden rounded-xl px-3 py-2 text-xs text-slate-800 font-medium"
+                  />
+                </div>
+
+                {/* 2. Medication Allergies */}
+                <div className="space-y-2 p-3.5 bg-rose-50/40 border border-rose-200/60 rounded-2xl">
+                  <label className="block text-xs font-bold text-rose-900">
+                    💊 Dị ứng Thuốc & Kháng Sinh (Áp dụng cho Sức khỏe & Đơn thuốc)
+                  </label>
+
+                  {/* Preset quick buttons */}
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    <span className="text-[11px] text-slate-500 font-medium">Gợi ý nhanh:</span>
+                    {["Penicillin", "Augmentin", "Cephalosporin", "Ibuprofen / NSAID", "Paracetamol", "Sulfamide"].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => addMedAllergy(preset)}
+                        className="text-[11px] px-2 py-0.5 bg-white hover:bg-rose-100 text-slate-700 border border-rose-200 rounded-lg cursor-pointer transition-all"
+                      >
+                        + {preset}
+                      </button>
+                    ))}
+                  </div>
+
+                  {medicationAllergies.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {medicationAllergies.map((item) => (
+                        <span
+                          key={item}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-100 border border-rose-200 text-rose-800 font-semibold rounded-full text-xs"
+                        >
+                          🚨 {item}
+                          <button
+                            type="button"
+                            onClick={() => setMedicationAllergies((prev) => prev.filter((a) => a !== item))}
+                            className="text-rose-600 hover:text-rose-900 cursor-pointer ml-0.5 font-bold"
+                            aria-label={`Xoá ${item}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <input
+                    type="text"
+                    value={medInputText}
+                    onChange={(e) => setMedInputText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        addMedAllergy();
+                      }
+                    }}
+                    onBlur={() => addMedAllergy()}
+                    placeholder="Nhập tên thuốc dị ứng rồi nhấn Enter (vd: Kháng sinh Penicillin, Ibuprofen...)"
+                    className="w-full bg-white border border-slate-200 focus:border-primary/40 focus:outline-hidden rounded-xl px-3 py-2 text-xs text-slate-800 font-medium"
+                  />
+                </div>
               </div>
 
-              <div className="pt-4 border-t border-white/20 flex items-center justify-between">
+              <div className="pt-4 border-t border-white/20 flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="submit"
                   disabled={isSaving || isUploadingAvatar}
-                  className="bg-primary hover:bg-primary/95 text-white px-5 py-2.5 rounded-full font-bold transition-all shadow-md shadow-primary/20 cursor-pointer disabled:opacity-60"
+                  className="bg-primary hover:bg-primary/95 text-white px-5 py-2.5 rounded-full font-bold transition-all shadow-md shadow-primary/20 cursor-pointer disabled:opacity-60 text-xs"
                 >
                   {isSaving ? "Đang lưu…" : isCreating ? "Tạo Hồ sơ em bé" : "Lưu chi tiết hồ sơ"}
                 </button>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                   {/* Chỉ cho xoá khi đang sửa một bé đã tồn tại, không phải lúc tạo mới */}
                   {!isCreating && activeBaby && (
                     <button
                       type="button"
                       onClick={handleDeleteBaby}
                       disabled={isSaving}
-                      className="inline-flex items-center gap-1.5 text-rose-500 hover:text-rose-600 font-bold cursor-pointer disabled:opacity-60"
+                      className="inline-flex items-center gap-1.5 text-rose-500 hover:text-rose-600 font-bold cursor-pointer disabled:opacity-60 text-xs"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       Xoá hồ sơ
                     </button>
                   )}
-                  {/* Chưa có bé nào thì không có "hồ sơ trước đó" để quay lại xem - ẩn nút Hủy
-                      để tránh lật sang view dashboard demographic vốn đọc thẳng activeBaby.* */}
+                  {/* Chưa có bé nào: hiển thị nút Bỏ qua cho người chăm sóc */}
+                  {!activeBaby && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCreating(false);
+                        setIsCaregiverMode(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-slate-200 bg-white/70 hover:bg-white text-slate-600 hover:text-emerald-700 font-bold text-xs shadow-2xs transition-all cursor-pointer"
+                    >
+                      <Users className="w-3.5 h-3.5 text-emerald-600" />
+                      Tôi là người chăm sóc (Bỏ qua tạo em bé)
+                    </button>
+                  )}
+                  {/* Đã có bé: hiển thị nút Hủy để quay lại view xem hồ sơ */}
                   {activeBaby && (
                     <button
                       type="button"
@@ -768,7 +1085,7 @@ export default function ProfileView({
                         setIsCreating(false);
                         setIsEditing(false);
                       }}
-                      className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                      className="text-slate-400 hover:text-slate-600 cursor-pointer text-xs"
                     >
                       Hủy
                     </button>
@@ -849,9 +1166,9 @@ export default function ProfileView({
                     onChange={(e) => setInviteRole(e.target.value as any)}
                     className="w-full bg-slate-50 border border-slate-200 focus:border-primary/45 rounded-xl px-3 py-2 font-medium"
                   >
-                    <option value="GUARDIAN">Người chăm sóc (Được chỉnh sửa nhật ký)</option>
-                    <option value="ADMIN">Đồng quản trị (Toàn quyền quản lý)</option>
-                    <option value="VIEWER">Người xem (Chỉ xem dữ liệu)</option>
+                    <option value="GUARDIAN">Người chăm sóc</option>
+                    <option value="ADMIN">Đồng quản trị</option>
+                    <option value="VIEWER">Người xem</option>
                   </select>
                 </div>
 

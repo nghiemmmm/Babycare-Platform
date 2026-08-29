@@ -77,13 +77,25 @@ async def get_measurements(
     results = []
     for log in history:
         age_m = log.who_status.age_in_months if log.who_status else 0.0
+        status_text = "Normal"
+        if log.who_status:
+            if log.who_status.height_status == "stunted":
+                status_text = "Height Alert (Risk of Stunting)"
+            elif log.who_status.weight_status == "underweight":
+                status_text = "Weight Alert (Underweight)"
+            elif log.who_status.weight_status == "overweight":
+                status_text = "Weight Alert (Overweight)"
+            elif log.who_status.height_status == "tall":
+                status_text = "Height (Tall)"
+
         results.append(MeasurementResponse(
             id=log.id or "",
             age_months=age_m,
             weight=log.weight,
             height=log.height,
             head_circumference=log.head_circumference,
-            date=log.logged_at[:10]  # Trả về YYYY-MM-DD
+            date=log.logged_at[:10],  # Trả về YYYY-MM-DD
+            status=status_text
         ))
     return results
 

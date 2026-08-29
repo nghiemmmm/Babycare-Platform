@@ -117,19 +117,20 @@ export default function FeedingLogView({
   const formulaMl = filteredFeeds.filter((f) => f.type === "Formula").reduce((acc, f) => acc + f.amount, 0);
 
   // Nutritional Adequacy & Macronutrient Ratio Estimation (Chuẩn WHO/RDA)
-  const proteinPct = Math.min(100, Math.max(40, Math.round(((totalMilk * 0.015) + (solidsCount * 4)) / 18 * 100))) || 85;
-  const fatPct = Math.min(100, Math.max(45, Math.round(((totalMilk * 0.035) + (solidsCount * 3)) / 25 * 100))) || 90;
-  const carbsPct = Math.min(100, Math.max(50, Math.round(((totalMilk * 0.07) + (solidsCount * 15)) / 80 * 100))) || 88;
-  const fiberPct = Math.min(100, Math.max(30, Math.round((solidsCount * 3.5) / 5 * 100))) || (solidsCount > 0 ? 80 : 45);
+  const hasFeeds = filteredFeeds.length > 0;
+  const proteinPct = hasFeeds ? Math.min(100, Math.max(5, Math.round(((totalMilk * 0.015) + (solidsCount * 4)) / 18 * 100))) : 0;
+  const fatPct = hasFeeds ? Math.min(100, Math.max(5, Math.round(((totalMilk * 0.035) + (solidsCount * 3)) / 25 * 100))) : 0;
+  const carbsPct = hasFeeds ? Math.min(100, Math.max(5, Math.round(((totalMilk * 0.07) + (solidsCount * 15)) / 80 * 100))) : 0;
+  const fiberPct = hasFeeds ? Math.min(100, Math.max(5, Math.round((solidsCount * 3.5) / 5 * 100))) : 0;
 
-  const isNutritionalBalanced = proteinPct >= 75 && fatPct >= 75 && carbsPct >= 75;
+  const isNutritionalBalanced = hasFeeds && proteinPct >= 75 && fatPct >= 75 && carbsPct >= 75;
 
   // Pie chart dataset for ratio breakdown
   const pieData = [
-    { name: "Sữa mẹ", value: breastMl || (formulaMl ? 0 : 350), color: "#38bdf8" },
-    { name: "Sữa công thức", value: formulaMl || (breastMl ? 0 : 400), color: "#1c648e" },
-    { name: "Ăn dặm (ml quy đổi)", value: solidsCount * 120 || 120, color: "#f59e0b" }
-  ].filter(d => d.value > 0);
+    ...(breastMl > 0 ? [{ name: "Sữa mẹ", value: breastMl, color: "#38bdf8" }] : []),
+    ...(formulaMl > 0 ? [{ name: "Sữa công thức", value: formulaMl, color: "#1c648e" }] : []),
+    ...(solidsCount > 0 ? [{ name: "Ăn dặm (ml quy đổi)", value: solidsCount * 120, color: "#f59e0b" }] : [])
+  ];
 
   const todaysMilkFeeds = filteredFeeds
     .filter((f) => f.type !== "Solids")
@@ -226,9 +227,9 @@ export default function FeedingLogView({
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-primary font-bold text-2xl tracking-tight">Nhật ký Ăn uống</h1>
-          <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-[9px] font-bold">
-            Đồng bộ Gia đình Hoạt động
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Nhật ký ăn uống</h1>
+          <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-xs font-bold">
+            Đồng bộ gia đình
           </span>
         </div>
 
@@ -273,7 +274,7 @@ export default function FeedingLogView({
             className="inline-flex items-center gap-1.5 bg-white/60 border border-white/30 text-slate-700 hover:bg-white/80 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
           >
             <FileDown className="w-3.5 h-3.5" />
-            Xuất Nhật ký
+            Xuất nhật ký
           </button>
 
           <button
@@ -293,7 +294,7 @@ export default function FeedingLogView({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="p-2 bg-amber-100 rounded-xl text-amber-800 text-xs font-bold">🥣 AI Y Khoa</span>
-              <h4 className="text-xs font-black text-amber-950">AI Đánh Giá Sẵn Sàng Chuyển Sang Ăn Dặm</h4>
+              <h4 className="text-xs font-black text-amber-950">AI đánh giá sẵn sàng chuyển sang ăn dặm</h4>
             </div>
             <span className="text-[10px] font-extrabold bg-amber-200/70 text-amber-900 px-2.5 py-0.5 rounded-full">
               Khuyến cáo Y tế WHO ({ageInMonths} Tháng)
@@ -315,7 +316,7 @@ export default function FeedingLogView({
               }}
               className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
-              ✨ AI Gợi Ý Thực Đơn & Ghi Nhận Ăn Dặm
+              ✨ AI gợi ý thực đơn & ghi nhận ăn dặm
             </button>
           </div>
         </div>
@@ -325,17 +326,21 @@ export default function FeedingLogView({
       <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
           <div>
-            <h3 className="text-primary font-bold text-xs uppercase tracking-wider text-slate-500 flex items-center gap-2">
+            <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-emerald-500" />
-              Đánh Giá Tỷ Lệ Đảm Bảo Chất Dinh Dưỡng (Chuẩn WHO/RDA)
+              Đánh giá tỷ lệ chất dinh dưỡng (Chuẩn WHO/RDA)
             </h3>
-            <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
               Mức độ đáp ứng nhu cầu năng lượng và vi chất cho bé {activeBaby.name} ({ageInMonths} tháng tuổi)
             </p>
           </div>
 
           <div className="self-start sm:self-auto">
-            {isNutritionalBalanced ? (
+            {!hasFeeds ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-200 text-slate-600 rounded-full text-xs font-bold">
+                🌱 Chưa có nhật ký dinh dưỡng
+              </span>
+            ) : isNutritionalBalanced ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full text-xs font-bold">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                 🟢 Đạt Cân Bằng Dinh Dưỡng Chuẩn WHO
@@ -355,55 +360,55 @@ export default function FeedingLogView({
           <div className="p-3.5 bg-rose-50/50 border border-rose-100/80 rounded-2xl space-y-2">
             <div className="flex items-center justify-between text-xs font-bold text-rose-950">
               <span className="flex items-center gap-1.5">🥩 Chất Đạm (Protein)</span>
-              <span className="text-rose-700">{proteinPct}%</span>
+              <span className="text-rose-700 font-black">{proteinPct}%</span>
             </div>
             <div className="w-full bg-rose-100/60 h-2 rounded-full overflow-hidden">
               <div className="bg-rose-500 h-full rounded-full transition-all duration-500" style={{ width: `${proteinPct}%` }} />
             </div>
-            <p className="text-[10px] text-rose-800/80 font-medium">Từ sữa, thịt/cá nghiền & lòng đỏ trứng</p>
+            <p className="text-[11px] text-rose-800/80 font-medium">Từ sữa, thịt/cá nghiền & lòng đỏ trứng</p>
           </div>
 
           {/* 2. Healthy Fats */}
           <div className="p-3.5 bg-amber-50/50 border border-amber-100/80 rounded-2xl space-y-2">
             <div className="flex items-center justify-between text-xs font-bold text-amber-950">
               <span className="flex items-center gap-1.5">🥑 Chất Béo (Fat/Lipid)</span>
-              <span className="text-amber-700">{fatPct}%</span>
+              <span className="text-amber-700 font-black">{fatPct}%</span>
             </div>
             <div className="w-full bg-amber-100/60 h-2 rounded-full overflow-hidden">
               <div className="bg-amber-500 h-full rounded-full transition-all duration-500" style={{ width: `${fatPct}%` }} />
             </div>
-            <p className="text-[10px] text-amber-800/80 font-medium">Từ sữa mẹ, sữa CT & dầu bơ dầm</p>
+            <p className="text-[11px] text-amber-800/80 font-medium">Từ sữa mẹ, sữa CT & dầu bơ dầm</p>
           </div>
 
           {/* 3. Carbohydrates */}
           <div className="p-3.5 bg-sky-50/50 border border-sky-100/80 rounded-2xl space-y-2">
             <div className="flex items-center justify-between text-xs font-bold text-sky-950">
               <span className="flex items-center gap-1.5">🌾 Tinh Bột (Carbs)</span>
-              <span className="text-sky-700">{carbsPct}%</span>
+              <span className="text-sky-700 font-black">{carbsPct}%</span>
             </div>
             <div className="w-full bg-sky-100/60 h-2 rounded-full overflow-hidden">
               <div className="bg-sky-500 h-full rounded-full transition-all duration-500" style={{ width: `${carbsPct}%` }} />
             </div>
-            <p className="text-[10px] text-sky-800/80 font-medium">Từ cháo rây 1:10, yến mạch & khoai lang</p>
+            <p className="text-[11px] text-sky-800/80 font-medium">Từ cháo rây 1:10, yến mạch & khoai lang</p>
           </div>
 
           {/* 4. Fiber & Micronutrients */}
           <div className="p-3.5 bg-emerald-50/50 border border-emerald-100/80 rounded-2xl space-y-2">
             <div className="flex items-center justify-between text-xs font-bold text-emerald-950">
               <span className="flex items-center gap-1.5">🥦 Chất Xơ & Vitamin</span>
-              <span className="text-emerald-700">{fiberPct}%</span>
+              <span className="text-emerald-700 font-black">{fiberPct}%</span>
             </div>
             <div className="w-full bg-emerald-100/60 h-2 rounded-full overflow-hidden">
               <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${fiberPct}%` }} />
             </div>
-            <p className="text-[10px] text-emerald-800/80 font-medium">Từ bí đỏ, súp lơ & trái cây dầm</p>
+            <p className="text-[11px] text-emerald-800/80 font-medium">Từ bí đỏ, súp lơ & trái cây dầm</p>
           </div>
         </div>
       </div>
 
       {/* Feeding Log Summary Cards & Recharts Pie Chart Grid */}
       <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-6">
-        <h3 className="text-primary font-bold text-xs uppercase tracking-wider text-slate-500">
+        <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
           Tổng quan Dinh dưỡng ({dateFilter === "today" ? "Hôm nay" : dateFilter === "yesterday" ? "Hôm qua" : dateFilter === "7days" ? "7 ngày qua" : "Tất cả"})
         </h3>
 
@@ -415,12 +420,12 @@ export default function FeedingLogView({
             {isInfant && (
               <div className="bg-white/40 border border-white/20 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase">Lượng sữa dùng</span>
+                  <span className="text-xs text-slate-500 font-bold">Lượng sữa dùng</span>
                   <Droplet className="w-4.5 h-4.5 text-sky-500" />
                 </div>
                 <div>
-                  <h4 className="text-xl font-bold text-primary">{totalMilk} / 800 ml</h4>
-                  <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Mục tiêu: 800ml mỗi ngày</p>
+                  <h4 className="text-xl sm:text-2xl font-black text-slate-900">{totalMilk} / 800 ml</h4>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">Mục tiêu: 800ml mỗi ngày</p>
                 </div>
                 <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                   <div
@@ -434,14 +439,14 @@ export default function FeedingLogView({
             {/* Solids Card */}
             <div className="bg-white/40 border border-white/20 rounded-2xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-500 font-bold uppercase">
+                <span className="text-xs text-slate-500 font-bold">
                   {isInfant ? "Cữ ăn dặm" : "Bữa ăn hôm nay"}
                 </span>
                 <Apple className="w-4.5 h-4.5 text-amber-500" />
               </div>
               <div>
-                <h4 className="text-xl font-bold text-primary">{solidsCount} / 3 Bữa</h4>
-                <p className="text-[9px] text-slate-400 font-semibold mt-0.5">
+                <h4 className="text-xl sm:text-2xl font-black text-slate-900">{solidsCount} / 3 Bữa</h4>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
                   {isInfant ? "Mục tiêu: 3 bữa nhẹ" : "Mục tiêu: 3 bữa chính"}
                 </p>
               </div>
@@ -457,12 +462,12 @@ export default function FeedingLogView({
             {isInfant && (
               <div className="bg-white/40 border border-white/20 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase">Cữ bú tiếp theo</span>
+                  <span className="text-xs text-slate-500 font-bold">Cữ bú tiếp theo</span>
                   <Clock className="w-4.5 h-4.5 text-primary animate-pulse" />
                 </div>
                 <div>
-                  <h4 className="text-xl font-bold text-primary">{nextFeedLabel}</h4>
-                  <p className="text-[9px] text-slate-400 font-semibold mt-0.5">{nextFeedSubLabel}</p>
+                  <h4 className="text-xl sm:text-2xl font-black text-slate-900">{nextFeedLabel}</h4>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">{nextFeedSubLabel}</p>
                 </div>
                 <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                   <div
@@ -478,41 +483,49 @@ export default function FeedingLogView({
           <div className="bg-white/40 border border-white/20 rounded-2xl p-4 flex flex-col items-center justify-center space-y-2">
             <div className="flex items-center gap-1.5 self-start">
               <PieChartIcon className="w-4 h-4 text-[#1c648e]" />
-              <span className="text-[10px] text-slate-500 font-bold uppercase">Tỷ lệ Nguồn Dinh Dưỡng</span>
+              <span className="text-xs text-slate-500 font-bold">Tỷ lệ nguồn dinh dưỡng</span>
             </div>
 
-            <div className="w-full h-[120px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={30}
-                    outerRadius={50}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(val: any) => [`${val} ml`, "Lượng nạp"]}
-                    contentStyle={{ borderRadius: "10px", fontSize: "10px", fontWeight: "bold" }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="flex items-center justify-center gap-3 text-[10px] font-bold text-slate-600 flex-wrap">
-              {pieData.map((d) => (
-                <div key={d.name} className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                  <span>{d.name}</span>
+            {pieData.length > 0 ? (
+              <>
+                <div className="w-full h-[120px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={30}
+                        outerRadius={50}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(val: any) => [`${val} ml`, "Lượng nạp"]}
+                        contentStyle={{ borderRadius: "10px", fontSize: "10px", fontWeight: "bold" }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              ))}
-            </div>
+
+                <div className="flex items-center justify-center gap-3 text-[11px] font-bold text-slate-600 flex-wrap">
+                  {pieData.map((d) => (
+                    <div key={d.name} className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                      <span>{d.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="w-full h-[120px] flex items-center justify-center text-slate-400 text-xs font-medium text-center px-4">
+                Chưa có dữ liệu cữ ăn trong mốc thời gian này
+              </div>
+            )}
           </div>
 
         </div>
@@ -521,8 +534,8 @@ export default function FeedingLogView({
       {/* Timeline Stream */}
       <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
         <div className="flex items-center justify-between border-b border-white/20 pb-3">
-          <h3 className="text-primary font-bold text-xs uppercase tracking-wider text-slate-500">
-            Dòng thời gian Dinh dưỡng ({dateFilter === "today" ? "Hôm nay" : dateFilter === "yesterday" ? "Hôm qua" : dateFilter === "7days" ? "7 ngày qua" : "Tất cả"})
+          <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+            Dòng thời gian dinh dưỡng ({dateFilter === "today" ? "Hôm nay" : dateFilter === "yesterday" ? "Hôm qua" : dateFilter === "7days" ? "7 ngày qua" : "Tất cả"})
           </h3>
           <span className="text-xs font-bold text-slate-400">
             Hiển thị <span className="text-[#1c648e] font-black">{filteredFeeds.length}</span> cữ ăn/bú
@@ -538,17 +551,17 @@ export default function FeedingLogView({
                 <span className="absolute -left-[30.5px] top-1 w-2.5 h-2.5 rounded-full ring-4 bg-primary ring-primary/10" />
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-400 font-bold">{feed.time}</span>
-                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                      feed.type === "Solids" ? "bg-amber-50 text-amber-600 border border-amber-100" : "bg-sky-50 text-sky-600 border border-sky-100"
+                    <span className="text-xs text-slate-400 font-bold">{feed.time}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      feed.type === "Solids" ? "bg-amber-50 text-amber-700 border border-amber-100" : "bg-sky-50 text-sky-700 border border-sky-100"
                     }`}>
                       {feed.type === "Solids" ? "Ăn dặm" : feed.type === "Formula" ? "Sữa công thức" : "Sữa mẹ"}
                     </span>
-                    <span className="text-[9px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded">
+                    <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
                       {feed.date === "Today" || feed.date === todayDateStr ? "Hôm nay" : feed.date === "Yesterday" ? "Hôm qua" : feed.date}
                     </span>
                   </div>
-                  <h4 className="text-xs font-bold text-slate-700 mt-1">
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-800 mt-1">
                     {feed.type === "Solids" ? feed.details : `${feed.amount}ml ${feed.type === "Formula" ? "Sữa công thức" : "Sữa mẹ"}`}
                   </h4>
                 </div>
@@ -564,7 +577,7 @@ export default function FeedingLogView({
             ))}
 
           {filteredFeeds.length === 0 && (
-            <div className="text-center py-6 text-slate-400 text-xs font-semibold">
+            <div className="text-center py-6 text-slate-400 text-xs font-medium">
               Không có nhật ký bú/ăn dặm nào trong mốc thời gian này.
             </div>
           )}
@@ -574,8 +587,8 @@ export default function FeedingLogView({
       {/* New Ingredients Tracker with Search & Filter */}
       <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/20 pb-3">
-          <h3 className="text-primary font-bold text-xs uppercase tracking-wider text-slate-500">
-            Nguyên liệu mới & Phản ứng của bé
+          <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+            Nguyên liệu mới & phản ứng của bé
           </h3>
 
           <div className="flex flex-wrap items-center gap-2">

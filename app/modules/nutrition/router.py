@@ -257,7 +257,17 @@ async def _bg_generate_weekly_meal_plan(job_id: str, baby_id: str, user_id: str,
         JobManager.update_job(job_id, JobStatus.FAILED, error=str(e))
 
 
-@feeds_router.post("/meal-plan/weekly/generate", response_model=AsyncJobCreatedResponse, status_code=status.HTTP_202_ACCEPTED)
+@feeds_router.post(
+    "/meal-plan/weekly/generate",
+    response_model=AsyncJobCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        409: {
+            "model": Message,
+            "description": "Thực đơn 7 ngày hiện tại của bé đang được áp dụng và chưa hết hạn 7 ngày (MealPlanLockedError)."
+        }
+    }
+)
 async def generate_weekly_meal_plan(
     req: GenerateWeeklyMealPlanRequest,
     background_tasks: BackgroundTasks,
@@ -267,13 +277,19 @@ async def generate_weekly_meal_plan(
     Sinh thực đơn 7 ngày mới cho bé dưới dạng Async Background Job (trả về HTTP 202 ngay lập tức kèm job_id).
     Nếu thực đơn hiện tại đã được chấp nhận và chưa hết hạn 7 ngày, backend trả 409 (MealPlanLockedError).
     """
+    # 1. Kiểm tra tồn tại và quyền giám hộ bé
+    solid_food_service.baby_service.get_baby_by_id(req.baby_id, current_user.uid)
+
+    # 2. Kiểm tra khóa 7 ngày nếu thực đơn hiện tại đã được chấp nhận
     cached = weekly_meal_plan_service.get_cached_weekly_plan(req.baby_id, current_user.uid)
     if cached and cached.status == "accepted":
         from datetime import date
         try:
             end_d = date.fromisoformat(cached.end_date)
             if date.today() <= end_d:
-                raise MealPlanLockedError(f"Thực đơn 7 ngày hiện tại của bé đang được áp dụng tới hết ngày {cached.end_date}.")
+                raise MealPlanLockedError(
+                    f"Thực đơn 7 ngày hiện tại của bé đang được áp dụng tới hết ngày {cached.end_date}. Không thể tạo thực đơn mới lúc này."
+                )
         except (ValueError, TypeError):
             pass
 
