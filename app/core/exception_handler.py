@@ -86,9 +86,11 @@ def init_app(app: FastAPI) -> None:
     @app.exception_handler(RateLimitExceededError)
     async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceededError) -> JSONResponse:
         logger.warning(f"Rate limit exceeded: {exc.message} on path {request.url.path}")
+        retry_after = getattr(exc, "retry_after", 60)
         return JSONResponse(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            content={"message": exc.message}
+            content={"detail": exc.message, "message": exc.message},
+            headers={"Retry-After": str(retry_after)},
         )
 
     @app.exception_handler(AIGenerationError)

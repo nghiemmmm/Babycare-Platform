@@ -1,11 +1,12 @@
 # ==============================================================================
-# Docker Compose cho BabyCare AI
-# ------------------------------------------------------------------------------
-# 1. Chạy chế độ CPU (Mặc định):
-#    docker compose up --build -d
+# BASE DOCKER COMPOSE CHO BABYCARE AI
+# ==============================================================================
+# File cấu hình cơ sở định nghĩa các dịch vụ cốt lõi, mạng nội bộ và volumes.
 #
-# 2. Chạy chế độ GPU (Tăng tốc xử lý tiếng khóc & RAG):
-#    docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
+# Cách sử dụng kết hợp (Compose Overrides):
+#   - Development : docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d
+#   - Production  : docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d
+#   - GPU Mode    : ... -f docker/docker-compose.gpu.yml up -d
 # ==============================================================================
 
 services:
@@ -26,7 +27,6 @@ services:
     env_file:
       - ../.env
     environment:
-      - APP_ENV=production
       - PORT=8000
       - HOST=0.0.0.0
       - REDIS_URL=redis://redis:6379/0
@@ -58,8 +58,6 @@ services:
     image: redis:7.2-alpine
     container_name: babycare-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     command: redis-server --save 60 1 --loglevel warning
     volumes:
       - redis_data:/data

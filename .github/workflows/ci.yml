@@ -43,7 +43,7 @@ jobs:
 
       - name: Run Unit Tests with Pytest
         run: |
-          pytest tests/unit/ -v
+          pytest -v
 
   # ==============================================================================
   # Stage 2: AI Model Integrity & Configs Validation

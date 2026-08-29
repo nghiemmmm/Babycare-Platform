@@ -74,6 +74,9 @@ COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv
 # Copy toàn bộ mã nguồn dự án vào container và phân quyền cho appuser
 COPY --chown=appuser:appgroup . /app
 
+# Phân quyền thực thi cho kịch bản tiền khởi động
+RUN chmod +x /app/scripts/prestart.sh
+
 # Chuyển sang user không đặc quyền (non-root)
 USER appuser
 
@@ -84,5 +87,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
-# Khởi chạy ứng dụng FastAPI bằng Uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Khởi chạy ứng dụng qua kịch bản tiền khởi động
+CMD ["/app/scripts/prestart.sh"]

@@ -75,16 +75,15 @@ def test_add_growth_log_success(mock_growth_repo):
     mock_baby_service = MagicMock()
     mock_baby_service.get_baby_by_id.return_value = MagicMock()
     
-    service = GrowthTrackingService(baby_service=mock_baby_service)
-    
-    log_in = GrowthLogCreate(height=70.5, weight=8.2, head_circumference=43.0)
-    
-    mock_growth_repo.create.side_effect = lambda x: x
-    
-    result = service.add_growth_log(baby_id="baby123", log_in=log_in, user_id="user123")
-    
-    assert result.height == 70.5
-    assert result.weight == 8.2
-    assert result.head_circumference == 43.0
-    mock_baby_service.get_baby_by_id.assert_called_once_with("baby123", "user123")
-    mock_growth_repo.create.assert_called_once()
+    with patch("app.modules.growth_tracking.service.require_role", return_value="ADMIN"):
+        service = GrowthTrackingService(baby_service=mock_baby_service)
+        log_in = GrowthLogCreate(height=70.5, weight=8.2, head_circumference=43.0)
+        mock_growth_repo.create.side_effect = lambda x: x
+        
+        result = service.add_growth_log(baby_id="baby123", log_in=log_in, user_id="user123")
+        
+        assert result.height == 70.5
+        assert result.weight == 8.2
+        assert result.head_circumference == 43.0
+        mock_baby_service.get_baby_by_id.assert_called_once_with("baby123", "user123")
+        mock_growth_repo.create.assert_called_once()

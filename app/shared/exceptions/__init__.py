@@ -60,8 +60,9 @@ class InvalidPasswordResetCodeError(AppException):
 
 class RateLimitExceededError(AppException):
     """Ngoại lệ xảy ra khi một client vượt quá số lần thử cho phép trong khoảng thời gian quy định."""
-    def __init__(self, message: str = "Bạn đã thực hiện quá nhiều lần, vui lòng thử lại sau."):
+    def __init__(self, message: str = "Bạn đã thực hiện quá nhiều yêu cầu. Vui lòng thử lại sau.", retry_after: int = 60):
         self.message = message
+        self.retry_after = retry_after
         super().__init__(self.message)
 
 

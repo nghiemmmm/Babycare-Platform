@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Git & IDEs
+.git/
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Virtual Environments & Dependencies
+.venv/
+venv/
+ENV/
+env/
+frontend/node_modules/
+frontend/dist/
+
+# Environment files & Secrets
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+serviceAccountKey.json
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Scratch & Cache
+scratch/
+.agents/
+docs/
+img/

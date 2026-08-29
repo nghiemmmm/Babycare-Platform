@@ -18,6 +18,11 @@ env/
 
 # Environment variables & Credentials (CRITICAL)
 .env
+.env.local
+.env.development
+.env.production
+.env.*.local
+!.env.example
 *firebase-adminsdk*.json
 firebase-credentials.json
 

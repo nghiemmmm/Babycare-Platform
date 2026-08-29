@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from app.shared.concurrency import run_in_threadpool
 from app.shared.schemas import Message
-from app.shared.rate_limit import rate_limiter
+from app.core.rate_limit import rate_limit
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.schemas import (
     UserRecord,
@@ -29,39 +29,28 @@ from app.modules.auth.service import (
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# Giới hạn số lần gọi theo IP để chống brute-force mật khẩu / spam đăng ký / spam email
-# quên mật khẩu (xem app/shared/rate_limit.py).
-_register_rate_limit = rate_limiter("register", max_attempts=5, window_seconds=600)
-_login_rate_limit = rate_limiter("login", max_attempts=10, window_seconds=300)
-_refresh_rate_limit = rate_limiter("refresh", max_attempts=20, window_seconds=300)
-_forgot_password_rate_limit = rate_limiter("forgot-password", max_attempts=5, window_seconds=600)
-# Giới hạn riêng cho việc thử mã OTP (ngoài giới hạn 5 lần thử sai/mã ở service layer) -
-# chặn một IP dò nhiều mã OTP của nhiều tài khoản khác nhau trong cùng khung giờ.
-_verify_otp_rate_limit = rate_limiter("verify-reset-otp", max_attempts=10, window_seconds=600)
-_reset_password_rate_limit = rate_limiter("reset-password", max_attempts=10, window_seconds=600)
-
-@router.post("/register", response_model=AuthTokenResponse, status_code=201, dependencies=[Depends(_register_rate_limit)])
+@router.post("/register", response_model=AuthTokenResponse, status_code=201, dependencies=[Depends(rate_limit("register"))])
 async def register(payload: RegisterRequest):
     """
     Đăng ký tài khoản mới qua Firebase Authentication và trả về token đăng nhập ngay.
     """
     return await run_in_threadpool(register_user, payload.email, payload.password, payload.name)
 
-@router.post("/login", response_model=AuthTokenResponse, dependencies=[Depends(_login_rate_limit)])
+@router.post("/login", response_model=AuthTokenResponse, dependencies=[Depends(rate_limit("login"))])
 async def login(payload: LoginRequest):
     """
     Đăng nhập bằng email/mật khẩu qua Firebase Authentication.
     """
     return await run_in_threadpool(login_user, payload.email, payload.password)
 
-@router.post("/refresh", response_model=AuthTokenResponse, dependencies=[Depends(_refresh_rate_limit)])
+@router.post("/refresh", response_model=AuthTokenResponse, dependencies=[Depends(rate_limit("refresh"))])
 async def refresh(payload: RefreshTokenRequest):
     """
     Làm mới ID token đã hết hạn bằng refresh token, không cần đăng nhập lại.
     """
     return await run_in_threadpool(refresh_id_token, payload.refresh_token)
 
-@router.post("/forgot-password", response_model=Message, dependencies=[Depends(_forgot_password_rate_limit)])
+@router.post("/forgot-password", response_model=Message, dependencies=[Depends(rate_limit("forgot-password"))])
 async def forgot_password(payload: ForgotPasswordRequest):
     """
     Gửi mã OTP đặt lại mật khẩu qua email nếu tài khoản ứng với email này tồn tại. Luôn trả
@@ -73,7 +62,7 @@ async def forgot_password(payload: ForgotPasswordRequest):
         message="Nếu tài khoản tồn tại, một mã xác thực đã được gửi tới email của bạn."
     )
 
-@router.post("/verify-reset-otp", response_model=Message, dependencies=[Depends(_verify_otp_rate_limit)])
+@router.post("/verify-reset-otp", response_model=Message, dependencies=[Depends(rate_limit("verify-reset-otp"))])
 async def verify_reset_otp(payload: VerifyOtpRequest):
     """
     Kiểm tra mã OTP đúng hay không, dùng để mở khoá bước nhập mật khẩu mới trên UI. Mã vẫn
@@ -82,7 +71,7 @@ async def verify_reset_otp(payload: VerifyOtpRequest):
     await run_in_threadpool(verify_password_reset_otp, payload.email, payload.otp)
     return Message(message="Mã xác thực hợp lệ.")
 
-@router.post("/reset-password", response_model=Message, dependencies=[Depends(_reset_password_rate_limit)])
+@router.post("/reset-password", response_model=Message, dependencies=[Depends(rate_limit("reset-password"))])
 async def reset_password(payload: ResetPasswordRequest):
     """
     Đặt mật khẩu mới bằng mã OTP 6 chữ số nhận được từ email đặt lại mật khẩu.

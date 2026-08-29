@@ -1,3 +1,0 @@
-@echo off
-echo Starting BabyCare AI Developer Server with FastAPI CLI...
-venv\Scripts\fastapi.exe dev app\main.py

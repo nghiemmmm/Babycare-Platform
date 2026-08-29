@@ -1,0 +1,83 @@
+name: BabyCare AI CD (Docker Compose Deploy)
+
+on:
+  workflow_run:
+    workflows:
+      - BabyCare AI CI
+    types:
+      - completed
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy:
+    name: Deploy to Server via Docker Compose
+    # Chỉ deploy khi workflow CI hoàn thành thành công trên nhánh main
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      # ==============================================================================
+      # 1. Checkout mã nguồn
+      # ==============================================================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ==============================================================================
+      # 2. Xử lý tên Image viết thường cho GHCR
+      # ==============================================================================
+      - name: Lowercase image name
+        id: image_tag
+        run: |
+          echo "IMAGE_LOWER=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      # ==============================================================================
+      # 3. Deploy từ xa lên Server (VPS / Cloud VM) qua SSH & Docker Compose
+      # ==============================================================================
+      - name: Deploy via SSH & Docker Compose
+        if: "${{ env.SERVER_HOST != '' }}"
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script: |
+            echo "🚀 Bắt đầu quá trình cập nhật Docker Compose trên Server..."
+            
+            # 1. Di chuyển vào thư mục dự án
+            cd ~/babycare-ai || cd /opt/babycare-ai
+            
+            # 2. Đăng nhập vào GitHub Container Registry để kéo image mới nhất
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # 3. Cập nhật mã nguồn và nạp môi trường Production
+            git pull origin main || true
+            python scripts/switch_env.py prod --yes || true
+            
+            # 4. Khởi động lại dịch vụ với Docker Compose Production Override
+            docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml down
+            docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up --build -d
+            
+            # 5. Dọn dẹp image cũ không dùng để tiết kiệm ổ cứng
+            docker image prune -f
+            
+            # 6. Kiểm tra trạng thái sức khỏe dịch vụ
+            sleep 10
+            curl -f http://localhost:8000/health && echo "✅ Hệ thống BabyCare AI đã khởi chạy thành công!" || echo "⚠️ Cảnh báo kiểm tra healthcheck"
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+
+      # ==============================================================================
+      # 4. Tổng kết triển khai
+      # ==============================================================================
+      - name: Deployment Summary
+        run: |
+          echo "======================================================="
+          echo "✅ Đã build xong Image: ${{ env.REGISTRY }}/${{ steps.image_tag.outputs.IMAGE_LOWER }}:${{ github.event.workflow_run.head_sha }}"
+          echo "🐳 Sẵn sàng chạy với Docker Compose trên máy chủ Production!"
+          echo "======================================================="

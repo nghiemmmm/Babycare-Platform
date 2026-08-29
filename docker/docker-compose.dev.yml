@@ -1,0 +1,25 @@
+# ==============================================================================
+# DEVELOPMENT OVERRIDE DOCKER COMPOSE CHO BABYCARE AI
+# ==============================================================================
+# Cấu hình tối ưu cho môi trường phát triển:
+#   1. Mount mã nguồn trực tiếp (../app -> /app/app) để bật Hot-Reload
+#   2. Khởi chạy Uvicorn với cờ --reload
+#   3. Mở port Redis (6379) ra máy host để lập trình viên kiểm tra cache
+# ==============================================================================
+
+services:
+  backend:
+    environment:
+      - APP_ENV=development
+      - DEBUG=true
+      - LOG_LEVEL=debug
+    volumes:
+      # Mount mã nguồn ứng dụng để tự động cập nhật khi sửa code (Live Hot-Reload)
+      - ../app:/app/app:rw
+      - ../scripts:/app/scripts:rw
+    command: ["uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+
+  redis:
+    # Expose port Redis ra host chỉ trong môi trường Development
+    ports:
+      - "6379:6379"

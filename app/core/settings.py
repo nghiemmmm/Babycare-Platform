@@ -1,5 +1,6 @@
 import os
 from typing import Optional
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -21,6 +22,26 @@ class Settings(BaseSettings):
     # sang bộ đếm trong bộ nhớ tiến trình)
     REDIS_URL: Optional[str] = None
     BABY_CACHE_TTL_SECONDS: int = 60
+
+    # Rate Limiting Configuration
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_TRUSTED_PROXIES: list[str] = ["127.0.0.1", "::1"]
+    RATE_LIMIT_DEFAULT_MAX_ATTEMPTS: int = 10
+    RATE_LIMIT_DEFAULT_WINDOW_SECONDS: int = 300
+    RATE_LIMIT_LOGIN_MAX_ATTEMPTS: int = 10
+    RATE_LIMIT_LOGIN_WINDOW_SECONDS: int = 300
+    RATE_LIMIT_LOGIN_EMAIL_MAX_ATTEMPTS: int = 5
+    RATE_LIMIT_LOGIN_EMAIL_WINDOW_SECONDS: int = 900
+    RATE_LIMIT_REGISTER_MAX_ATTEMPTS: int = 5
+    RATE_LIMIT_REGISTER_WINDOW_SECONDS: int = 600
+    RATE_LIMIT_REFRESH_MAX_ATTEMPTS: int = 20
+    RATE_LIMIT_REFRESH_WINDOW_SECONDS: int = 300
+    RATE_LIMIT_FORGOT_PASSWORD_MAX_ATTEMPTS: int = 5
+    RATE_LIMIT_FORGOT_PASSWORD_WINDOW_SECONDS: int = 600
+    RATE_LIMIT_VERIFY_OTP_MAX_ATTEMPTS: int = 10
+    RATE_LIMIT_VERIFY_OTP_WINDOW_SECONDS: int = 600
+    RATE_LIMIT_RESET_PASSWORD_MAX_ATTEMPTS: int = 10
+    RATE_LIMIT_RESET_PASSWORD_WINDOW_SECONDS: int = 600
 
     # Timeout tối đa (giây) cho các call đồng bộ (Firebase/Firestore/RAG) chạy trong threadpool
     THREADPOOL_TIMEOUT_SECONDS: int = 30
@@ -51,6 +72,16 @@ class Settings(BaseSettings):
     CLOUDINARY_CLOUD_NAME: Optional[str] = None
     CLOUDINARY_API_KEY: Optional[str] = None
     CLOUDINARY_API_SECRET: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        """Production Guard: Ngăn chặn cấu hình mất an toàn trên môi trường Production."""
+        if self.APP_ENV.lower() == "production" and self.DEBUG is True:
+            raise ValueError(
+                "Production Guard Alert: DEBUG không được phép bật (True) khi APP_ENV='production'. "
+                "Vui lòng thiết lập DEBUG=false để đảm bảo an toàn bảo mật."
+            )
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",
