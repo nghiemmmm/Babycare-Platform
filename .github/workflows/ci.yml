@@ -27,10 +27,10 @@ env:
 
 jobs:
   # ==============================================================================
-  # Stage 1: Code Quality & Unit Tests
+  # Stage 1: Backend Tests & Quality Checks
   # ==============================================================================
-  lint-and-test:
-    name: Lint & Unit Tests
+  backend-test:
+    name: Backend Tests & Quality
     runs-on: ubuntu-latest
 
     steps:
@@ -53,7 +53,7 @@ jobs:
         run: |
           ruff check app/ tests/
 
-      - name: Run Unit Tests with Pytest
+      - name: Run Backend Tests with Pytest
         run: |
           pytest -v
 
@@ -62,7 +62,7 @@ jobs:
   # ==============================================================================
   validate-model:
     name: Validate AI Models & Prompts
-    needs: lint-and-test
+    needs: backend-test
     runs-on: ubuntu-latest
 
     steps:
