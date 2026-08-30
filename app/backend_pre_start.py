@@ -70,10 +70,19 @@ def check_redis() -> None:
 def main() -> None:
     logger.info("Starting BabyCare AI backend pre-start checks...")
 
-    # 1. Check Primary Database (Firestore)
-    if not check_firestore():
-        logger.error("Critical failure: Cannot establish connection to Firebase Firestore. Exiting with error.")
-        sys.exit(1)
+    # Trong môi trường CI/CD Runner hoặc Dev không có file Firebase credentials thật, không chặn khởi động container
+    is_ci = os.getenv("CI", "false").lower() in ["true", "1"] or os.getenv("APP_ENV") in ["ci", "test", "development"]
+    if is_ci:
+        logger.info("Non-production or CI environment detected. Performing non-blocking Firestore pre-flight check.")
+        try:
+            check_firestore(max_tries=2, sleep_time=1)
+        except Exception as e:
+            logger.warning(f"CI non-blocking Firestore check notice: {e}")
+    else:
+        # Môi trường Production: Bắt buộc kết nối Firestore thật
+        if not check_firestore():
+            logger.error("Critical failure: Cannot establish connection to Firebase Firestore. Exiting with error.")
+            sys.exit(1)
 
     # 2. Check Cache / Rate Limit storage (Redis)
     check_redis()

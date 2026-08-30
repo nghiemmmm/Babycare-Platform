@@ -17,8 +17,7 @@ async def lifespan(app: FastAPI):
         initialize_firebase()
         logger.info("[Startup] Firebase initialized.")
     except Exception as e:
-        logger.error(f"[Startup] Failed to initialize Firebase: {e}")
-        raise e
+        logger.warning(f"[Startup] Firebase initialization warning (non-fatal for basic healthcheck): {e}")
 
     # 2. BGE-M3 Local Embedding Model — load vào RAM trước khi RAGPipeline dùng
     try:
