@@ -8,6 +8,8 @@ pydantic-settings>=2.2.1
 python-dotenv>=1.0.1
 python-dateutil>=2.9.0
 email-validator>=2.1.0
+itsdangerous>=2.1.0
+python-multipart>=0.0.9
 
 # Cloud Database, Cache & Media Storage
 firebase-admin>=6.5.0
