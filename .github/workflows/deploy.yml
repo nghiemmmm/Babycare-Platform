@@ -41,11 +41,15 @@ jobs:
       # 3. Kết nối SSH vào máy chủ EC2 thực thi triển khai 6 bước
       - name: Deploy via SSH & Auto-Rollback to EC2
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          PROD_ENV_RAW: ${{ secrets.PROD_ENV_FILE }}
+          FIREBASE_KEY_RAW: ${{ secrets.FIREBASE_KEY_JSON }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
+          envs: PROD_ENV_RAW,FIREBASE_KEY_RAW
           script_stop: true
           script: |
             echo "🚀 [1/6] Di chuyển vào thư mục dự án trên máy chủ AWS EC2..."
@@ -55,21 +59,17 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             git pull origin production || git pull origin main
 
-            # Tự động nạp tệp .env từ GitHub Secret (fallback switch script nếu chưa set)
-            if [ -n "${{ secrets.PROD_ENV_FILE }}" ]; then
-              cat << 'EOF_ENV' > .env
-${{ secrets.PROD_ENV_FILE }}
-EOF_ENV
+            # Nạp tệp .env an toàn từ GitHub Secret
+            if [ -n "$PROD_ENV_RAW" ]; then
+              printf "%s\n" "$PROD_ENV_RAW" > .env
               echo "✅ Đã nạp tệp .env từ GitHub Secret PROD_ENV_FILE."
             else
               bash scripts/switch-environment.sh prod --yes || python scripts/switch_env.py prod --yes || true
             fi
 
-            # Tự động nạp chứng chỉ Firebase Admin JSON từ GitHub Secret
-            if [ -n "${{ secrets.FIREBASE_KEY_JSON }}" ]; then
-              cat << 'EOF_FIREBASE' > baby-7d4a7-firebase-adminsdk-fbsvc-12ba4419bc.json
-${{ secrets.FIREBASE_KEY_JSON }}
-EOF_FIREBASE
+            # Nạp chứng chỉ Firebase an toàn từ GitHub Secret
+            if [ -n "$FIREBASE_KEY_RAW" ]; then
+              printf "%s\n" "$FIREBASE_KEY_RAW" > baby-7d4a7-firebase-adminsdk-fbsvc-12ba4419bc.json
               echo "✅ Đã nạp chứng chỉ Firebase từ GitHub Secret FIREBASE_KEY_JSON."
             fi
 
