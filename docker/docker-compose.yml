@@ -11,7 +11,7 @@
 
 services:
   # ==============================================================================
-  # Dịch vụ Backend FastAPI & AI Engine
+  # 1. Dịch vụ Backend FastAPI & AI Engine
   # ==============================================================================
   backend:
     container_name: babycare-api
@@ -30,20 +30,14 @@ services:
       - PORT=8000
       - HOST=0.0.0.0
       - REDIS_URL=redis://redis:6379/0
-      # Đường dẫn file trọng số model AST Cry Classifier bên trong container
       - MODEL_PATH=/app/app/ai/CRY/weights/best_audio_model.pth
-      # Cấu hình Reranker & FAISS Vector Index
       - MODEL_CACHE_DIR=/app/app/ai/models
       - RERANKER_MODEL_NAME=mixedbread-ai/mxbai-rerank-xsmall-v1
-      # Cấu hình cache thư mục mô hình AI (Whisper, Sentence-Transformers, HuggingFace)
       - HF_HOME=/home/appuser/.cache/huggingface
       - TRANSFORMERS_CACHE=/home/appuser/.cache/huggingface/hub
     volumes:
-      # Persistent cache cho các mô hình AI đã tải về
       - huggingface_cache:/home/appuser/.cache/huggingface
-      # Mount toàn bộ Model AI cục bộ (Reranker mxbai, Embedding BGE-M3, FAISS index, Faster-Whisper)
       - ../app/ai/models:/app/app/ai/models:ro
-      # Mount file trọng số mô hình tiếng khóc (AST Model .pth)
       - ../app/ai/CRY/weights:/app/app/ai/CRY/weights:ro
     depends_on:
       redis:
@@ -52,7 +46,26 @@ services:
       - babycare-network
 
   # ==============================================================================
-  # Dịch vụ Redis: Cache dữ liệu bé, Rate Limiting & Hàng đợi tác vụ
+  # 2. Dịch vụ Frontend React 19 + Vite 6 + Express
+  # ==============================================================================
+  frontend:
+    container_name: babycare-ui
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    networks:
+      - babycare-network
+
+  # ==============================================================================
+  # 3. Dịch vụ Redis: Cache dữ liệu bé, Rate Limiting & Hàng đợi tác vụ
   # ==============================================================================
   redis:
     image: redis:7.2-alpine

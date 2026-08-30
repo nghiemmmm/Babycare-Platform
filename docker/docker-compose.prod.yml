@@ -29,6 +29,24 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  frontend:
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.2'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
   redis:
     deploy:
       resources:

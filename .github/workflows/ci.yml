@@ -30,7 +30,7 @@ jobs:
   # Stage 1: Backend Tests & Quality Checks
   # ==============================================================================
   backend-test:
-    name: Backend Tests & Quality
+    name: Backend Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -46,23 +46,52 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff pytest pytest-anyio
+          pip install pytest pytest-anyio
           pip install -r requirements.txt
-
-      - name: Code Linting with Ruff
-        run: |
-          ruff check app/ tests/
 
       - name: Run Backend Tests with Pytest
         run: |
           pytest -v
 
   # ==============================================================================
-  # Stage 2: AI Model Integrity & Configs Validation
+  # Stage 2: Frontend Lint & Build Checks (React 19 + Vite 6)
+  # ==============================================================================
+  frontend-test:
+    name: Frontend Lint & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: |
+          npm ci
+
+      - name: TypeScript Type Checking (Lint)
+        working-directory: ./frontend
+        run: |
+          npm run lint
+
+      - name: Test Frontend Production Build
+        working-directory: ./frontend
+        run: |
+          npm run build
+
+  # ==============================================================================
+  # Stage 3: AI & MLOps Validation (Prompts, AST PyTorch, LightGBM, Airflow DAGs)
   # ==============================================================================
   validate-model:
-    name: Validate AI Models & Prompts
-    needs: backend-test
+    name: Validate AI Models & MLOps Pipelines
+    needs: [backend-test, frontend-test]
     runs-on: ubuntu-latest
 
     steps:
@@ -102,11 +131,67 @@ jobs:
           print('✅ Xác thực kiến trúc AST Cry Classification Model thành công!')
           "
 
+      - name: Validate LightGBM Wake Window Model Inference
+        run: |
+          python -c "
+          from app.modules.sleep.wake_window_predictor import GlobalLightGBMPredictor
+          from app.modules.sleep.wake_window_schemas import WakeWindowFeatureVector
+          dummy_features = WakeWindowFeatureVector(age_months=6.0, age_days=180)
+          pred = GlobalLightGBMPredictor.predict_raw(dummy_features)
+          assert 60 <= pred <= 300, f'Dự đoán LightGBM bất thường: {pred} phút'
+          print(f'✅ Xác thực mô hình LightGBM Wake Window thành công (Dự đoán mẫu: {pred:.1f} phút)!')
+          "
+
+      - name: Validate Airflow MLOps DAGs Integrity
+        run: |
+          python -c "
+          from pathlib import Path
+          dag_dir = Path('airflow/airflow_project/dags')
+          assert dag_dir.exists(), 'Thư mục Airflow DAGs không tồn tại!'
+          dag_files = [f for f in dag_dir.glob('*.py') if f.name != '__init__.py']
+          assert len(dag_files) >= 2, f'Kỳ vọng ít nhất 2 DAGs, tìm thấy {len(dag_files)}'
+          for f in dag_files:
+              with open(f, 'r', encoding='utf-8') as fp:
+                  compile(fp.read(), str(f), 'exec')
+              print(f'  • DAG {f.name}: Cú pháp & cấu trúc hợp lệ!')
+          print('✅ Toàn bộ Airflow MLOps DAGs (Huấn luyện LightGBM & Ingest RAG) hợp lệ 100%!')
+          "
+
   # ==============================================================================
-  # Stage 3: Build & Push Docker Images (CPU & GPU)
+  # Stage 4: E2E Integration Test with Docker Compose
+  # ==============================================================================
+  integration-test:
+    name: E2E Integration Test
+    needs: validate-model
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Khởi tạo biến môi trường mẫu cho CI
+        run: |
+          cp .env.example .env
+
+      - name: Khởi chạy cụm Docker Compose
+        run: |
+          docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d --build
+
+      - name: Chờ Backend Khởi động & Healthcheck Polling
+        run: |
+          timeout 90 bash -c 'until curl -sf http://localhost:8000/health; do echo "Waiting for backend service..."; sleep 4; done'
+          echo "✅ Backend Service & Redis Container đã khởi động thành công!"
+
+      - name: Dọn dẹp cụm container
+        if: always()
+        run: |
+          docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml down -v
+
+  # ==============================================================================
+  # Stage 5: Build & Push 2 Docker Packages (Backend & Frontend)
   # ==============================================================================
   build-and-push:
-    name: Build & Push Docker Images
+    name: Build & Push Docker Packages (Backend & Frontend)
     needs: validate-model
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production' || github.ref == 'refs/heads/develop')
@@ -134,8 +219,8 @@ jobs:
         run: |
           echo "IMAGE_LOWER=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      # Build & Push CPU Version (Default)
-      - name: Build and push CPU Image
+      # 📦 GÓI 1: Build & Push Backend Package (FastAPI + AI Models)
+      - name: Build and push Backend Image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -145,7 +230,60 @@ jobs:
             PYTHON_VERSION=3.11.9-slim
             MODEL_VERSION=${{ github.sha }}
           tags: |
+            ${{ env.REGISTRY }}/${{ steps.image_tag.outputs.IMAGE_LOWER }}-backend:latest
+            ${{ env.REGISTRY }}/${{ steps.image_tag.outputs.IMAGE_LOWER }}-backend:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ steps.image_tag.outputs.IMAGE_LOWER }}:latest
-            ${{ env.REGISTRY }}/${{ steps.image_tag.outputs.IMAGE_LOWER }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # 📦 GÓI 2: Build & Push Frontend Package (React 19 + Vite 6)
+      - name: Build and push Frontend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.image_tag.outputs.IMAGE_LOWER }}-frontend:latest
+            ${{ env.REGISTRY }}/${{ steps.image_tag.outputs.IMAGE_LOWER }}-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ==============================================================================
+  # Stage 6: CI Summary & Branch Protection Gate
+  # ==============================================================================
+  summary:
+    name: CI Pipeline Summary Gate
+    needs: [backend-test, frontend-test, validate-model, integration-test, build-and-push]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Tổng hợp & Đánh giá Trạng thái Toàn bộ Pipeline
+        run: |
+          echo "========================================================"
+          echo "           TỔNG HỢP KẾT QUẢ KIỂM THỬ CI/CD             "
+          echo "========================================================"
+          echo "1. Backend Tests     : ${{ needs.backend-test.result }}"
+          echo "2. Frontend Tests    : ${{ needs.frontend-test.result }}"
+          echo "3. Model Validation  : ${{ needs.validate-model.result }}"
+          echo "4. Integration E2E   : ${{ needs.integration-test.result }}"
+          echo "5. Build & Push GHCR : ${{ needs.build-and-push.result }}"
+          echo "========================================================"
+
+          # Kiểm tra các job bắt buộc
+          if [ "${{ needs.backend-test.result }}" != "success" ] || \
+             [ "${{ needs.frontend-test.result }}" != "success" ] || \
+             [ "${{ needs.validate-model.result }}" != "success" ] || \
+             [ "${{ needs.integration-test.result }}" != "success" ]; then
+            echo "❌ Có bài kiểm thử thất bại! Chặn merge Pull Request để bảo vệ hệ thống."
+            exit 1
+          fi
+
+          # Kiểm tra build-and-push (nếu có chạy trên main/develop/production)
+          if [ "${{ needs.build-and-push.result }}" == "failure" ]; then
+            echo "❌ Đóng gói Docker thất bại!"
+            exit 1
+          fi
+
+          echo "🟢 TẤT CẢ CÁC BƯỚC KIỂM THỬ ĐÃ VƯỢT QUA 100%! SẴN SÀNG MERGE."

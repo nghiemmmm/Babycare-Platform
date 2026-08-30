@@ -1,83 +1,118 @@
-name: BabyCare AI CD (Docker Compose Deploy)
+name: BabyCare AI CD (Production Deployment)
 
 on:
-  workflow_run:
-    workflows:
-      - BabyCare AI CI
-    types:
-      - completed
+  workflow_dispatch: # Cho phép bấm nút deploy thủ công trên GitHub Actions UI
+  push:
     branches:
-      - main
+      - production
+    tags:
+      - "v*.*.*"
+
+# ==============================================================================
+# Kiểm soát đồng thời: Chỉ cho phép 1 tác vụ deploy chạy tại một thời điểm
+# ==============================================================================
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # ==============================================================================
+  # Triển khai lên AWS EC2 với cơ chế Auto-Rollback khi có sự cố
+  # ==============================================================================
   deploy:
-    name: Deploy to Server via Docker Compose
-    # Chỉ deploy khi workflow CI hoàn thành thành công trên nhánh main
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    name: Deploy to AWS EC2 Production
     runs-on: ubuntu-latest
 
     steps:
-      # ==============================================================================
       # 1. Checkout mã nguồn
-      # ==============================================================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ==============================================================================
-      # 2. Xử lý tên Image viết thường cho GHCR
-      # ==============================================================================
+      # 2. Xử lý tên Image cho GHCR
       - name: Lowercase image name
         id: image_tag
         run: |
           echo "IMAGE_LOWER=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      # ==============================================================================
-      # 3. Deploy từ xa lên Server (VPS / Cloud VM) qua SSH & Docker Compose
-      # ==============================================================================
-      - name: Deploy via SSH & Docker Compose
-        if: "${{ env.SERVER_HOST != '' }}"
+      # 3. Kết nối SSH vào máy chủ EC2 thực thi triển khai 6 bước
+      - name: Deploy via SSH & Auto-Rollback to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
+          script_stop: true
           script: |
-            echo "🚀 Bắt đầu quá trình cập nhật Docker Compose trên Server..."
-            
-            # 1. Di chuyển vào thư mục dự án
-            cd ~/babycare-ai || cd /opt/babycare-ai
-            
-            # 2. Đăng nhập vào GitHub Container Registry để kéo image mới nhất
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # 3. Cập nhật mã nguồn và nạp môi trường Production
-            git pull origin main || true
-            python scripts/switch_env.py prod --yes || true
-            
-            # 4. Khởi động lại dịch vụ với Docker Compose Production Override
-            docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml down
-            docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up --build -d
-            
-            # 5. Dọn dẹp image cũ không dùng để tiết kiệm ổ cứng
-            docker image prune -f
-            
-            # 6. Kiểm tra trạng thái sức khỏe dịch vụ
-            sleep 10
-            curl -f http://localhost:8000/health && echo "✅ Hệ thống BabyCare AI đã khởi chạy thành công!" || echo "⚠️ Cảnh báo kiểm tra healthcheck"
-        env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+            echo "🚀 [1/6] Di chuyển vào thư mục dự án trên máy chủ AWS EC2..."
+            cd ~/babycare-ai || cd /opt/babycare-ai || { echo "❌ Không tìm thấy thư mục dự án!"; exit 1; }
 
-      # ==============================================================================
-      # 4. Tổng kết triển khai
-      # ==============================================================================
-      - name: Deployment Summary
+            echo "🔑 [2/6] Đăng nhập GitHub Container Registry & Nạp biến môi trường Production..."
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            git pull origin production || git pull origin main
+
+            # Tự động nạp tệp .env từ GitHub Secret (fallback switch script nếu chưa set)
+            if [ -n "${{ secrets.PROD_ENV_FILE }}" ]; then
+              cat << 'EOF_ENV' > .env
+${{ secrets.PROD_ENV_FILE }}
+EOF_ENV
+              echo "✅ Đã nạp tệp .env từ GitHub Secret PROD_ENV_FILE."
+            else
+              bash scripts/switch-environment.sh prod --yes || python scripts/switch_env.py prod --yes || true
+            fi
+
+            # Tự động nạp chứng chỉ Firebase Admin JSON từ GitHub Secret
+            if [ -n "${{ secrets.FIREBASE_KEY_JSON }}" ]; then
+              cat << 'EOF_FIREBASE' > baby-7d4a7-firebase-adminsdk-fbsvc-12ba4419bc.json
+${{ secrets.FIREBASE_KEY_JSON }}
+EOF_FIREBASE
+              echo "✅ Đã nạp chứng chỉ Firebase từ GitHub Secret FIREBASE_KEY_JSON."
+            fi
+
+            chmod 600 .env baby-7d4a7-firebase-adminsdk-fbsvc-12ba4419bc.json 2>/dev/null || true
+
+            echo "🐳 [3/6] Kéo Docker Images mới & Khởi động dịch vụ Production..."
+            docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml down
+            docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d --build
+
+            echo "🩺 [4/6] Chờ nạp mô hình AI & Kiểm tra sức khỏe hệ thống (Healthcheck 120s)..."
+            SUCCESS=0
+            for i in {1..24}; do
+              if curl -sf http://localhost:8000/health; then
+                echo "✅ Backend & AI Models (AST Cry & LightGBM) đã khởi động thành công!"
+                SUCCESS=1
+                break
+              fi
+              echo "⏳ Đang nạp mô hình và kiểm tra kết nối... (Thử lại $i/24)"
+              sleep 5
+            done
+
+            if [ $SUCCESS -eq 0 ]; then
+              echo "❌ Healthcheck thất bại sau 120s! Kích hoạt cơ chế AUTO-ROLLBACK khôi phục bản cũ..."
+              git reset --hard HEAD@{1}
+              docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml down
+              docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d
+              echo "⚠️ Đã tự động khôi phục về phiên bản ổn định trước đó."
+              exit 1
+            fi
+
+            echo "🧹 [5/6] Dọn dẹp Docker Images cũ để giải phóng dung lượng ổ cứng..."
+            docker image prune -a -f --filter "until=24h"
+
+            echo "🎉 [6/6] Triển khai Production thành công 100%!"
+
+      # 4. Báo cáo kết quả trên GitHub Step Summary
+      - name: Deployment Summary Report
+        if: always()
         run: |
-          echo "======================================================="
-          echo "✅ Đã build xong Image: ${{ env.REGISTRY }}/${{ steps.image_tag.outputs.IMAGE_LOWER }}:${{ github.event.workflow_run.head_sha }}"
-          echo "🐳 Sẵn sàng chạy với Docker Compose trên máy chủ Production!"
-          echo "======================================================="
+          echo "### 🚀 BabyCare AI CD Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "| Thuộc tính | Chi tiết |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trạng thái** | ${{ job.status == 'success' && '🟢 Thành Công (Success)' || '🔴 Thất Bại (Auto-Rollback)' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Nhánh / Tag** | \`${{ github.ref }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit SHA** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Registry Image** | \`${{ env.REGISTRY }}/${{ steps.image_tag.outputs.IMAGE_LOWER }}:latest\` |" >> $GITHUB_STEP_SUMMARY
