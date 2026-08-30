@@ -24,6 +24,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  PYTHONPATH: .
 
 jobs:
   # ==============================================================================
@@ -50,8 +51,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Backend Tests with Pytest
+        env:
+          PYTHONPATH: .
         run: |
-          pytest -v
+          python -m pytest -v
 
   # ==============================================================================
   # Stage 2: Frontend Lint & Build Checks (React 19 + Vite 6)
