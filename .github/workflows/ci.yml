@@ -202,8 +202,22 @@ jobs:
 
       - name: Chờ Backend Khởi động & Healthcheck Polling
         run: |
-          timeout 90 bash -c 'until curl -sf http://localhost:8000/health; do echo "Waiting for backend service..."; sleep 4; done'
-          echo "✅ Backend Service & Redis Container đã khởi động thành công!"
+          SUCCESS=0
+          for i in {1..25}; do
+            if curl -sf http://localhost:8000/health; then
+              echo "✅ Backend Service & Redis Container đã khởi động thành công!"
+              SUCCESS=1
+              break
+            fi
+            echo "Waiting for backend service... ($i/25)"
+            sleep 4
+          done
+
+          if [ $SUCCESS -eq 0 ]; then
+            echo "❌ Backend healthcheck failed! In toàn bộ logs của Docker Containers:"
+            docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml logs
+            exit 1
+          fi
 
       - name: Dọn dẹp cụm container
         if: always()

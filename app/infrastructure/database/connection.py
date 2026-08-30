@@ -37,23 +37,29 @@ def initialize_firebase() -> firebase_admin.App:
             except Exception as e:
                 logger.error(f"Failed to parse FIREBASE_CREDENTIALS_JSON: {e}")
                 raise e
-        elif settings.FIREBASE_CREDENTIALS_PATH:
+        elif settings.FIREBASE_CREDENTIALS_PATH and os.path.exists(settings.FIREBASE_CREDENTIALS_PATH):
             try:
                 cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
                 logger.info(f"Initializing Firebase using credentials file from path: {settings.FIREBASE_CREDENTIALS_PATH}")
             except Exception as e:
                 logger.error(f"Failed to load Firebase credentials from path {settings.FIREBASE_CREDENTIALS_PATH}: {e}")
-                raise e
+                if os.getenv("APP_ENV") == "production":
+                    raise e
         else:
-            logger.warning("Firebase credentials not configured. Attempting to use Application Default Credentials.")
+            logger.warning("Firebase credentials not configured or file not found. Attempting to use Application Default Credentials.")
             try:
                 cred = credentials.ApplicationDefault()
             except Exception as e:
-                logger.error(f"Application Default Credentials not available: {e}")
-                raise ValueError("Firebase credentials not configured. Please set FIREBASE_CREDENTIALS_PATH or FIREBASE_CREDENTIALS_JSON.")
+                logger.warning(f"Application Default Credentials notice: {e}")
+                if os.getenv("APP_ENV") == "production":
+                    raise ValueError("Firebase credentials not configured for production.")
+                cred = None
 
-        _firebase_app = firebase_admin.initialize_app(cred)
-        logger.info("Firebase Admin SDK successfully initialized.")
+        if cred is not None:
+            _firebase_app = firebase_admin.initialize_app(cred)
+            logger.info("Firebase Admin SDK successfully initialized.")
+        else:
+            logger.warning("Running in mock/local mode without active Firebase credentials.")
 
     # Initialize Firestore Client
     _db_client = firestore.client()
