@@ -26,11 +26,17 @@ def _get_bge_model():
         except Exception:
             pass
         from sentence_transformers import SentenceTransformer
-        _bge_model = SentenceTransformer(
-            _BGE_M3_LOCAL_PATH,
-            device="cpu",
-            local_files_only=True
-        )
+        if os.path.exists(_BGE_M3_LOCAL_PATH):
+            _bge_model = SentenceTransformer(
+                _BGE_M3_LOCAL_PATH,
+                device="cpu",
+                local_files_only=True
+            )
+        else:
+            _bge_model = SentenceTransformer(
+                "BAAI/bge-m3",
+                device="cpu"
+            )
     return _bge_model
 
 

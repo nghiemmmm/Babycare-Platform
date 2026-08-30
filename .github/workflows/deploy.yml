@@ -105,24 +105,21 @@ jobs:
             docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml down || true
             docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d --build
 
-            echo "🩺 [4/6] Chờ nạp mô hình AI & Kiểm tra sức khỏe hệ thống (Healthcheck 120s)..."
+            echo "🩺 [4/6] Chờ nạp mô hình AI & Kiểm tra sức khỏe hệ thống (Healthcheck 180s)..."
             SUCCESS=0
-            for i in {1..24}; do
+            for i in {1..36}; do
               if curl -sf http://localhost:8000/health; then
                 echo "✅ Backend & AI Models (AST Cry & LightGBM) đã khởi động thành công!"
                 SUCCESS=1
                 break
               fi
-              echo "⏳ Đang nạp mô hình và kiểm tra kết nối... (Thử lại $i/24)"
+              echo "⏳ Đang nạp mô hình và kiểm tra kết nối... (Thử lại $i/36)"
               sleep 5
             done
 
             if [ $SUCCESS -eq 0 ]; then
-              echo "❌ Healthcheck thất bại sau 120s! Kích hoạt cơ chế AUTO-ROLLBACK khôi phục bản cũ..."
-              git reset --hard HEAD@{1}
-              docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml down
-              docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d
-              echo "⚠️ Đã tự động khôi phục về phiên bản ổn định trước đó."
+              echo "❌ Healthcheck thất bại sau 180s! In log chi tiết của container Backend:"
+              docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml logs backend --tail 50
               exit 1
             fi
 
