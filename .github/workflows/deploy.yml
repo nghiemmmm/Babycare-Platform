@@ -52,12 +52,31 @@ jobs:
           envs: PROD_ENV_RAW,FIREBASE_KEY_RAW
           script_stop: true
           script: |
-            echo "🚀 [1/6] Di chuyển vào thư mục dự án trên máy chủ AWS EC2..."
-            cd ~/babycare-ai || cd /opt/babycare-ai || { echo "❌ Không tìm thấy thư mục dự án!"; exit 1; }
+            echo "🚀 [1/6] Kiểm tra môi trường & Khởi tạo thư mục dự án trên AWS EC2..."
+            if ! command -v git &> /dev/null; then
+              echo "📦 Cài đặt git trên máy chủ EC2..."
+              sudo apt-get update -y && sudo apt-get install -y git curl
+            fi
 
-            echo "🔑 [2/6] Đăng nhập GitHub Container Registry & Nạp biến môi trường Production..."
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            git pull origin production || git pull origin main
+            if [ ! -d "$HOME/babycare-ai" ] && [ ! -d "/opt/babycare-ai" ]; then
+              echo "📥 Thư mục dự án chưa tồn tại, tự động clone mã nguồn từ GitHub..."
+              git clone -b production https://github.com/nghiemmmm/Babycare-Platform.git ~/babycare-ai
+            fi
+
+            cd ~/babycare-ai || cd /opt/babycare-ai || { echo "❌ Không thể truy cập thư mục dự án!"; exit 1; }
+
+            echo "🔑 [2/6] Đăng nhập GitHub Container Registry & Đồng bộ mã nguồn Production..."
+            if ! command -v docker &> /dev/null; then
+              echo "🐳 Đang tự động cài đặt Docker Engine trên EC2..."
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sudo sh get-docker.sh
+              sudo usermod -aG docker $USER || true
+            fi
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin || true
+            git fetch origin production
+            git checkout production || true
+            git reset --hard origin/production || git pull origin production || true
 
             # Nạp tệp .env an toàn từ GitHub Secret
             if [ -n "$PROD_ENV_RAW" ]; then
