@@ -50,6 +50,8 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
           envs: PROD_ENV_RAW,FIREBASE_KEY_RAW
+          timeout: 60s
+          command_timeout: 30m
           script_stop: true
           script: |
             echo "🚀 [1/6] Kiểm tra môi trường & Khởi tạo thư mục dự án trên AWS EC2..."
