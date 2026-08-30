@@ -83,6 +83,26 @@ services:
     networks:
       - babycare-network
 
+  # ==============================================================================
+  # 4. Dịch vụ Nginx Reverse Proxy & API Gateway (Cửa ngõ Cổng 80 & 443)
+  # ==============================================================================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: babycare-gateway
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../nginx/ec2.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - babycare-network
+
 # ==============================================================================
 # Khai báo Volumes lưu trữ dữ liệu bền vững (Persistent Storage)
 # ==============================================================================
