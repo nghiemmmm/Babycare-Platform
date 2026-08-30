@@ -150,7 +150,16 @@ jobs:
           python -c "
           from app.modules.sleep.wake_window_predictor import GlobalLightGBMPredictor
           from app.modules.sleep.wake_window_schemas import WakeWindowFeatureVector
-          dummy_features = WakeWindowFeatureVector(age_months=6.0, age_days=180)
+          dummy_features = WakeWindowFeatureVector(
+              age_months=6.0,
+              age_days=180,
+              nap_number=1,
+              day_start_minutes=420,
+              previous_night_end_minutes=420,
+              previous_wake_window_minutes=120,
+              previous_nap_minutes=0,
+              previous_sleep_duration_minutes=600
+          )
           pred = GlobalLightGBMPredictor.predict_raw(dummy_features)
           assert 60 <= pred <= 300, f'Dự đoán LightGBM bất thường: {pred} phút'
           print(f'✅ Xác thực mô hình LightGBM Wake Window thành công (Dự đoán mẫu: {pred:.1f} phút)!')
