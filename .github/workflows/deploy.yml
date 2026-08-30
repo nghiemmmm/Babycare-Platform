@@ -73,6 +73,10 @@ jobs:
               sudo usermod -aG docker $USER || true
             fi
 
+            # Đảm bảo quyền truy cập Docker Socket cho user hiện tại
+            sudo usermod -aG docker $USER 2>/dev/null || true
+            sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin || true
             git fetch origin production
             git checkout production || true
@@ -95,7 +99,8 @@ jobs:
             chmod 600 .env baby-7d4a7-firebase-adminsdk-fbsvc-12ba4419bc.json 2>/dev/null || true
 
             echo "🐳 [3/6] Kéo Docker Images mới & Khởi động dịch vụ Production..."
-            docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml down
+            sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+            docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml down || true
             docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d --build
 
             echo "🩺 [4/6] Chờ nạp mô hình AI & Kiểm tra sức khỏe hệ thống (Healthcheck 120s)..."
