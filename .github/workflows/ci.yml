@@ -50,9 +50,20 @@ jobs:
           pip install pytest pytest-anyio
           pip install -r requirements.txt
 
+      - name: Khởi tạo biến môi trường kiểm thử (Mock Test Environment)
+        run: |
+          cp .env.example .env
+
       - name: Run Backend Tests with Pytest
         env:
           PYTHONPATH: .
+          APP_ENV: test
+          DEBUG: "true"
+          FIREBASE_WEB_API_KEY: "AIzaSy_mock_test_key_12345"
+          GEMINI_API_KEY: "dummy_test_gemini_api_key"
+          GOOGLE_API_KEY: "dummy_test_gemini_api_key"
+          OPENROUTER_API_KEY: "dummy_test_openrouter_api_key"
+          LLM_PROVIDER: "gemini"
         run: |
           python -m pytest -v
 
