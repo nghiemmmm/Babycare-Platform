@@ -1,5 +1,3 @@
-from app.infrastructure.storage.cloudinary_service import resolve_asset_url
-
 CRY_REASONS = ["hungry", "tired", "pain", "discomfort", "burp", "lonely", "scared", "cold_hot", "unknown"]
 
 AST_LABEL_MAPPING = {
@@ -14,19 +12,26 @@ AST_LABEL_MAPPING = {
     "dk": "unknown"      # Don't know (Chưa rõ nguyên nhân)
 }
 
+# Trỏ tới các tệp âm thanh THỰC SỰ có trong app/static/ (được serve qua backend
+# /static/, và qua nginx gateway proxy /static/ -> backend). Trước đây map trỏ tới
+# các tên .mp3 không tồn tại ở bất kỳ đâu (classic_lullaby.mp3, pink_noise_rain.mp3...)
+# nên trình phát luôn 404. Thêm tệp mới vào các thư mục này rồi cập nhật path tương ứng.
 SOUND_MAPPING = {
-    "hungry":      "/static/voices/mom/ai_voice_mom.mp3",
-    "tired":       "/static/sounds/lullabies/classic_lullaby.mp3",
-    "pain":        "/static/sounds/white_noise/pink_noise_rain.mp3",
-    "discomfort":  "/static/sounds/white_noise/pink_noise_rain.mp3",
-    "burp":        "/static/sounds/lullabies/classic_lullaby.mp3",
-    "lonely":      "/static/voices/mom/ai_voice_mom.mp3",
-    "scared":      "/static/sounds/white_noise/white_noise_fan.mp3",
-    "cold_hot":    "/static/voices/mom/ai_voice_mom.mp3",
-    "unknown":     "/static/sounds/white_noise/white_noise_fan.mp3"
+    "hungry":      "/static/voices/mom/ai_voice_mom.wav",
+    "tired":       "/static/sounds/lullabies/1.wav",
+    "pain":        "/static/sounds/white_noise/1.wav",
+    "discomfort":  "/static/sounds/white_noise/1.wav",
+    "burp":        "/static/sounds/lullabies/1.wav",
+    "lonely":      "/static/voices/mom/ai_voice_mom.wav",
+    "scared":      "/static/sounds/white_noise/1.wav",
+    "cold_hot":    "/static/voices/mom/ai_voice_mom.wav",
+    "unknown":     "/static/sounds/white_noise/1.wav",
 }
 
+
 def get_soothing_sound_url(reason: str) -> str:
-    path = SOUND_MAPPING.get(reason, SOUND_MAPPING["unknown"])
-    return resolve_asset_url(path, resource_type="video")
+    # Trả thẳng đường dẫn /static/ nội bộ. Đây là asset đóng gói sẵn của app, không
+    # phải file người dùng upload — phục vụ trực tiếp từ backend ổn định hơn là ép
+    # qua Cloudinary (chỉ tồn tại sau khi chạy scripts/sync_static_to_cloudinary.py).
+    return SOUND_MAPPING.get(reason, SOUND_MAPPING["unknown"])
 

@@ -9,6 +9,10 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Backend origin cho proxy. Local dev (không Docker): backend chạy cùng máy -> 127.0.0.1:8000.
+// Trong Docker Compose: backend là service riêng -> đặt BACKEND_ORIGIN=http://backend:8000.
+const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN || "http://127.0.0.1:8000";
+
 app.use(express.json());
 
 // Initialize Gemini safely
@@ -49,7 +53,7 @@ app.post("/api/chat", async (req, res) => {
   const threadId = req.body.thread_id || "default-thread";
 
   try {
-    const backendUrl = `http://127.0.0.1:8000/api/v1/ai/threads/${threadId}/messages`;
+    const backendUrl = `${BACKEND_ORIGIN}/api/v1/ai/threads/${threadId}/messages`;
     const response = await fetch(backendUrl, {
       method: "POST",
       headers: {
@@ -108,7 +112,7 @@ app.post("/api/chat", async (req, res) => {
 
 // Proxy all other /api/v1/* requests to FastAPI backend
 app.all("/api/v1/*", async (req, res) => {
-  const targetUrl = `http://127.0.0.1:8000${req.originalUrl}`;
+  const targetUrl = `${BACKEND_ORIGIN}${req.originalUrl}`;
   try {
     const headers: Record<string, string> = {};
     for (const [key, val] of Object.entries(req.headers)) {
@@ -155,7 +159,7 @@ app.all("/api/v1/*", async (req, res) => {
 
 // Proxy /static/* requests to FastAPI backend (so static assets like baby photos work)
 app.all("/static/*", async (req, res) => {
-  const targetUrl = `http://127.0.0.1:8000${req.originalUrl}`;
+  const targetUrl = `${BACKEND_ORIGIN}${req.originalUrl}`;
   try {
     const response = await fetch(targetUrl, {
       method: req.method,

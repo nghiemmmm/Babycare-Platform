@@ -26,21 +26,65 @@ if BASE_DIR not in sys.path:
 from models.ast_models import ASTModel
 
 
+import shutil
+import subprocess
+import tempfile
+
 import soundfile as sf
 
-def load_audio(wav_name):
-    """Tải tệp âm thanh an toàn bằng soundfile hoặc torchaudio fallback."""
+
+def _sf_to_waveform(path):
+    data, sr = sf.read(path)
+    waveform = torch.from_numpy(data).float()
+    if waveform.ndim == 1:
+        waveform = waveform.unsqueeze(0)
+    else:
+        waveform = waveform.t()
+    return waveform, sr
+
+
+def _ffmpeg_decode(src_path):
+    """Chuyển mã mọi định dạng (webm/opus/m4a/mp3/ogg...) sang WAV 16kHz mono bằng ffmpeg.
+
+    Trình duyệt ghi âm tiếng khóc thường xuất audio/webm;codecs=opus mà libsndfile
+    không giải mã được; torchaudio>=2.9 lại bỏ backend FFmpeg nội bộ và bắt buộc
+    cài package torchcodec. Dùng binary ffmpeg hệ thống là cách ổn định nhất.
+    """
+    ffmpeg_bin = shutil.which("ffmpeg")
+    if not ffmpeg_bin:
+        raise RuntimeError("ffmpeg không có trên PATH")
+    tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
     try:
-        data, sr = sf.read(wav_name)
-        waveform = torch.from_numpy(data).float()
-        if waveform.ndim == 1:
-            waveform = waveform.unsqueeze(0)
-        else:
-            waveform = waveform.t()
-        return waveform, sr
-    except Exception:
-        waveform, sr = torchaudio.load(wav_name)
-        return waveform, sr
+        subprocess.run(
+            [ffmpeg_bin, "-y", "-loglevel", "error", "-i", src_path,
+             "-ac", "1", "-ar", "16000", "-f", "wav", tmp_wav],
+            check=True,
+            capture_output=True,
+        )
+        return _sf_to_waveform(tmp_wav)
+    finally:
+        try:
+            os.remove(tmp_wav)
+        except OSError:
+            pass
+
+
+def load_audio(wav_name):
+    """Tải tệp âm thanh an toàn: soundfile -> ffmpeg (WAV 16kHz) -> torchaudio."""
+    try:
+        return _sf_to_waveform(wav_name)
+    except Exception as sf_err:
+        try:
+            return _ffmpeg_decode(wav_name)
+        except Exception as ff_err:
+            try:
+                waveform, sr = torchaudio.load(wav_name)
+                return waveform, sr
+            except Exception as ta_err:
+                raise RuntimeError(
+                    f"Không giải mã được tệp âm thanh '{os.path.basename(str(wav_name))}'. "
+                    f"soundfile: {sf_err}; ffmpeg: {ff_err}; torchaudio: {ta_err}"
+                )
 
 
 def make_features(wav_name, mel_bins=128, target_length=704):
