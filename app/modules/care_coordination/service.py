@@ -22,6 +22,7 @@ from app.modules.care_coordination.schemas import (
 )
 from app.modules.care_coordination.repository import CareCoordinationRepository
 from app.modules.baby.service import BabyService
+from app.modules.guardian.permissions import require_role, ADMIN, GUARDIAN
 from app.shared.exceptions import EntityNotFoundError, PermissionDeniedError
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,8 @@ class CareCoordinationService:
     ) -> HandoverNoteResponse:
         """Tạo hoặc cập nhật lời dặn bàn giao buổi sáng."""
         self.baby_service.get_baby_by_id(note_in.baby_id, user_id)
+        # Chỉ phụ huynh (ADMIN) được viết/sửa lời dặn bàn giao cho người chăm sóc
+        require_role(note_in.baby_id, user_id, ADMIN)
         target_date = note_in.date or date.today().isoformat()
 
         payload = {
@@ -90,7 +93,9 @@ class CareCoordinationService:
     ) -> CareTaskResponse:
         """Tạo một việc cần làm mới cho bé theo mô hình linh hoạt."""
         self.baby_service.get_baby_by_id(task_in.baby_id, user_id)
-        
+        # Chỉ phụ huynh (ADMIN) được tạo việc chăm sóc & phân công người phụ trách
+        require_role(task_in.baby_id, user_id, ADMIN)
+
         today_str = date.today().isoformat()
         time_mode = task_in.time_mode or "fixed"
         scheduled = task_in.scheduled_time
@@ -176,6 +181,8 @@ class CareCoordinationService:
 
         baby_id = task_doc["baby_id"]
         self.baby_service.get_baby_by_id(baby_id, user_id)
+        # Người chăm sóc (GUARDIAN) và phụ huynh (ADMIN) được tick hoàn thành; VIEWER thì không
+        require_role(baby_id, user_id, ADMIN, GUARDIAN)
 
         now_utc = datetime.now(timezone.utc).isoformat()
         occurred_at = complete_in.occurred_at or now_utc
@@ -224,6 +231,8 @@ class CareCoordinationService:
             raise EntityNotFoundError(f"Không tìm thấy việc cần làm mã: {task_id}")
         
         self.baby_service.get_baby_by_id(task_doc["baby_id"], user_id)
+        # Chỉ phụ huynh (ADMIN) được xoá việc khỏi lịch chăm sóc
+        require_role(task_doc["baby_id"], user_id, ADMIN)
         return self.repo.delete_task(task_id)
 
     # ─── 3. TIMELINE & SUMMARY ───────────────────────────────────────────────
@@ -332,6 +341,8 @@ class CareCoordinationService:
             raise EntityNotFoundError(f"Không tìm thấy việc cần làm mã: {task_id}")
 
         self.baby_service.get_baby_by_id(task_doc["baby_id"], user_id)
+        # Người chăm sóc (GUARDIAN) và phụ huynh (ADMIN) được nhận việc; VIEWER thì không
+        require_role(task_doc["baby_id"], user_id, ADMIN, GUARDIAN)
         updates = {
             "assigned_to": user_id,
             "assigned_name": user_name,
@@ -358,8 +369,10 @@ class CareCoordinationService:
             raise EntityNotFoundError(f"Không tìm thấy việc cần làm mã: {task_id}")
 
         self.baby_service.get_baby_by_id(task_doc["baby_id"], user_id)
+        # Người chăm sóc (GUARDIAN) và phụ huynh (ADMIN) được chuyển giao việc; VIEWER thì không
+        require_role(task_doc["baby_id"], user_id, ADMIN, GUARDIAN)
         now_utc = datetime.now(timezone.utc).isoformat()
-        
+
         orig_name = task_doc.get("original_assigned_name") or task_doc.get("assigned_name", "Mẹ")
         handoff_msg = reason or ("Nhờ chăm sóc hộ tạm thời cữ này" if is_temporary else "Đổi người phụ trách chính")
 
@@ -391,6 +404,8 @@ class CareCoordinationService:
             raise EntityNotFoundError(f"Không tìm thấy việc cần làm mã: {task_id}")
 
         self.baby_service.get_baby_by_id(task_doc["baby_id"], user_id)
+        # Người chăm sóc (GUARDIAN) và phụ huynh (ADMIN) được escalate việc quá hạn; VIEWER thì không
+        require_role(task_doc["baby_id"], user_id, ADMIN, GUARDIAN)
         now_utc = datetime.now(timezone.utc).isoformat()
 
         target_assignee = new_assignee_name or task_doc.get("backup_assigned_name") or "Bố/Mẹ (Người dự phòng)"
@@ -417,7 +432,9 @@ class CareCoordinationService:
         Tính toán phân bổ khối lượng công việc chăm sóc giữa các thành viên trong gia đình (Workload Balance).
         """
         self.baby_service.get_baby_by_id(baby_id, user_id)
-        
+        # Phân tích cân bằng khối lượng là công cụ giám sát của phụ huynh (ADMIN)
+        require_role(baby_id, user_id, ADMIN)
+
         from datetime import timedelta
         end_date = date.today()
         start_date = end_date - timedelta(days=period_days - 1)

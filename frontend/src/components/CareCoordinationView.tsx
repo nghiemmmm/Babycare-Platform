@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ClipboardList,
@@ -27,6 +27,7 @@ import {
   Sparkle
 } from "lucide-react";
 import { apiFetch } from "../lib/authClient";
+import { useAuth } from "../auth/AuthContext";
 import { BabyProfile, Guardian } from "../types";
 
 interface HandoverNote {
@@ -169,6 +170,26 @@ export default function CareCoordinationView({ activeBaby, userName, guardians }
   const [breakCovering, setBreakCovering] = useState<string>("Bố");
 
   const babyName = activeBaby?.name || "bé";
+
+  // ─── PHÂN QUYỀN THEO ROLE ──────────────────────────────────────────────────
+  // Role của user hiện tại trên bé đang xem = role trong bản ghi guardian khớp email.
+  // ADMIN (và mom/dad) = phụ huynh -> được xem "Góc bố mẹ".
+  // GUARDIAN / VIEWER = người chăm sóc -> khoá cứng vào "Góc người chăm sóc".
+  // Chưa xác định được role (guardians chưa load) -> không khoá, để backend chặn.
+  const { email: authEmail } = useAuth();
+  const myRole = useMemo(() => {
+    const list = [...(activeGuardians || []), ...(guardians || [])];
+    const me = list.find(
+      (g) => (g.email || "").trim().toLowerCase() === (authEmail || "").trim().toLowerCase()
+    );
+    return (me?.role || "").toString().toUpperCase();
+  }, [activeGuardians, guardians, authEmail]);
+  const isParentRole = myRole === "" || myRole === "ADMIN" || myRole === "MOM" || myRole === "DAD";
+  const lockedToCaregiver = !isParentRole;
+
+  useEffect(() => {
+    if (lockedToCaregiver) setRoleMode("caregiver");
+  }, [lockedToCaregiver]);
 
   // ─── LOAD DATA ─────────────────────────────────────────────────────────────
   const fetchData = async () => {
@@ -466,29 +487,38 @@ export default function CareCoordinationView({ activeBaby, userName, guardians }
           </div>
         </div>
 
-        {/* Role Switcher Pill */}
-        <div className="bg-slate-100/80 p-1 rounded-2xl border border-slate-200/60 flex items-center self-start lg:self-auto shadow-2xs">
-          <button
-            onClick={() => setRoleMode("parent")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              roleMode === "parent"
-                ? "bg-primary text-white shadow-xs"
-                : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <User className="w-3.5 h-3.5" /> Góc bố mẹ
-          </button>
-          <button
-            onClick={() => setRoleMode("caregiver")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              roleMode === "caregiver"
-                ? "bg-amber-500 text-white shadow-xs"
-                : "text-slate-500 hover:text-slate-800"
-            }`}
+        {/* Role Switcher Pill — chỉ phụ huynh (ADMIN) mới được xem "Góc bố mẹ" */}
+        {lockedToCaregiver ? (
+          <div
+            className="bg-amber-500 text-white px-4 py-2 rounded-2xl text-xs font-bold flex items-center gap-2 self-start lg:self-auto shadow-xs"
+            title="Bạn đang tham gia với vai trò người chăm sóc"
           >
             <Heart className="w-3.5 h-3.5" /> Góc người chăm sóc
-          </button>
-        </div>
+          </div>
+        ) : (
+          <div className="bg-slate-100/80 p-1 rounded-2xl border border-slate-200/60 flex items-center self-start lg:self-auto shadow-2xs">
+            <button
+              onClick={() => setRoleMode("parent")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                roleMode === "parent"
+                  ? "bg-primary text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <User className="w-3.5 h-3.5" /> Góc bố mẹ
+            </button>
+            <button
+              onClick={() => setRoleMode("caregiver")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                roleMode === "caregiver"
+                  ? "bg-amber-500 text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <Heart className="w-3.5 h-3.5" /> Góc người chăm sóc
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Progress & AI Summary Bar */}
