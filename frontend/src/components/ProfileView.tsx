@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { apiFetch } from "../lib/authClient";
 import {
@@ -54,6 +54,16 @@ export default function ProfileView({
   const auth = useAuth();
   const userEmail = auth?.email ?? "";
   const activeBaby = babies.find((b) => b.isActive) || babies[0];
+
+  // Chỉ ADMIN (phụ huynh) của bé đang chọn mới được mời / gửi lại / xoá thành viên.
+  // Role lấy từ bản ghi guardian khớp email của user hiện tại. Backend cũng đã chặn
+  // (require_role ADMIN ở invite/resend/remove) — đây là lớp ẩn UI cho khớp.
+  const isAdminOfActiveBaby = useMemo(() => {
+    const me = (guardians || []).find(
+      (g) => (g.email || "").trim().toLowerCase() === userEmail.trim().toLowerCase()
+    );
+    return (me?.role || "").toString().toUpperCase() === "ADMIN";
+  }, [guardians, userEmail]);
 
   // UI state toggles: viewing dashboard, editing existing, or creating new.
   // Chưa có bé nào (vd. vừa đăng ký tài khoản xong) -> mở thẳng form tạo mới, vì view dashboard
@@ -285,6 +295,10 @@ export default function ProfileView({
 
   const handleInviteGuardian = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdminOfActiveBaby) {
+      setInviteError("Chỉ phụ huynh (Admin) mới có quyền mời thành viên gia đình.");
+      return;
+    }
     if (!inviteEmail || !inviteName || isInviting) return;
 
     setInviteError(null);
@@ -637,7 +651,7 @@ export default function ProfileView({
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        {g.status !== "Synced" && (
+                        {isAdminOfActiveBaby && g.status !== "Synced" && (
                           <button
                             onClick={() => handleResendInvite(g.id)}
                             disabled={resendingId === g.id}
@@ -646,7 +660,7 @@ export default function ProfileView({
                             {resendingId === g.id ? "Đang gửi..." : "Gửi lại"}
                           </button>
                         )}
-                        {g.role !== "ADMIN" && (
+                        {isAdminOfActiveBaby && g.role !== "ADMIN" && (
                           <button
                             onClick={() => onDeleteGuardian(g.id)}
                             className="p-1 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 cursor-pointer"
@@ -660,17 +674,23 @@ export default function ProfileView({
                   ))}
                 </div>
 
-                {/* Invite Member outline button */}
-                <button
-                  onClick={() => {
-                    setInviteError(null);
-                    setShowInviteModal(true);
-                  }}
-                  className="w-full inline-flex items-center justify-center gap-1.5 border border-dashed border-slate-300 hover:border-primary text-slate-500 hover:text-primary text-xs font-bold py-2.5 rounded-2xl transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  Mời thành viên gia đình
-                </button>
+                {/* Invite Member outline button — chỉ ADMIN (phụ huynh) mới mời được */}
+                {isAdminOfActiveBaby ? (
+                  <button
+                    onClick={() => {
+                      setInviteError(null);
+                      setShowInviteModal(true);
+                    }}
+                    className="w-full inline-flex items-center justify-center gap-1.5 border border-dashed border-slate-300 hover:border-primary text-slate-500 hover:text-primary text-xs font-bold py-2.5 rounded-2xl transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Mời thành viên gia đình
+                  </button>
+                ) : (
+                  <p className="text-center text-[10px] font-semibold text-slate-400 py-2">
+                    Chỉ phụ huynh (Admin) mới có quyền mời hoặc gỡ thành viên gia đình.
+                  </p>
+                )}
 
                 {/* Family status widget */}
                 <div className="p-3.5 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/10 rounded-2xl flex items-center gap-3">
