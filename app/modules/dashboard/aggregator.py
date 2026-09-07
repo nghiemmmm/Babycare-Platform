@@ -159,26 +159,58 @@ class DashboardAggregator:
     def _aggregate_medication(self, baby_id: str, user_id: str):
         """
         Gọi MedicationService để kiểm tra Paracetamol và cảnh báo an toàn.
+
+        Gộp 2 nguồn: nhật ký thuốc cũ (medication logs) + cữ thuốc theo phác đồ đã
+        uống hôm nay (medication dose logs) - để Dashboard đồng bộ với trang Sức khỏe.
         """
+        # (a) Số cữ thuốc theo phác đồ còn phải uống hôm nay
+        pending_today = 0
         try:
-            history = self.med_svc.get_medication_history(baby_id, user_id)
+            today_doses = self.med_svc.get_today_doses(baby_id, user_id)
+            pending_today = sum(1 for d in today_doses if d.status == "pending")
         except Exception:
-            return None, None, 0
+            today_doses = []
 
-        paras = [
-            log for log in history
-            if "paracetamol" in log.medication_name.lower()
-            or "hapacol" in log.medication_name.lower()
-        ]
+        # (b) Thời điểm uống Paracetamol/Hapacol gần nhất - xét cả 2 kho dữ liệu
+        para_times: list[datetime] = []
+        para_name = "Paracetamol"
 
-        if not paras:
-            return SafetyAlert(level="NORMAL", message="Không có cảnh báo đặc biệt về thuốc."), None, 0
+        def _is_para(name: str) -> bool:
+            n = (name or "").lower()
+            return "paracetamol" in n or "hapacol" in n
 
-        last = paras[0]
+        def _parse(ts: str) -> Optional[datetime]:
+            try:
+                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except Exception:
+                return None
+
         try:
-            last_time = datetime.fromisoformat(last.logged_at.replace("Z", "+00:00"))
+            for log in self.med_svc.get_medication_history(baby_id, user_id):
+                if _is_para(log.medication_name) and (dt := _parse(log.logged_at)):
+                    para_times.append(dt)
+                    para_name = log.medication_name
         except Exception:
-            last_time = datetime.now(timezone.utc)
+            pass
+
+        try:
+            for d in self.med_svc.get_dose_history(baby_id, user_id, limit=100):
+                if d.status == "taken" and _is_para(d.medication_name) and d.taken_at and (dt := _parse(d.taken_at)):
+                    para_times.append(dt)
+                    para_name = d.medication_name
+        except Exception:
+            pass
+
+        if not para_times:
+            msg = (
+                f"Còn {pending_today} cữ thuốc theo phác đồ cần cho bé uống hôm nay."
+                if pending_today
+                else "Không có cảnh báo đặc biệt về thuốc."
+            )
+            return SafetyAlert(level="NORMAL", message=msg), None, pending_today
+
+        last_time = max(para_times)
+        last = type("_L", (), {"medication_name": para_name})()
 
         next_eligible = last_time + timedelta(hours=4)
         now = datetime.now(timezone.utc)
@@ -201,7 +233,7 @@ class DashboardAggregator:
             next_eligible_time=next_eligible.isoformat(),
             is_administer_disabled=is_disabled,
         )
-        return alert, countdown, 1 if is_disabled else 0
+        return alert, countdown, pending_today
 
     def _aggregate_growth(self, baby_id: str, user_id: str) -> Optional[GrowthSnapshot]:
         """
@@ -340,20 +372,34 @@ class DashboardAggregator:
             logger.warning(f"Error fetching notifications collection: {e}")
 
 
-        # 2. Tự động bổ sung thông báo lịch uống thuốc đến hạn nếu chưa có
+        # 2. Nhắc lịch uống thuốc: ưu tiên cữ thuốc theo phác đồ (hệ mới) còn phải uống hôm nay,
+        #    fallback về nhật ký thuốc cũ để tương thích ngược.
         try:
-            med_logs = self.med_svc.get_medication_history(baby_id, user_id)
-            for m in med_logs[:3]:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            pending = [d for d in self.med_svc.get_today_doses(baby_id, user_id) if d.status == "pending"]
+            for d in pending[:3]:
                 notifications.append(
                     NotificationResponse(
-                        id=f"notif_med_{m.id}",
-                        title=f"Lịch uống thuốc: {m.medication_name}",
-                        message=f"Liều dùng: {m.dosage}. {m.notes or ''}",
+                        id=f"notif_dose_{d.dose_id}",
+                        title=f"Lịch uống thuốc: {d.medication_name}",
+                        message=f"Cữ {d.scheduled_time} • Liều: {d.dose_display}. {d.instructions or ''}",
                         type="medication",
-                        created_at=m.logged_at,
+                        created_at=now_iso,
                         read=False,
                     )
                 )
+            if not pending:
+                for m in self.med_svc.get_medication_history(baby_id, user_id)[:3]:
+                    notifications.append(
+                        NotificationResponse(
+                            id=f"notif_med_{m.id}",
+                            title=f"Lịch uống thuốc: {m.medication_name}",
+                            message=f"Liều dùng: {m.dosage}. {m.notes or ''}",
+                            type="medication",
+                            created_at=m.logged_at,
+                            read=False,
+                        )
+                    )
         except Exception as e:
             logger.warning(f"Error aggregating medication notifications: {e}")
 

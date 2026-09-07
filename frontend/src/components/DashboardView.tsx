@@ -46,7 +46,7 @@ import {
   Tooltip,
   Legend
 } from "recharts";
-import { BabyProfile, MedicationLog, FeedLog, Measurement, ChatMessage, SmartExtraction, NotificationItem } from "../types";
+import { BabyProfile, MedicationLog, FeedLog, Measurement, ChatMessage, SmartExtraction, NotificationItem, TodayDoseItem } from "../types";
 import { DEFAULT_AVATAR_URL, DEFAULT_SOOTHING_SOUND_URL, DEFAULT_SAMPLE_CRY_URL } from "../data";
 import { apiFetch, authStorage } from "../lib/authClient";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
@@ -196,6 +196,12 @@ export default function DashboardView({
   // Backend Aggregated Dashboard Data
   const [dashboardData, setDashboardData] = useState<any>(null);
 
+  // Cữ thuốc hôm nay (hệ phác đồ - dùng chung nguồn dữ liệu với trang Sức khỏe)
+  const [todayDoses, setTodayDoses] = useState<TodayDoseItem[]>([]);
+  const pendingDoses = todayDoses.filter((d) => d.status === "pending");
+  const nextPendingDose = pendingDoses[0];
+  const hasPendingDoses = pendingDoses.length > 0;
+
   // Handover Note State (Giấy Nhớ Lời Dặn Đầu Ngày)
   const [handoverNote, setHandoverNote] = useState<{
     id?: string;
@@ -235,7 +241,86 @@ export default function DashboardView({
 
     fetchDashboardSummary();
     fetchHandoverNote();
+    fetchTodayDoses();
   }, [activeBaby.id]);
+
+  // Cữ thuốc hôm nay - cùng endpoint mà trang Sức khỏe dùng, để 2 nơi luôn đồng bộ
+  const fetchTodayDoses = async () => {
+    if (!activeBaby?.id) return;
+    try {
+      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/medication-doses/today`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setTodayDoses(data);
+      }
+    } catch {
+      /* im lặng - dashboard vẫn hiển thị phần còn lại */
+    }
+  };
+
+  // Ghi nhận đã cho bé uống 1 cữ thuốc -> POST /medication-doses/log (giống hệt trang Sức khỏe),
+  // rồi phát sự kiện baby-data-updated để trang Sức khỏe + Sổ bàn giao cùng cập nhật.
+  const logDoseAction = async (
+    dose: TodayDoseItem,
+    status: "taken" | "skipped" = "taken"
+  ) => {
+    const nowIso = new Date().toISOString();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const actor = authStorage.name || "Người chăm sóc";
+    // Optimistic update
+    setTodayDoses((prev) =>
+      prev.map((d) =>
+        d.dose_id === dose.dose_id
+          ? { ...d, status, taken_at: status === "taken" ? nowIso : undefined, administered_by: actor }
+          : d
+      )
+    );
+    try {
+      await apiFetch(`/api/v1/babies/${activeBaby.id}/medication-doses/log`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan_id: dose.plan_id ?? null,
+          medication_name: dose.medication_name,
+          scheduled_date: todayStr,
+          scheduled_time: dose.scheduled_time,
+          taken_at: status === "taken" ? nowIso : undefined,
+          dose_taken: dose.dose_display,
+          status,
+          administered_by: actor,
+          notes: status === "taken" ? "Ghi nhận từ Trang tổng quan" : "Bỏ qua cữ này (từ Trang tổng quan)"
+        })
+      });
+      const label = status === "taken" ? "Đã cho uống" : "Đã bỏ qua";
+      showToast("success", `${label} cữ thuốc`, `${dose.medication_name} (${dose.dose_display}) • ${actor}. Đã đồng bộ với trang Sức khỏe.`);
+    } catch {
+      showToast("error", "Chưa thể ghi nhận", "Không lưu được cữ thuốc. Vui lòng thử lại.");
+    } finally {
+      fetchTodayDoses();
+      window.dispatchEvent(new CustomEvent("baby-data-updated", { detail: { babyId: activeBaby.id } }));
+    }
+  };
+
+  // Ghi nhận cữ thuốc ngoài phác đồ (không gắn plan) - vẫn vào chung kho medication-doses
+  const logAdHocDose = async (name: string, doseText: string) => {
+    if (!name.trim()) return;
+    const now = new Date();
+    const hhmm = now.toTimeString().slice(0, 5);
+    await logDoseAction(
+      {
+        dose_id: `adhoc_${now.getTime()}`,
+        plan_id: null,
+        medication_name: name.trim(),
+        dose_display: doseText.trim() || "Theo chỉ định",
+        scheduled_time: hhmm,
+        session: "custom",
+        status: "pending",
+        route: "Oral (Đường uống)",
+        meal_timing: "after_food"
+      } as unknown as TodayDoseItem,
+      "taken"
+    );
+  };
 
   // Tự động lắng nghe Event baby-data-updated để sync dữ liệu Dashboard tức thì (< 100ms)
   useBabyDataListener(useCallback(() => {
@@ -247,6 +332,11 @@ export default function DashboardView({
     apiFetch(`/api/v1/care-coordination/handover/today?baby_id=${activeBaby.id}`)
       .then(res => res.ok && res.json())
       .then(data => data && setHandoverNote(data))
+      .catch(() => {});
+
+    apiFetch(`/api/v1/babies/${activeBaby.id}/medication-doses/today`)
+      .then(res => res.ok && res.json())
+      .then(data => Array.isArray(data) && setTodayDoses(data))
       .catch(() => {});
   }, [activeBaby.id]));
 
@@ -841,24 +931,10 @@ export default function DashboardView({
     }
   };
 
-  const handleAddMedicationSubmit = (e: React.FormEvent) => {
+  const handleAddMedicationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      onAddMedication({
-        babyId: activeBaby.id,
-        name: medName,
-        dosage: medDosage,
-        time: timeStr,
-        date: "Today",
-        prescribedBy: prescribedBy || "Self Logged"
-      });
-      setActiveModal("none");
-      showToast("success", "Thành công", "Đã lưu nhật ký dùng thuốc cho bé 💊");
-    } catch (err) {
-      showToast("error", "Chưa thể lưu", "Không thể lưu thông tin thuốc.");
-    }
+    await logAdHocDose(medName, medDosage);
+    setActiveModal("none");
   };
 
   const handleAddMeasurementSubmit = (e: React.FormEvent) => {
@@ -897,7 +973,20 @@ export default function DashboardView({
       title: m.name,
       detail: `Dosage: ${m.dosage} • Prescribed by: ${m.prescribedBy || "Self"}`,
       rawType: "Med"
-    }))
+    })),
+    // Cữ thuốc đã cho uống hôm nay theo phác đồ (hệ mới) - để timeline khớp trang Sức khỏe
+    ...todayDoses
+      .filter(d => d.status === "taken")
+      .map(d => ({
+        id: d.dose_id,
+        time: d.taken_at
+          ? new Date(d.taken_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+          : d.scheduled_time,
+        type: "medication",
+        title: d.medication_name,
+        detail: `Liều: ${d.dose_display}${d.administered_by ? ` • ${d.administered_by}` : ""}`,
+        rawType: "Med"
+      }))
   ].sort((a, b) => {
     const timeToMinutes = (tStr: string) => {
       const match = tStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
@@ -1274,14 +1363,17 @@ export default function DashboardView({
 
           return (
             <>
-              {/* 1. Nhắc lịch uống thuốc khi bé có đơn thuốc, hoặc thông báo bé khỏe mạnh khi đã xong đợt điều trị */}
-              {medications.length > 0 ? (
+              {/* 1. Nhắc lịch uống thuốc khi bé có cữ thuốc trong phác đồ (hoặc nhật ký thuốc cũ) */}
+              {(nextPendingDose || medications.length > 0) ? (
                 <div className="mt-6 p-4 bg-purple-50/90 border border-purple-200/80 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-bold text-purple-900 shadow-2xs">
                   <div className="flex items-center gap-2.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-ping shrink-0" />
                     <div>
                       <span className="block font-black text-purple-950">
-                        💊 NHẮC LỊCH UỐNG THUỐC: {medications[0].name} ({medications[0].dosage}) lúc {medications[0].time}
+                        💊 NHẮC LỊCH UỐNG THUỐC:{" "}
+                        {nextPendingDose
+                          ? `${nextPendingDose.medication_name} (${nextPendingDose.dose_display}) lúc ${nextPendingDose.scheduled_time}`
+                          : `${medications[0].name} (${medications[0].dosage}) lúc ${medications[0].time}`}
                       </span>
                       <span className="text-[11px] text-purple-700 font-medium">Nhắc nhở cho bé {activeBaby.name} uống thuốc đúng giờ & đồng bộ người chăm sóc</span>
                     </div>
@@ -1478,7 +1570,7 @@ export default function DashboardView({
                 {[
                   { label: isSolidsStage ? "Ăn dặm & Sữa" : "Ăn uống", icon: Droplet, color: "text-[#7cb9e8] bg-[#7cb9e8]/10 border-[#7cb9e8]/20", modal: "feed", show: customModules.feed !== false },
                   { label: "Giấc ngủ", icon: Moon, color: "text-[#b19cd9] bg-[#b19cd9]/10 border-[#b19cd9]/20", modal: "sleep", show: customModules.sleep !== false },
-                  { label: "Uống thuốc", icon: Pill, color: "text-purple-600 bg-purple-50 border-purple-200", modal: "medication", show: isBabySick && customModules.medication !== false },
+                  { label: "Uống thuốc", icon: Pill, color: "text-purple-600 bg-purple-50 border-purple-200", modal: "medication", show: (isBabySick || hasPendingDoses) && customModules.medication !== false },
                   { label: isBabySick ? "Khai báo khỏi" : "Báo bé ốm", icon: Activity, color: isBabySick ? "text-emerald-600 bg-emerald-50 border-emerald-200" : "text-rose-600 bg-rose-50 border-rose-200", modal: "health", show: true }
                 ]
                   .filter((a) => a.show)
@@ -2388,46 +2480,56 @@ export default function DashboardView({
                 </button>
               </div>
 
-              {/* 1. DANH SÁCH THUỐC CẦN UỐNG TẠI THỜI ĐIỂM HIỆN TẠI (1-CHẠM XÁC NHẬN) */}
-              {medications.length > 0 ? (
+              {/* 1. CỮ THUỐC HÔM NAY THEO PHÁC ĐỒ (1-CHẠM XÁC NHẬN) - chung nguồn với trang Sức khỏe */}
+              {todayDoses.length > 0 ? (
                 <div className="space-y-3">
                   <p className="text-[11px] font-bold text-slate-500">
-                    Bấm để xác nhận đã cho bé uống tại thời điểm này:
+                    Bấm để xác nhận đã cho bé uống - tự động đồng bộ sang trang Sức khỏe & Sổ bàn giao:
                   </p>
                   <div className="space-y-2 max-h-56 overflow-y-auto">
-                    {medications.map((med) => (
-                      <div
-                        key={med.id}
-                        className="p-3.5 bg-purple-50/80 border border-purple-200/80 rounded-2xl flex items-center justify-between gap-3 shadow-2xs"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-xs font-black text-purple-950 truncate">{med.name}</p>
-                          <p className="text-[11px] text-purple-700 font-semibold mt-0.5">
-                            Liều: {med.dosage} {med.prescribedBy ? `• ${med.prescribedBy}` : ""}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nowStr = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-                            onAddMedication({
-                              babyId: activeBaby.id,
-                              name: med.name,
-                              dosage: med.dosage,
-                              time: nowStr,
-                              date: new Date().toISOString().split("T")[0],
-                              prescribedBy: med.prescribedBy || "Bác sĩ",
-                              givenBy: authStorage.name || "Người chăm sóc"
-                            });
-                            showToast("success", "Đã ghi nhận cữ thuốc", `Đã lưu bé ${activeBaby.name} uống ${med.name} (${med.dosage}) lúc ${nowStr}`);
-                            setActiveModal("none");
-                          }}
-                          className="text-[11px] font-black bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer"
+                    {todayDoses.map((dose) => {
+                      const isTaken = dose.status === "taken";
+                      const isSkipped = dose.status === "skipped";
+                      return (
+                        <div
+                          key={dose.dose_id}
+                          className={`p-3.5 rounded-2xl flex items-center justify-between gap-3 shadow-2xs border ${
+                            isTaken
+                              ? "bg-emerald-50/80 border-emerald-200/80"
+                              : isSkipped
+                              ? "bg-slate-50 border-slate-200 opacity-70"
+                              : "bg-purple-50/80 border-purple-200/80"
+                          }`}
                         >
-                          ✓ Đã cho uống
-                        </button>
-                      </div>
-                    ))}
+                          <div className="min-w-0">
+                            <p className="text-xs font-black text-slate-900 truncate">
+                              {dose.medication_name}
+                              <span className="ml-1.5 font-bold text-slate-400">· {dose.scheduled_time}</span>
+                            </p>
+                            <p className="text-[11px] font-semibold mt-0.5 text-slate-600">
+                              Liều: {dose.dose_display}
+                              {isTaken && dose.administered_by ? ` • ${dose.administered_by}` : ""}
+                              {isTaken && dose.taken_at
+                                ? ` lúc ${new Date(dose.taken_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`
+                                : ""}
+                            </p>
+                          </div>
+                          {isTaken ? (
+                            <span className="text-[11px] font-black text-emerald-600 shrink-0">✓ Đã uống</span>
+                          ) : isSkipped ? (
+                            <span className="text-[11px] font-black text-slate-400 shrink-0">✕ Bỏ qua</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => logDoseAction(dose, "taken")}
+                              className="text-[11px] font-black bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer"
+                            >
+                              ✓ Đã cho uống
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
@@ -2437,7 +2539,6 @@ export default function DashboardView({
                         setMedName("");
                         setMedDosage("");
                         setPrescribedBy("");
-                        // Show raw form fallback
                         const el = document.getElementById("manual-med-form");
                         if (el) el.classList.toggle("hidden");
                       }}
@@ -2447,13 +2548,17 @@ export default function DashboardView({
                     </button>
                   </div>
                 </div>
-              ) : null}
+              ) : (
+                <p className="text-[11px] font-medium text-slate-400 text-center py-1">
+                  Hôm nay bé chưa có cữ thuốc nào trong phác đồ. Có thể ghi nhận thủ công bên dưới.
+                </p>
+              )}
 
-              {/* 2. FORM NHẬP THỦ CÔNG (Nếu chưa có đơn thuốc hoặc muốn thêm thuốc mới) */}
+              {/* 2. FORM NHẬP THỦ CÔNG (thuốc ngoài phác đồ) - vẫn ghi vào chung kho medication-doses */}
               <form
                 id="manual-med-form"
                 onSubmit={handleAddMedicationSubmit}
-                className={`space-y-4 text-xs font-bold text-slate-600 ${medications.length > 0 ? "hidden pt-2 border-t border-slate-100" : ""}`}
+                className={`space-y-4 text-xs font-bold text-slate-600 ${todayDoses.length > 0 ? "hidden pt-2 border-t border-slate-100" : ""}`}
               >
                 <div className="space-y-2">
                   <label className="block">Tên thuốc</label>
