@@ -7,6 +7,7 @@ from datetime import datetime, date, timezone
 
 from app.modules.care_coordination.schemas import (
     HandoverNoteCreate,
+    HandoverNoteUpdate,
     HandoverNoteResponse,
     CareTaskCreate,
     CareTaskUpdate,
@@ -39,15 +40,17 @@ class CareCoordinationService:
 
     # ─── 1. HANDOVER NOTES ───────────────────────────────────────────────────
 
-    def get_today_handover(self, baby_id: str, user_id: str, date_str: Optional[str] = None) -> Optional[HandoverNoteResponse]:
-        """Lấy lời dặn bàn giao trong ngày của bé."""
+    def get_today_handovers(self, baby_id: str, user_id: str, date_str: Optional[str] = None) -> List[HandoverNoteResponse]:
+        """Lấy toàn bộ danh sách lời dặn bàn giao trong ngày của bé."""
         self.baby_service.get_baby_by_id(baby_id, user_id)
         target_date = date_str or date.today().isoformat()
-        
-        doc = self.repo.get_handover_by_date(baby_id, target_date)
-        if not doc:
-            return None
-        return HandoverNoteResponse(**doc)
+        raw_notes = self.repo.list_handovers_by_date(baby_id, target_date)
+        return [HandoverNoteResponse(**n) for n in raw_notes]
+
+    def get_today_handover(self, baby_id: str, user_id: str, date_str: Optional[str] = None) -> Optional[HandoverNoteResponse]:
+        """Lấy lời dặn bàn giao mới nhất trong ngày của bé."""
+        notes = self.get_today_handovers(baby_id, user_id, date_str)
+        return notes[0] if notes else None
 
     def save_handover_note(
         self,
@@ -55,7 +58,7 @@ class CareCoordinationService:
         user_id: str,
         author_name: str = "Phụ huynh"
     ) -> HandoverNoteResponse:
-        """Tạo hoặc cập nhật lời dặn bàn giao buổi sáng."""
+        """Tạo mới một lời dặn bàn giao trong ngày."""
         self.baby_service.get_baby_by_id(note_in.baby_id, user_id)
         # Chỉ phụ huynh (ADMIN) được viết/sửa lời dặn bàn giao cho người chăm sóc
         require_role(note_in.baby_id, user_id, ADMIN)
@@ -70,11 +73,46 @@ class CareCoordinationService:
             "content": note_in.content,
             "voice_note_url": note_in.voice_note_url,
             "photo_urls": note_in.photo_urls or [],
-            "acknowledged_by": []
+            "acknowledged_by": [],
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
-        doc_id = self.repo.create_or_update_handover(payload)
-        doc = self.repo.get_handover_by_date(note_in.baby_id, target_date)
+        doc_id = self.repo.create_handover(payload)
+        doc = self.repo.get_handover_by_id(doc_id)
         return HandoverNoteResponse(**doc)
+
+    def update_handover_note(
+        self,
+        note_id: str,
+        note_in: HandoverNoteUpdate,
+        user_id: str
+    ) -> HandoverNoteResponse:
+        """Chỉnh sửa lời dặn bàn giao."""
+        doc = self.repo.get_handover_by_id(note_id)
+        if not doc:
+            raise EntityNotFoundError(f"Không tìm thấy lời dặn mã: {note_id}")
+        self.baby_service.get_baby_by_id(doc["baby_id"], user_id)
+
+        updates = {}
+        if note_in.content is not None:
+            updates["content"] = note_in.content
+        if note_in.recipient_name is not None:
+            updates["recipient_name"] = note_in.recipient_name
+        if note_in.voice_note_url is not None:
+            updates["voice_note_url"] = note_in.voice_note_url
+        if note_in.photo_urls is not None:
+            updates["photo_urls"] = note_in.photo_urls
+
+        self.repo.update_handover(note_id, updates)
+        updated = self.repo.get_handover_by_id(note_id)
+        return HandoverNoteResponse(**updated)
+
+    def delete_handover_note(self, note_id: str, user_id: str) -> bool:
+        """Xóa một lời dặn bàn giao."""
+        doc = self.repo.get_handover_by_id(note_id)
+        if not doc:
+            raise EntityNotFoundError(f"Không tìm thấy lời dặn mã: {note_id}")
+        self.baby_service.get_baby_by_id(doc["baby_id"], user_id)
+        return self.repo.delete_handover(note_id)
 
     # ─── 2. CARE TASKS ───────────────────────────────────────────────────────
 
@@ -261,11 +299,9 @@ class CareCoordinationService:
                 sched_str = t.get("scheduled_time", "")
                 task_type = t.get("task_type", "custom")
                 try:
-                    if "T" in sched_str:
-                        sched_dt = datetime.fromisoformat(sched_str.replace("Z", "+00:00"))
-                    else:
-                        sched_dt = datetime.fromisoformat(f"{target_date}T{sched_str}:00+00:00")
-                    
+                    time_part = sched_str.split("T")[1][:5] if "T" in sched_str else sched_str[:5]
+                    sched_dt = datetime.fromisoformat(f"{target_date}T{time_part}:00")
+                    now_dt = datetime.now()
                     diff_seconds = (now_dt - sched_dt).total_seconds()
                     
                     # Ngưỡng trễ thông minh theo loại hình công việc
@@ -293,10 +329,16 @@ class CareCoordinationService:
         # Tự động quét cập nhật task quá hạn
         self.check_and_update_overdue_tasks(baby_id, user_id, target_date)
 
-        handover = self.get_today_handover(baby_id, user_id, target_date)
+        handovers = self.get_today_handovers(baby_id, user_id, target_date)
+        handover = handovers[0] if handovers else None
         tasks = self.get_today_tasks(baby_id, user_id, target_date)
         raw_events = self.repo.list_events_by_date(baby_id, target_date)
-        events = [CareEventResponse(**e) for e in raw_events]
+        events = []
+        for e in raw_events:
+            try:
+                events.append(CareEventResponse(**e))
+            except Exception as exc:
+                logger.warning(f"Bỏ qua care event lỗi schema {e.get('id')}: {exc}")
 
         total = len(tasks)
         completed = sum(1 for t in tasks if t.status == TaskStatusEnum.COMPLETED.value)
@@ -320,6 +362,7 @@ class CareCoordinationService:
             completed_tasks=completed,
             overdue_tasks=overdue,
             handover_note=handover,
+            handover_notes=handovers,
             tasks=tasks,
             recent_events=events,
             ai_summary_text=ai_summary

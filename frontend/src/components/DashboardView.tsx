@@ -154,6 +154,10 @@ export default function DashboardView({
   // Growth Metric Toggle state (weight or height)
   const [growthMetric, setGrowthMetric] = useState<"weight" | "height">("weight");
 
+  // Wake Window & Sweet Spot Model Info State
+  const [wakeWindowData, setWakeWindowData] = useState<any>(null);
+  const [showSleepModelModal, setShowSleepModelModal] = useState(false);
+
   // Form states for Feed
   const [feedType, setFeedType] = useState<"Formula" | "Breast" | "Solids">("Formula");
   const [feedAmount, setFeedAmount] = useState(150);
@@ -213,6 +217,66 @@ export default function DashboardView({
   } | null>(null);
   const [isAcknowledgedLocally, setIsAcknowledgedLocally] = useState(false);
 
+  // Real-time Care Coordination Activity Stream (Chuyển từ Hồ sơ sang Tổng quan Dashboard)
+  const [recentActivities, setRecentActivities] = useState<Array<{ id: string; user: string; action: string; time: string; color: string }>>([]);
+
+  const fetchRecentActivities = useCallback(async () => {
+    if (!activeBaby?.id) return;
+    try {
+      const res = await apiFetch(`/api/v1/care-coordination/overview?baby_id=${activeBaby.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        const events = data.recent_events || [];
+        const mapped = events.map((ev: any, idx: number) => {
+          const timeStr = ev.occurred_at ? new Date(ev.occurred_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "";
+          let action = "đã ghi nhận hoạt động";
+          let color = "bg-teal-50 text-teal-600";
+          if (ev.event_type === "feeding") {
+            const amt = ev.actual_value?.amount ? `${ev.actual_value.amount}ml ` : "";
+            const feedType = ev.actual_value?.feed_type === "Formula" ? "Sữa công thức" : (ev.actual_value?.feed_type === "Breast" ? "Sữa mẹ" : "Ăn dặm");
+            action = `đã cho bé bú ${amt}${feedType}`.trim();
+            color = "bg-sky-50 text-sky-600";
+          } else if (ev.event_type === "sleep") {
+            const dur = ev.actual_value?.duration_minutes ? ` (${ev.actual_value.duration_minutes} phút)` : "";
+            action = `đã ghi nhận giấc ngủ${dur}`;
+            color = "bg-purple-50 text-purple-600";
+          } else if (ev.event_type === "medication") {
+            const med = ev.actual_value?.medicine ? ` (${ev.actual_value.medicine})` : "";
+            action = `đã cho bé uống vi chất/thuốc${med}`;
+            color = "bg-rose-50 text-rose-600";
+          } else if (ev.event_type === "diaper") {
+            action = "đã thay tã sạch sẽ cho bé";
+            color = "bg-amber-50 text-amber-600";
+          } else if (ev.notes) {
+            action = ev.notes;
+          }
+          return {
+            id: ev.id || `act_${idx}`,
+            user: ev.recorded_by_name || ev.logged_by_name || "Người chăm sóc",
+            action,
+            time: timeStr || "Hôm nay",
+            color
+          };
+        });
+        setRecentActivities(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to load dashboard activities:", err);
+    }
+  }, [activeBaby.id]);
+
+  const fetchWakeWindow = useCallback(async () => {
+    try {
+      const res = await apiFetch(`/api/v1/babies/${activeBaby.id}/sleep/next-wake-window`);
+      if (res.ok) {
+        const data = await res.json();
+        setWakeWindowData(data);
+      }
+    } catch (err) {
+      console.error("Failed to load wake window prediction:", err);
+    }
+  }, [activeBaby.id]);
+
   useEffect(() => {
     const fetchDashboardSummary = async () => {
       try {
@@ -242,7 +306,9 @@ export default function DashboardView({
     fetchDashboardSummary();
     fetchHandoverNote();
     fetchTodayDoses();
-  }, [activeBaby.id]);
+    fetchRecentActivities();
+    fetchWakeWindow();
+  }, [activeBaby.id, fetchRecentActivities, fetchWakeWindow]);
 
   // Cữ thuốc hôm nay - cùng endpoint mà trang Sức khỏe dùng, để 2 nơi luôn đồng bộ
   const fetchTodayDoses = async () => {
@@ -338,7 +404,10 @@ export default function DashboardView({
       .then(res => res.ok && res.json())
       .then(data => Array.isArray(data) && setTodayDoses(data))
       .catch(() => {});
-  }, [activeBaby.id]));
+
+    fetchRecentActivities();
+    fetchWakeWindow();
+  }, [activeBaby.id, fetchRecentActivities, fetchWakeWindow]));
 
 
   // AI Cry Detection State & Handlers
@@ -452,7 +521,9 @@ export default function DashboardView({
     if (cryResult?.logId) {
       try {
         await apiFetch(`/api/v1/babies/${activeBaby.id}/cry-prediction/${cryResult.logId}/feedback?feedback_accurate=${accurate}`, {
-          method: "PATCH"
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(accurate)
         });
       } catch (e) {
         console.error("Error submitting cry feedback:", e);
@@ -1672,12 +1743,13 @@ export default function DashboardView({
           },
           {
             title: "DỰ ĐOÁN CỮ NGỦ",
-            value: dashboardData?.nap_prediction || "Cần thêm dữ liệu",
-            subtitle: "Tính toán nhịp thức (Wake Window)",
+            value: wakeWindowData ? `${wakeWindowData.optimal_sleep_time} (Thức ${wakeWindowData.predicted_wake_window_formatted})` : (dashboardData?.nap_prediction || "Cần thêm dữ liệu"),
+            subtitle: wakeWindowData ? `Chuẩn bị thư giãn phòng lúc ${wakeWindowData.wind_down_start_time}` : "Tính toán nhịp thức (Wake Window)",
             icon: Clock,
-            badge: "💡 Dự đoán theo thói quen sinh học",
+            badge: wakeWindowData?.model_source === "LIGHTGBM_NORMAL" ? "✨ Đã tối ưu nhịp sinh học" : (wakeWindowData?.model_source === "EXPERT_BASELINE_COLD_START" ? "🌱 Chuẩn Nhi khoa" : "💡 Dự đoán sinh học"),
             color: "text-amber-600 bg-amber-50 border-amber-100",
-            show: true
+            show: true,
+            onClick: () => setShowSleepModelModal(true)
           },
           {
             title: "LỊCH TIÊM NGỪA",
@@ -1695,7 +1767,11 @@ export default function DashboardView({
             {allStatCards.map((card, idx) => {
               const Icon = card.icon;
               return (
-                <div key={idx} className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-5 flex flex-col justify-between space-y-4 hover:scale-105 transition-transform duration-300">
+                <div
+                  key={idx}
+                  onClick={card.onClick}
+                  className={`bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-5 flex flex-col justify-between space-y-4 hover:scale-105 transition-transform duration-300 ${card.onClick ? 'cursor-pointer hover:border-amber-300/60' : ''}`}
+                >
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{card.title}</span>
                     <div className={`p-1.5 rounded-full ${card.color}`}>
@@ -1708,6 +1784,7 @@ export default function DashboardView({
                   </div>
                   <div className="text-[10px] font-bold text-slate-500 bg-white/40 border border-white/20 rounded-lg px-2 py-1 inline-flex items-center gap-1 self-start">
                     {card.badge}
+                    {card.onClick && <span className="text-[9px] text-amber-600 font-bold ml-1">👉 Chạm xem</span>}
                   </div>
                 </div>
               );
@@ -2122,45 +2199,60 @@ export default function DashboardView({
             </div>
           </div>
 
-          {/* Daily Timeline */}
+          {/* Dòng hoạt động thời gian thực (Care Coordination Activity Stream) */}
           <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-white/20 pb-3">
               <h3 className="text-primary font-bold text-sm tracking-tight flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-slate-400" />
-                Dòng thời gian hoạt động
+                Dòng hoạt động thời gian thực
               </h3>
-              <span className="text-[9px] font-bold text-slate-400 bg-white/40 border border-white/20 rounded-md px-2 py-0.5">
-                Hôm nay
+              <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-md px-2 py-0.5 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Đồng bộ trực tiếp
               </span>
             </div>
 
-            <div className="relative pl-4 border-l border-slate-100 space-y-5">
-              {combinedTimeline.slice(0, 5).map((item, idx) => {
-                let dotColor = "bg-[#7cb9e8] ring-[#7cb9e8]/20";
-                if (item.type === "medication") dotColor = "bg-[#b2e2f2] ring-[#b2e2f2]/30";
-                if (item.type === "diaper") dotColor = "bg-[#fdfd96] ring-[#fdfd96]/30";
-
-                return (
+            {recentActivities.length > 0 ? (
+              <div className="space-y-3">
+                {recentActivities.slice(0, 6).map((act) => (
+                  <div
+                    key={act.id}
+                    className="p-3 bg-white/40 border border-white/20 rounded-2xl flex items-center justify-between gap-3 text-xs hover:bg-white/70 transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${act.color}`}>
+                        {act.user.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-700 leading-snug">
+                          <span className="font-bold text-slate-800">{act.user}</span> {act.action}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-medium text-slate-400 shrink-0">{act.time}</span>
+                  </div>
+                ))}
+              </div>
+            ) : combinedTimeline.length > 0 ? (
+              <div className="relative pl-4 border-l border-slate-100 space-y-4">
+                {combinedTimeline.slice(0, 5).map((item, idx) => (
                   <div key={idx} className="relative group">
-                    <span className={`absolute -left-[20.5px] top-1 w-2.5 h-2.5 rounded-full ring-4 ${dotColor}`} />
-                    
+                    <span className="absolute -left-[20.5px] top-1 w-2.5 h-2.5 rounded-full ring-4 bg-[#7cb9e8] ring-[#7cb9e8]/20" />
                     <div className="space-y-0.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-700">{item.title.replace("Formula Feed", "Bú sữa công thức").replace("Breast Feed", "Bú sữa mẹ").replace("Solids Feed", "Ăn dặm").replace("Diaper Change", "Thay tã")}</span>
+                        <span className="text-xs font-bold text-slate-700">{item.title.replace("Formula Feed", "Bú sữa công thức").replace("Breast Feed", "Bú sữa mẹ").replace("Solids Feed", "Ăn dặm")}</span>
                         <span className="text-[9px] font-bold text-slate-400">{item.time}</span>
                       </div>
-                      <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">{item.detail.replace("Formula", "Sữa công thức").replace("Dosage:", "Liều lượng:").replace("Prescribed by:", "Kê đơn bởi:").replace("Self", "Tự cho").replace("Wet Diaper", "Tã ướt").replace("Dirty Diaper", "Tã bẩn").replace("Normal", "Bình thường").replace("Soft", "Mềm")}</p>
+                      <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">{item.detail.replace("Formula", "Sữa công thức")}</p>
                     </div>
                   </div>
-                );
-              })}
-
-              {combinedTimeline.length === 0 && (
-                <div className="text-center text-slate-400 py-6 text-xs">
-                  Chưa ghi nhận hoạt động nào hôm nay. Hãy ghi nhanh ở trên!
-                </div>
-              )}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-slate-400 py-6 text-xs font-medium">
+                Chưa có hoạt động nào được ghi nhận hôm nay cho bé {activeBaby.name}.
+              </div>
+            )}
           </div>
 
         </div>
@@ -2452,6 +2544,101 @@ export default function DashboardView({
                   {isNapTimerRunning ? "Dừng & Lưu nhật ký" : "Bắt đầu tính giờ ngủ"}
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Modal: Thông tin chi tiết Dự đoán Giấc ngủ & Mô hình AI */}
+        {showSleepModelModal && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white/95 backdrop-blur-xl rounded-[32px] max-w-md w-full p-6 shadow-2xl border border-white/40 space-y-5"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 bg-amber-50 text-amber-600 rounded-2xl">
+                    <Moon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800">
+                      Trợ lý Giấc ngủ & Điểm rơi Sinh học
+                    </h3>
+                    <p className="text-[10px] font-semibold text-slate-400">
+                      Cá nhân hóa theo chuẩn Y khoa & Nhịp thức của bé
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSleepModelModal(false)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Status Badge */}
+              <div className="flex items-center justify-between bg-amber-50/70 border border-amber-200/60 rounded-2xl px-3.5 py-2">
+                <span className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  {wakeWindowData?.model_source === "LIGHTGBM_NORMAL"
+                    ? `✨ Đã tối ưu riêng theo nhịp sinh học bé ${activeBaby.name}`
+                    : `🌱 Đang áp dụng chuẩn sinh học Nhi khoa (AAP/CDC)`}
+                </span>
+                <span className="text-[10px] font-semibold text-amber-600 bg-white/80 px-2 py-0.5 rounded-lg">
+                  {wakeWindowData?.data_days_available ? `Dữ liệu ${wakeWindowData.data_days_available} ngày` : "Khởi tạo"}
+                </span>
+              </div>
+
+              {/* 2 Key Metrics */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-amber-50/40 border border-amber-100 rounded-2xl p-3.5 space-y-1">
+                  <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wide">Điểm rơi tối ưu (Sweet Spot)</span>
+                  <p className="text-2xl font-black text-amber-600">
+                    {wakeWindowData?.optimal_sleep_time || "--:--"}
+                  </p>
+                  <p className="text-[10px] font-medium text-slate-500">
+                    Khoảng thức: {wakeWindowData?.predicted_wake_window_formatted || "--"}
+                  </p>
+                </div>
+                <div className="bg-purple-50/40 border border-purple-100 rounded-2xl p-3.5 space-y-1">
+                  <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wide">Giờ bắt đầu thư giãn</span>
+                  <p className="text-2xl font-black text-purple-600">
+                    {wakeWindowData?.wind_down_start_time || "--:--"}
+                  </p>
+                  <p className="text-[10px] font-medium text-slate-500">
+                    Trước 15 phút (Hạ đèn, vỗ về)
+                  </p>
+                </div>
+              </div>
+
+              {/* Parental Guidance Box */}
+              <div className="bg-sky-50/60 border border-sky-100 rounded-2xl p-3.5 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-sky-800">
+                  <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                  Lời khuyên từ Bác sĩ AI
+                </div>
+                <p className="text-xs text-sky-900 font-medium leading-relaxed">
+                  {wakeWindowData?.parental_guidance || "Bé sinh hoạt đều đặn theo nhịp sinh học quen thuộc."}
+                </p>
+              </div>
+
+              {/* Clinical Guardrail Note */}
+              <div className="text-[11px] text-slate-500 font-medium bg-slate-50 border border-slate-100 rounded-2xl p-3 flex items-start gap-2">
+                <Shield className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <span>
+                  Mọi dự đoán được kiểm định và kẹp biên tự động theo Bằng sáng chế US 20250292903, đảm bảo ngưỡng an toàn sinh học lứa tuổi của bé.
+                </span>
+              </div>
+
+              <button
+                onClick={() => setShowSleepModelModal(false)}
+                className="w-full py-2.5 bg-primary hover:bg-primary/95 text-white font-bold rounded-2xl shadow-md cursor-pointer transition-all text-xs"
+              >
+                Đã hiểu, cảm ơn Bác sĩ AI
+              </button>
             </motion.div>
           </div>
         )}

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime
@@ -42,6 +42,13 @@ class HandoverNoteCreate(BaseModel):
     recipient_name: Optional[str] = "Tất cả mọi người"
     voice_note_url: Optional[str] = None
     photo_urls: Optional[List[str]] = Field(default_factory=list)
+
+
+class HandoverNoteUpdate(BaseModel):
+    content: Optional[str] = None
+    recipient_name: Optional[str] = None
+    voice_note_url: Optional[str] = None
+    photo_urls: Optional[List[str]] = None
 
 
 class HandoverNoteResponse(BaseModel):
@@ -192,12 +199,30 @@ class CareEventResponse(BaseModel):
     task_id: Optional[str] = None
     event_type: str
     occurred_at: str
-    recorded_by: str
-    recorded_by_name: str
+    recorded_by: Optional[str] = "system"
+    recorded_by_name: Optional[str] = "Người chăm sóc"
     actual_value: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
     synced_to_module: Optional[str] = None
     created_at: str
+    title: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # Đồng bộ recorded_by nếu chỉ có recorded_by_id
+            if not data.get("recorded_by"):
+                data["recorded_by"] = data.get("recorded_by_id") or "system"
+            if not data.get("recorded_by_name"):
+                data["recorded_by_name"] = data.get("caregiver_name") or "Người chăm sóc"
+            if not data.get("occurred_at"):
+                data["occurred_at"] = data.get("created_at") or datetime.now().isoformat()
+            if not data.get("created_at"):
+                data["created_at"] = data.get("occurred_at") or datetime.now().isoformat()
+            if not data.get("event_type"):
+                data["event_type"] = "custom"
+        return data
 
 
 # ─── 4. DAILY SUMMARY SCHEMA ─────────────────────────────────────────────────
@@ -209,6 +234,7 @@ class CareTimelineSummary(BaseModel):
     completed_tasks: int
     overdue_tasks: int
     handover_note: Optional[HandoverNoteResponse] = None
+    handover_notes: List[HandoverNoteResponse] = Field(default_factory=list)
     tasks: List[CareTaskResponse] = Field(default_factory=list)
     recent_events: List[CareEventResponse] = Field(default_factory=list)
     ai_summary_text: Optional[str] = None

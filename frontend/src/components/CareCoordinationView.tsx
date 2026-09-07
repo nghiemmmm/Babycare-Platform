@@ -24,7 +24,8 @@ import {
   ArrowRightLeft,
   HandHeart,
   Timer,
-  Sparkle
+  Sparkle,
+  Edit3
 } from "lucide-react";
 import { apiFetch } from "../lib/authClient";
 import { useAuth } from "../auth/AuthContext";
@@ -112,9 +113,15 @@ export default function CareCoordinationView({ activeBaby, userName, guardians }
 
   // Data states
   const [handoverNote, setHandoverNote] = useState<HandoverNote | null>(null);
+  const [handoverNotes, setHandoverNotes] = useState<HandoverNote[]>([]);
+  const [isAddingHandover, setIsAddingHandover] = useState(false);
   const [handoverInput, setHandoverInput] = useState("");
   const [handoverRecipient, setHandoverRecipient] = useState("Tất cả người chăm sóc");
   const [isSavingHandover, setIsSavingHandover] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editRecipient, setEditRecipient] = useState("Tất cả người chăm sóc");
+  const [isUpdatingHandover, setIsUpdatingHandover] = useState(false);
   const [activeGuardians, setActiveGuardians] = useState<Guardian[]>(guardians || []);
 
   const [tasks, setTasks] = useState<CareTask[]>([]);
@@ -199,13 +206,9 @@ export default function CareCoordinationView({ activeBaby, userName, guardians }
       const res = await apiFetch(`/api/v1/care-coordination/summary/daily?baby_id=${activeBaby.id}`);
       if (res.ok) {
         const data = await res.json();
-        setHandoverNote(data.handover_note);
-        if (data.handover_note?.content) {
-          setHandoverInput(data.handover_note.content);
-        }
-        if (data.handover_note?.recipient_name) {
-          setHandoverRecipient(data.handover_note.recipient_name);
-        }
+        const rawNotes: HandoverNote[] = data.handover_notes || (data.handover_note ? [data.handover_note] : []);
+        setHandoverNotes(rawNotes);
+        setHandoverNote(data.handover_note || (rawNotes.length > 0 ? rawNotes[0] : null));
         setTasks(data.tasks || []);
         setEvents(data.recent_events || []);
         setAiSummary(data.ai_summary_text || "");
@@ -253,7 +256,7 @@ export default function CareCoordinationView({ activeBaby, userName, guardians }
     fetchData();
   }, [activeBaby?.id]);
 
-  // Save Handover Note
+  // Create Handover Note
   const handleSaveHandover = async () => {
     if (!handoverInput.trim() || !activeBaby?.id) return;
     setIsSavingHandover(true);
@@ -268,13 +271,52 @@ export default function CareCoordinationView({ activeBaby, userName, guardians }
         })
       });
       if (res.ok) {
-        const saved = await res.json();
-        setHandoverNote(saved);
+        setHandoverInput("");
+        setIsAddingHandover(false);
+        fetchData();
       }
     } catch (err) {
       console.error("Error saving handover note:", err);
     } finally {
       setIsSavingHandover(false);
+    }
+  };
+
+  // Update Handover Note
+  const handleUpdateHandover = async (noteId: string) => {
+    if (!editContent.trim()) return;
+    setIsUpdatingHandover(true);
+    try {
+      const res = await apiFetch(`/api/v1/care-coordination/handover/${noteId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: editContent.trim(),
+          recipient_name: editRecipient
+        })
+      });
+      if (res.ok) {
+        setEditingNoteId(null);
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Error updating handover note:", err);
+    } finally {
+      setIsUpdatingHandover(false);
+    }
+  };
+
+  // Delete Handover Note
+  const handleDeleteHandover = async (noteId: string) => {
+    try {
+      const res = await apiFetch(`/api/v1/care-coordination/handover/${noteId}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Error deleting handover note:", err);
     }
   };
 
@@ -553,7 +595,7 @@ export default function CareCoordinationView({ activeBaby, userName, guardians }
       {/* ─── GÓC BỐ / MẸ: HANDOVER NOTE, TASK TIMELINE & WORKLOAD ANALYTICS ───── */}
       {roleMode === "parent" ? (
         <div className="space-y-6">
-          {/* Lời dặn buổi sáng (Handover Note) */}
+          {/* Lời dặn bàn giao (Handover Notes List) */}
           <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
@@ -562,52 +604,190 @@ export default function CareCoordinationView({ activeBaby, userName, guardians }
                 </div>
                 <div>
                   <h2 className="text-sm font-black text-slate-800">
-                    Lời dặn bàn giao buổi sáng cho người ở nhà
+                    Sổ dặn dò & Lưu ý trong ngày cho người ở nhà
                   </h2>
                   <p className="text-xs text-slate-400 font-medium">
-                    Dặn dò bà hoặc bảo mẫu những điểm đặc biệt cần lưu ý trong ngày
+                    Ghi chú các lưu ý quan trọng theo từng mốc thời gian để người ở nhà cùng theo dõi
                   </p>
                 </div>
               </div>
+
               <button
-                onClick={handleSaveHandover}
-                disabled={isSavingHandover}
-                className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-4 py-2.5 rounded-2xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                onClick={() => setIsAddingHandover(!isAddingHandover)}
+                className="inline-flex items-center gap-1.5 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold px-3.5 py-2 rounded-2xl transition-all shadow-2xs cursor-pointer"
               >
-                {isSavingHandover ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                Lưu lời dặn
+                <Plus className="w-3.5 h-3.5" />
+                {isAddingHandover ? "Đóng form" : "Thêm lời dặn mới"}
               </button>
             </div>
 
-            <div className="space-y-3">
-              <textarea
-                value={handoverInput}
-                onChange={(e) => setHandoverInput(e.target.value)}
-                placeholder="Ví dụ: Hôm nay bé hơi hắt hơi nhẹ, cô nhớ cho bé uống nhiều nước ấm và đo nhiệt độ lúc 10h nhé..."
-                rows={3}
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none"
-              />
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500 font-bold">Gửi tới:</span>
-                  <select
-                    value={handoverRecipient}
-                    onChange={(e) => setHandoverRecipient(e.target.value)}
-                    className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
-                  >
-                    <option value="Tất cả người chăm sóc">Tất cả người chăm sóc</option>
-                    {activeGuardians.map((g) => (
-                      <option key={g.id} value={g.name}>{g.name} ({g.relationship || g.role})</option>
-                    ))}
-                  </select>
+            {/* Form Thêm Lời Dặn Mới */}
+            {isAddingHandover && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 bg-primary/5 border border-primary/20 rounded-2xl space-y-3"
+              >
+                <div className="text-xs font-extrabold text-primary flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" /> Thêm lời dặn mới trong ngày
                 </div>
-                {handoverNote && (
-                  <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Đã cập nhật lúc {handoverNote.created_at?.substring(11, 16) || "hôm nay"}
-                  </span>
-                )}
+                <textarea
+                  value={handoverInput}
+                  onChange={(e) => setHandoverInput(e.target.value)}
+                  placeholder="Ví dụ: Bé mọc răng hơi sốt nhẹ lúc 13h, cô/bà nhớ đo nhiệt độ và cho bé uống nhiều nước ấm nhé..."
+                  rows={3}
+                  className="w-full p-3.5 bg-white border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none shadow-2xs"
+                />
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500 font-bold">Gửi tới:</span>
+                    <select
+                      value={handoverRecipient}
+                      onChange={(e) => setHandoverRecipient(e.target.value)}
+                      className="p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-2xs"
+                    >
+                      <option value="Tất cả người chăm sóc">Tất cả người chăm sóc</option>
+                      {activeGuardians.map((g) => (
+                        <option key={g.id} value={g.name}>{g.name} ({g.relationship || g.role})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setIsAddingHandover(false); setHandoverInput(""); }}
+                      className="px-3 py-1.5 text-slate-500 hover:text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveHandover}
+                      disabled={isSavingHandover || !handoverInput.trim()}
+                      className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/95 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingHandover ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      Lưu lời dặn
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Danh Sách Các Lời Dặn Đã Lưu Trong Ngày */}
+            {handoverNotes.length === 0 ? (
+              <div className="p-5 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+                <p className="text-xs text-slate-400 font-medium">
+                  Chưa có lời dặn nào trong ngày hôm nay. Hãy bấm <strong>"Thêm lời dặn mới"</strong> để bắt đầu dặn dò người ở nhà.
+                </p>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-3">
+                {handoverNotes.map((note, idx) => {
+                  const isEditing = editingNoteId === note.id;
+                  const timeFormatted = note.created_at?.includes("T")
+                    ? note.created_at.split("T")[1].substring(0, 5)
+                    : "Hôm nay";
+
+                  if (isEditing) {
+                    return (
+                      <div key={note.id} className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-3">
+                        <div className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
+                          <Edit3 className="w-3.5 h-3.5 text-amber-700" /> Chỉnh sửa lời dặn
+                        </div>
+                        <textarea
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          rows={3}
+                          className="w-full p-3 bg-white border border-amber-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all resize-none shadow-2xs"
+                        />
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-600 font-bold">Gửi tới:</span>
+                            <select
+                              value={editRecipient}
+                              onChange={(e) => setEditRecipient(e.target.value)}
+                              className="p-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-2xs"
+                            >
+                              <option value="Tất cả người chăm sóc">Tất cả người chăm sóc</option>
+                              {activeGuardians.map((g) => (
+                                <option key={g.id} value={g.name}>{g.name} ({g.relationship || g.role})</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditingNoteId(null)}
+                              className="px-3 py-1.5 text-slate-500 hover:text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+                            >
+                              Hủy
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateHandover(note.id)}
+                              disabled={isUpdatingHandover || !editContent.trim()}
+                              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                            >
+                              {isUpdatingHandover ? "Đang lưu..." : "Lưu thay đổi"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={note.id}
+                      className="p-4 bg-slate-50/70 hover:bg-slate-50 border border-slate-200/80 rounded-2xl transition-all flex flex-col sm:flex-row sm:items-start justify-between gap-3 shadow-2xs"
+                    >
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2.5 py-0.5 bg-primary/10 text-primary rounded-lg text-[11px] font-black flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> {timeFormatted}
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-500">
+                            👤 {note.author_name} ➔ <strong className="text-slate-700">{note.recipient_name || "Tất cả mọi người"}</strong>
+                          </span>
+                          {idx === 0 && (
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md text-[10px] font-extrabold flex items-center gap-0.5">
+                              <Sparkles className="w-2.5 h-2.5" /> Mới nhất
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-800 font-medium leading-relaxed whitespace-pre-wrap">
+                          "{note.content}"
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1 self-end sm:self-start shrink-0 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingNoteId(note.id);
+                            setEditContent(note.content);
+                            setEditRecipient(note.recipient_name || "Tất cả người chăm sóc");
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-xl transition-all cursor-pointer"
+                          title="Chỉnh sửa lời dặn"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteHandover(note.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                          title="Xóa lời dặn"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* ─── BẢNG ĐIỀU PHỐI LỊCH TRÌNH LINH HOẠT ────────────────────────── */}
@@ -1014,15 +1194,36 @@ export default function CareCoordinationView({ activeBaby, userName, guardians }
       ) : (
         /* ─── GÓC NGƯỜI CHĂM SÓC (ÔNG / BÀ / BẢO MẪU): 1-TAP EXECUTION ────────── */
         <div className="space-y-6">
-          {/* Lời dặn to rõ của Bố/Mẹ */}
-          {handoverNote && handoverNote.content && (
-            <div className="bg-amber-50/90 border border-amber-200 p-6 rounded-[32px] space-y-2 shadow-2xs">
+          {/* Lời dặn to rõ của Bố/Mẹ cho người ở nhà */}
+          {handoverNotes.length > 0 && (
+            <div className="bg-amber-50/90 border border-amber-200 p-6 rounded-[32px] space-y-4 shadow-2xs">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-900">
-                <Heart className="w-4 h-4 fill-amber-700 text-amber-700" /> Lời dặn của mẹ dành cho người ở nhà hôm nay:
+                <Heart className="w-4 h-4 fill-amber-700 text-amber-700" /> Sổ dặn dò dành cho người ở nhà hôm nay ({handoverNotes.length} lời dặn):
               </div>
-              <p className="text-sm sm:text-base font-bold text-amber-950 leading-relaxed">
-                "{handoverNote.content}"
-              </p>
+              <div className="space-y-3">
+                {handoverNotes.map((note, idx) => {
+                  const timeFormatted = note.created_at?.includes("T")
+                    ? note.created_at.split("T")[1].substring(0, 5)
+                    : "Hôm nay";
+                  return (
+                    <div key={note.id} className="p-4 bg-white/80 border border-amber-200/80 rounded-2xl space-y-1.5 shadow-2xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="px-2.5 py-0.5 bg-amber-100 text-amber-900 font-extrabold rounded-lg text-xs">
+                          ⏰ {timeFormatted} • {note.author_name}
+                        </span>
+                        {idx === 0 && (
+                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded-md text-[10px]">
+                            Mới nhất
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm sm:text-base font-bold text-amber-950 leading-relaxed whitespace-pre-wrap">
+                        "{note.content}"
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -1104,7 +1305,7 @@ export default function CareCoordinationView({ activeBaby, userName, guardians }
                             onClick={() => handleCompleteTask(task.id, task.target_value?.amount, task.target_value?.unit)}
                             className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer"
                           >
-                            <CheckCircle2 className="w-5 h-5" /> BẤM KHI XONG
+                            <CheckCircle2 className="w-5 h-5" /> ĐÁNH DẤU HOÀN THÀNH
                           </button>
                         )}
                       </div>
@@ -1144,7 +1345,7 @@ export default function CareCoordinationView({ activeBaby, userName, guardians }
               {/* ─── 12 QUICK PRESETS (PRIMARY INTERACTION) ───────────────── */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-slate-500 block">
-                  ⚡ Chọn nhanh mẫu công việc (1-Chạm tự điền):
+                  ⚡ Chọn mẫu công việc thường ngày gợi ý:
                 </label>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
                   {[
