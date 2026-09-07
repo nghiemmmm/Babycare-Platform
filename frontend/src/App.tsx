@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import {
   Heart,
   LayoutDashboard,
-  Activity,
   Sparkles,
   User,
   Coffee,
@@ -17,7 +16,9 @@ import {
   X,
   Shield,
   LogOut,
-  ClipboardList
+  ClipboardList,
+  Stethoscope,
+  TrendingUp
 } from "lucide-react";
 
 import {
@@ -1288,7 +1289,7 @@ export default function App() {
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
               }`}
           >
-            <Activity className="w-4 h-4" />
+            <Stethoscope className="w-4 h-4" />
             Sức khỏe
           </button>
 
@@ -1306,7 +1307,7 @@ export default function App() {
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
               }`}
           >
-            <Activity className="w-4 h-4" />
+            <TrendingUp className="w-4 h-4" />
             Tăng trưởng
           </button>
 
@@ -1324,7 +1325,7 @@ export default function App() {
                 : "text-slate-500 hover:text-primary hover:bg-primary/5"
               }`}
           >
-            <ClipboardList className="w-4 h-4 text-emerald-600" />
+            <ClipboardList className="w-4 h-4" />
             Sổ bàn giao & Lịch trình
           </button>
 
