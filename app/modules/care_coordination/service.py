@@ -324,7 +324,12 @@ class CareCoordinationService:
         handover = handovers[0] if handovers else None
         tasks = self.get_today_tasks(baby_id, user_id, target_date)
         raw_events = self.repo.list_events_by_date(baby_id, target_date)
-        events = [CareEventResponse(**e) for e in raw_events]
+        events = []
+        for e in raw_events:
+            try:
+                events.append(CareEventResponse(**e))
+            except Exception as exc:
+                logger.warning(f"Bỏ qua care event lỗi schema {e.get('id')}: {exc}")
 
         total = len(tasks)
         completed = sum(1 for t in tasks if t.status == TaskStatusEnum.COMPLETED.value)

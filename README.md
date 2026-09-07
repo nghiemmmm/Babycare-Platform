@@ -1,444 +1,509 @@
 # 🍼 BabyCare AI — Nền Tảng Chăm Sóc Trẻ Sơ Sinh Thông Minh
 
 <p align="center">
-  <img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi" />
-  <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react" />
-  <img src="https://img.shields.io/badge/LangGraph-0.4-FF6F00?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=for-the-badge&logo=pytorch" />
-  <img src="https://img.shields.io/badge/Firebase-Firestore-FFCA28?style=for-the-badge&logo=firebase" />
+  <img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react" alt="React" />
+  <img src="https://img.shields.io/badge/LangGraph-0.4-FF6F00?style=for-the-badge" alt="LangGraph" />
+  <img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=for-the-badge&logo=pytorch" alt="PyTorch" />
+  <img src="https://img.shields.io/badge/Docker-Production-2496ED?style=for-the-badge&logo=docker" alt="Docker" />
+  <img src="https://img.shields.io/badge/Nginx-Reverse%20Proxy-009639?style=for-the-badge&logo=nginx" alt="Nginx" />
+  <img src="https://img.shields.io/badge/Firebase-Firestore-FFCA28?style=for-the-badge&logo=firebase" alt="Firebase" />
 </p>
 
-**BabyCare AI** là nền tảng chăm sóc trẻ sơ sinh toàn diện, kết hợp trí tuệ nhân tạo (AI), đồ thị tác tử đa tác nhân (Multi-Agent LangGraph), cơ sở tri thức y khoa RAG (Hybrid Search & Re-ranking) và mô hình phân loại tiếng khóc sâu (PyTorch AST) giúp cha mẹ đồng hành cùng sự phát triển của bé yêu một cách nhẹ nhàng, khoa học và chính xác.
+**BabyCare AI** là nền tảng chăm sóc trẻ sơ sinh toàn diện, kết hợp trí tuệ nhân tạo (AI), đồ thị tác tử đa tác nhân (**Multi-Agent LangGraph**), cơ sở tri thức y khoa RAG (**Hybrid Search & Re-ranking**) và mô hình phân loại tiếng khóc sâu (**PyTorch AST**) giúp cha mẹ đồng hành cùng sự phát triển của bé yêu một cách nhẹ nhàng, khoa học và an tâm tuyệt đối.
 
+---
+
+## 🧭 Bảng Điều Hướng Nhanh Theo Nhánh & Vai Trò (Branch Navigation)
+
+Kho mã nguồn BabyCare AI được cấu trúc tối ưu theo mô hình **Gitflow & MLOps**. Bạn có thể truy cập nhanh vào phần nội dung phù hợp với nhu cầu của mình:
+
+| Nhánh GitHub | Định Vị & Vai Trò | Liên Kết Truy Cập Nhanh |
+|:---|:---|:---|
+| 🌟 **`main`** | **Tổng Quan Sản Phẩm & Trải Nghiệm Demo**<br>*(Dành cho phụ huynh, đối tác, nhà tuyển dụng)* | ▫️ [Tổng Quan & UI Showcase](#ui-showcase)<br>▫️ [Tính Năng Nổi Bật](#tinh-nang-noi-bat)<br>▫️ [Đăng Nhập Tài Khoản Demo](#tai-khoan-demo)<br>▫️ [Chuẩn Y Tế & An Toàn Dữ Liệu](#an-toan-y-te) |
+| 💻 **`develop`** | **Kỹ Thuật & Cẩm Nang Lập Trình Viên**<br>*(Dành cho Frontend/Backend Devs, AI Engineers)* | ▫️ [Sơ Đồ Kiến Trúc Hệ Thống](#kien-truc-he-thong)<br>▫️ [Cấu Trúc Thư Mục Monorepo](#cau-truc-monorepo)<br>▫️ [Hướng Dẫn Cài Đặt Local (Dev Setup)](#cai-dat-local)<br>▫️ [Đồ Thị Đa Tác Nhân LangGraph](#langgraph-multi-agent)<br>▫️ [RAG Y Khoa 2 Giai Đoạn](#rag-pipeline)<br>▫️ [Kiểm Thử Tự Động & Benchmark](#kiem-thu-benchmark)<br>▫️ [Quy Trình Gitflow & Đóng Góp](#quy-trinh-gitflow) |
+| 🚀 **`production`** | **Hạ Tầng, Vận Hành & DevOps Runbook**<br>*(Dành cho DevOps, SRE, Kỹ sư Hệ thống)* | ▫️ [Kiến Trúc Hạ Tầng Production](#kien-truc-production)<br>▫️ [Khởi Chạy Docker Compose Prod](#docker-compose-prod)<br>▫️ [Cổng Nginx Gateway & SSL/TLS](#nginx-gateway)<br>▫️ [Quy Trình Tự Động CI/CD](#cicd-pipeline)<br>▫️ [Giám Sát Healthcheck & Logging](#giam-sat-healthcheck)<br>▫️ [Kế Hoạch Khôi Phục Khẩn Cấp (Rollback)](#rollback-runbook) |
+
+---
+
+# PHẦN I: 🌟 TỔNG QUAN SẢN PHẨM & TÍNH NĂNG (MAIN BRANCH)
+
+<a id="tinh-nang-noi-bat"></a>
+## ✨ Tính Năng Nổi Bật
+
+| Tính Năng | Mô Tả Dịu Nhẹ |
+|---|---|
+| 🔊 **Nhận Diện Tiếng Khóc AI** | Mô hình **AST (Audio Spectrogram Transformer) PyTorch** nhận dạng chính xác **8 nguyên nhân khóc** (*Đói sữa, Gắt ngủ, Đau bụng co thắt, Cần ợ hơi, Bẩn tã, Môi trường khó chịu, Cần cha mẹ vỗ về, Giật mình*) kèm gợi ý nhạc dỗ bé êm dịu. |
+| 🤖 **Trợ Lý AI Đa Tác Nhân** | **Orchestrator LangGraph** định tuyến thông minh sang các tác nhân chuyên sâu: Tư vấn chăm sóc nhi khoa, trích xuất nhật ký giọng nói, cảnh báo y tế an toàn, xuất báo cáo PDF và tra cứu web thời gian thực. |
+| 🍼 **Dinh Dưỡng & Ăn Dặm Dịu Dàng** | Quản lý linh hoạt cữ bú (sữa mẹ/bình) cho trẻ nhỏ và chuyển đổi nhịp nhàng sang thực đơn ăn dặm cho trẻ lớn; tự động nhận diện nguyên liệu dị ứng (đậu nành, trứng, sữa bò) theo chuẩn **WHO/AAP**. |
+| 📈 **Theo Dõi Tăng Trưởng Chuẩn WHO** | Tự động tính bách phân vị chiều cao, cân nặng, vòng đầu và vẽ biểu đồ tăng trưởng trực quan chuẩn Tổ chức Y tế Thế giới. |
+| 🏥 **Nhật Ký & Nhắc Nhở Sức Khỏe Cho Bé** | Ghi nhận diễn biến sức khỏe, triệu chứng; tự động đếm ngược chốt chặn an toàn giữa các liều hạ sốt Paracetamol/Hapacol (khoảng cách tối thiểu **≥ 4-6 tiếng/liều**). |
+| ⏱️ **Dự Đoán Cửa Sổ Thức (Wake Window AI)** | Dự đoán điểm rơi giấc ngủ lý tưởng (*Sweet Spot*) cá nhân hóa bám sát sáng chế **Patent US 20250292903** bằng Global LightGBM, ma trận 5 ngày kết hợp chốt chặn an toàn nhi khoa và LLM. |
+| 📊 **Xuất Báo Cáo Sức Khỏe PDF** | Tổng hợp toàn bộ dữ liệu sinh hiệu, tăng trưởng và dinh dưỡng thành báo cáo PDF chuyên nghiệp gửi bác sĩ nhi khoa. |
+| 🎤 **Nhật Ký Giọng Nói Phụ Huynh** | Lắng nghe chia sẻ tự nhiên của cha mẹ và tự động bóc tách thành dữ liệu nhật ký có cấu trúc bằng Gemini Multimodal. |
+| 👨‍👩‍👧 **Đồng Bộ Dữ Liệu Gia Đình** | Phân quyền bảo mật giữa cha, mẹ và người chăm sóc để cả gia đình cùng theo sát từng nhịp lớn lên của bé. |
+
+---
+
+<a id="ui-showcase"></a>
+## 🎨 Bộ Ảnh Giao Diện Thực Tế (UI Showcase)
+
+### 1. Giao Diện Đăng Nhập & Đăng Ký Dịu Nhẹ
 <p align="center">
   <img src="img/dangnhap.jpg" width="48%" alt="Màn Hình Đăng Nhập BabyCare AI" />
   <img src="img/dangky2.jpg" width="48%" alt="Màn Hình Đăng Ký BabyCare AI" />
   <br>
-  <em>Giao diện Đăng nhập & Đăng ký tài khoản dịu nhẹ dành cho Phụ huynh</em>
+  <em>Giao diện đăng nhập & tạo tài khoản mang sắc màu ấm áp, tinh tế và an tâm cho phụ huynh</em>
 </p>
 
----
-
-## ✨ Tính Năng Nổi Bật
-
-| Tính Năng | Mô Tả |
-|---|---|
-| 🔊 **Nhận Diện Tiếng Khóc AI** | Mô hình AST (Audio Spectrogram Transformer) PyTorch nhận dạng **8 loại khóc** (*Đói, Gắt ngủ, Đau bụng, Cần ợ hơi, Bẩn tã, Khó chịu, Cần bế, Giật mình*) với điểm tin cậy đa lớp % |
-| 🤖 **Trợ Lý AI Đa Tác Nhân** | Orchestrator LangGraph định tuyến thông minh sang các luồng chuyên biệt: Chat tư vấn nhi khoa, Báo cáo PDF, Ghi nhận nhật ký giọng nói, Tra cứu web thời gian thực, Lọc an toàn y tế |
-| 🍼 **Dinh Dưỡng & Ăn Dặm** | Quản lý cữ bú (ml sữa mẹ/công thức), theo dõi ăn dặm, phát hiện dị ứng nguyên liệu, cảnh báo thực phẩm cấm theo độ tuổi (WHO/AAP) |
-| 📈 **Tăng Trưởng Chuẩn WHO** | Lưu trữ và tự động tính bách phân vị cân nặng, chiều cao, vòng đầu theo biểu đồ WHO chuẩn quốc tế |
-| 🏥 **Nhắc Nhở & Nhật Ký Sức Khỏe** | Ghi nhận triệu chứng, nhật ký bệnh trạng; tự động nhắc nhở và đếm ngược an toàn liều hạ sốt Paracetamol (≥ 4-6 tiếng/liều) |
-| 📊 **Xuất Báo Cáo PDF** | AI tổng hợp toàn bộ dữ liệu tăng trưởng, dinh dưỡng và sức khỏe thành báo cáo PDF y khoa chuyên nghiệp |
-| 🎤 **Nhật Ký Giọng Nói** | Bóc tách nhật ký ăn uống/sức khỏe từ giọng nói của cha mẹ bằng Gemini Multimodal |
-| 🌐 **Tra Cứu Web Thời Gian Thực** | Tích hợp Tavily Search (fallback DuckDuckGo) khi câu hỏi vượt ngoài kho tri thức nội bộ |
-| 👨‍👩‍👧 **Đồng Bộ Gia Đình** | Mời và phân quyền chia sẻ dữ liệu bé giữa cha, mẹ và người giám hộ |
-| ⏱️ **Dự Đoán Cửa Sổ Thức (Wake Window AI)** | Dự đoán điểm rơi giấc ngủ tối ưu (*Sweet Spot*) cá nhân hóa bám sát **Patent US 20250292903** bằng Global LightGBM + Ma trận 5 ngày + Chốt chặn Nhi khoa & LLM Reasoner khi có biến cố sức khỏe |
-
-### 🎨 Giao Diện Ứng Dụng (Application UI Showcase)
-
+### 2. Trang Tổng Quan Sinh Hiệu Thời Gian Thực & Nhắc Nhở Sức Khỏe
 <p align="center">
   <img src="img/tongquan1.jpg" width="100%" alt="Giao diện Trang Tổng Quan - Sinh hiệu Real-time & Phân Tích Tiếng Khóc AI" />
   <br>
-  <em>Giao diện Dashboard: Các thẻ sinh hiệu thời gian thực (cữ bú, giấc ngủ, lượng sữa), cảnh báo lịch uống thuốc an toàn & thanh điều hướng chính</em>
+  <em>Dashboard tổng quan: Băng điều phối sức khỏe, cảnh báo cữ thuốc an toàn, thanh tác vụ ghi nhanh và phân tích tiếng khóc sơ sinh</em>
 </p>
 
-<br>
-
+### 3. Trợ Lý Trò Chuyện Nhi Khoa AI & Tiến Trình Tăng Trưởng Chuẩn WHO
 <p align="center">
   <img src="img/tomgquan2.jpg" width="100%" alt="Giao diện Trang Tổng Quan - Biểu Đồ WHO & AI Insights" />
   <br>
-  <em>Giao diện Dashboard: Trợ lý trò chuyện AI, Phân tích tiếng khóc AI real-time, Đánh giá mốc phát triển CDC/AAP & Tiến trình đường cong tăng trưởng chuẩn WHO</em>
+  <em>Phòng trò chuyện cùng Trợ lý AI, đánh giá mốc vận động theo AAP và đường cong phát triển bách phân vị WHO</em>
 </p>
 
 ---
 
+<a id="tai-khoan-demo"></a>
+## 🚀 Trải Nghiệm Nhanh (Tài Khoản Demo)
+
+Để khám phá ngay các tính năng mà không cần tự cấu hình dữ liệu ban đầu:
+
+1. Truy cập giao diện ứng dụng tại: `http://localhost:3000/login` (hoặc `http://localhost:5173/login`).
+2. Bấm nút **"🚀 Đăng nhập nhanh (Tài khoản Demo)"** trên màn hình đăng nhập.
+3. Hệ thống sẽ tự động đăng nhập với thông tin tài khoản mẫu đã chuẩn bị sẵn trên Firebase Firestore:
+   - **Tài khoản**: `nghiem@babycare.com` / Mật khẩu: `Nghiem1234`
+   - **Người dùng**: Minh Anh (Mẹ bé Leo)
+   - **Dữ liệu sẵn có**:
+     - 👶 **Bé Leo**: Bé trai 6 tháng tuổi (sinh 20/04/2023), tiền sử dị ứng Đậu nành, chiều cao 66cm, cân nặng 7.2kg, lịch uống thuốc Hapacol 150mg & Vitamin D3 K2.
+     - 👶 **Bé Bo**: Bé gái 3 tháng tuổi (sinh 15/11/2023), ưu tiên cữ bú sữa mẹ.
+
+---
+
+<a id="an-toan-y-te"></a>
+## 🛡️ An Toàn Y Tế & Bảo Mật Dữ Liệu
+
+- **Văn Phong Nhi Khoa Tinh Tế**: Mọi phản hồi từ AI đều tuân thủ nguyên tắc tôn trọng cảm xúc phụ huynh, thấu hiểu lo lắng và tuyệt đối không chẩn đoán thay bác sĩ.
+- **Quy Chuẩn Y Khoa WHO/AAP**: Dữ liệu dinh dưỡng, danh mục thực phẩm cấm theo tháng tuổi (như mật ong dưới 1 tuổi) và bách phân vị tăng trưởng đều được đối chiếu cẩn trọng.
+- **Chốt Chặn Liều Dùng Thuốc An Toàn**: Cơ chế đếm ngược thời gian giữa các liều hạ sốt ngăn ngừa tuyệt đối nguy cơ phụ huynh vô tình cho bé uống quá gần nhau.
+- **Bảo Mật Quyền Riêng Tư**: Áp dụng mã hóa token JWT, phân quyền Firestore Security Rules độc lập theo từng gia đình.
+
+---
+
+# PHẦN II: 💻 CẨM NANG KỸ SƯ & PHÁT TRIỂN (DEVELOP BRANCH)
+
+<a id="kien-truc-he-thong"></a>
 ## 🏗️ Kiến Trúc Tổng Thể Hệ Thống (System Architecture)
 
 <p align="center">
   <img src="img/system-architecture (2).png" width="100%" alt="Sơ Đồ Kiến Trúc Hệ Thống BabyCare AI Platform" />
   <br>
-  <em>Sơ đồ Kiến trúc Tổng thể Hệ thống BabyCare AI Platform (Frontend Next.js/React, Nginx API Gateway, Backend FastAPI, LangGraph Multi-Agent, PyTorch AST & Firestore)</em>
+  <em>Kiến trúc phân tầng chuyên nghiệp: Nginx Gateway, FastAPI Hexagonal Backend, Multi-Agent LangGraph, PyTorch AST và NoSQL Firestore</em>
 </p>
 
-<br>
-
-### 🧩 Phân Tích Các Tầng Trong Kiến Trúc
-
-1. **Giao diện Người dùng & Cổng kết nối (Frontend & API Gateway)**:
-   - **Frontend**: Được xây dựng trên nền **Next.js / React**, cung cấp giao diện phản hồi thời gian thực qua WebSocket/SSE, bao gồm các màn hình chính: *Trò chuyện AI, Dashboard tổng quan, Phân tích tiếng khóc, Theo dõi tăng trưởng, Kế hoạch dinh dưỡng, Xuất báo cáo & Cài đặt*.
-   - **NGINX API Gateway**: Đảm nhận Reverse Proxy, SSL Termination, Load Balancing, Rate Limiting và bảo mật hệ thống.
-
-2. **Tầng Ứng Dụng & Dịch Vụ Nghiệp Vụ (FastAPI Layer)**:
-   - **Authentication Service**: Quản lý xác thực an toàn qua **JWT / OAuth2**, quản lý phiên đăng nhập và phân quyền gia đình (RBAC).
-   - **Business API Services**: Xử lý các logic nghiệp vụ như *Hồ sơ bé, Nhật ký tăng trưởng, An toàn thuốc & sức khỏe, Kế hoạch cữ sữa/ăn dặm, Hoạt động giấc ngủ, Xuất file báo cáo PDF và Thông báo*.
-
-3. **Tầng Điều Phối Đa Tác Nhân AI (LangGraph Multi-Agent Orchestrator)**:
-   - **Intent Classification (TaskPlanner)**: Phân tích mục đích của phụ huynh để điều hướng chính xác.
-   - **7 Subgraphs Chuyên Biệt**: *ChatGraph* (RAG Nhi khoa), *VoiceLogging* (Gemini Multimodal bóc tách giọng nói), *CryAnalysis* (Suy luận nguyên nhân khóc), *HealthGraph* (An toàn liều thuốc & lịch sử sức khỏe), *NutritionGraph* (Thực đơn & lọc dị ứng), *ReportGraph* (Xuất báo cáo PDF), *OutOfScopeGraph* (Tra cứu web thời gian thực).
-   - **Human-in-the-Loop Checkpoint**: Tạm dừng kiểm duyệt và duyệt kết quả trước khi đưa ra phản hồi tổng hợp cuối cùng.
-
-4. **Pipeline Chuyên Chế Xử Lý Tiếng Khóc & Giọng Nói (Specialized Pipelines)**:
-   - **Cry Analysis Pipeline (PyTorch AST)**: Nạp âm thanh (.wav/.mp3) → Trích xuất đặc trưng Kaldi Feature Extraction → Mô hình **AST Transformer (PyTorch)** → Dự đoán 8 loại khóc → Gợi ý nhạc ru & tiếng ồn trắng dỗ bé.
-   - **Voice Understanding Pipeline**: Thu âm giọng nói → Gemini Multimodal → Bóc tách nhật ký hoạt động → Đưa vào dữ liệu ghi nhận chuẩn hóa cho bé.
-
-5. **Tầng Lưu Trữ & Dịch Vụ Phụ Trợ (Data Stores & External Services)**:
-   - **Firestore (NoSQL)**: Lưu trữ hồ sơ bé, dữ liệu tăng trưởng, nhật ký sức khỏe & cữ bú thời gian thực.
-   - **Vector Database (FAISS)**: Kho lưu trữ tri thức y khoa nhi khoa, cẩm nang WHO/AAP & dữ liệu dị ứng.
-   - **Redis Cache & Queue**: Bộ đệm tăng tốc độ phản hồi và hàng chờ xử lý tác vụ background.
-   - **Dịch vụ tích hợp ngoài**: Gemini API, Tavily/DuckDuckGo Search, Cloudinary Media Storage, Firebase Auth.
+### Các Tầng Kỹ Thuật Trọng Tâm:
+1. **Frontend Layer (React 18 + Vite + TypeScript)**: Thiết kế giao diện phản ứng nhanh (SPA), quản lý trạng thái luồng sự kiện (Activity Stream) và hiển thị tương thích theo độ tuổi bé (Adaptive Dashboard).
+2. **Gateway & Reverse Proxy (NGINX)**: Điều phối phân tải, quản lý chứng chỉ SSL/TLS, nén Gzip, kiểm soát tốc độ truy cập và chuyển tiếp yêu cầu tới backend/frontend.
+3. **Application & Domain Services (FastAPI)**: Xây dựng theo phong cách Hexagonal Architecture / DDD với các module độc lập: `auth`, `baby`, `growth_tracking`, `health_records`, `nutrition`, `sleep`, `cry`.
+4. **AI Multi-Agent Core (LangGraph)**: Điều phối trạng thái động với StateGraph, tự động phân luồng (Intent Routing), cơ chế đường tắt định tính (Deterministic Bypass tiết kiệm chi phí gọi LLM) và bộ nhớ ngữ cảnh nhiều lớp.
+5. **Machine Learning Inference**:
+   - **PyTorch AST (Audio Spectrogram Transformer)**: Xử lý Mel-Spectrogram 128 băng tần từ âm thanh để nhận dạng 8 loại tiếng khóc.
+   - **Global LightGBM**: Mô hình dự đoán điểm rơi giấc ngủ (Wake Window) bám sát sáng chế US 20250292903.
+6. **Data & Persistence**: Google Cloud Firestore (Dữ liệu phi quan hệ thời gian thực), FAISS (Cơ sở tri thức Vector), Redis (Cache & Queue).
 
 ---
 
-## 📁 Cấu Trúc Mã Nguồn
+<a id="cau-truc-monorepo"></a>
+## 📁 Cấu Trúc Mã Nguồn (Monorepo)
 
 ```text
 babycare-ai/
-├── img/                              # 🖼️ HÌNH ẢNH KIẾN TRÚC & GIAO DIỆN HỆ THỐNG
-│   ├── dangnhap.jpg                  # Màn hình Đăng nhập
-│   ├── dangky2.jpg                   # Màn hình Đăng ký
-│   ├── tongquan1.jpg                 # Dashboard phần 1 (Sinh hiệu & Nhắc nhở)
-│   ├── tomgquan2.jpg                 # Dashboard phần 2 (AI Chat & Biểu đồ WHO)
-│   ├── system-architecture (2).png   # Sơ đồ Kiến trúc Tổng thể Hệ thống
-│   ├── multi-agent-system-architecture.png # Sơ đồ Kiến trúc Multi-Agent LangGraph
-│   ├── ingestion.png                 # Sơ đồ RAG Ingestion Pipeline
-│   └── retrival.png                  # Sơ đồ RAG Hybrid Retrieval & Re-ranking
+├── app/                              # 🐍 BACKEND LAYER (FastAPI - Hexagonal Architecture)
+│   ├── core/                         # Cấu hình hệ thống, middleware bảo mật, lifespan
+│   ├── infrastructure/               # Kết nối cơ sở dữ liệu Firestore & Redis Cache
+│   ├── modules/                      # Các Domain Modules độc lập (RESTful Endpoints & Services)
+│   │   ├── auth/                     # Xác thực JWT & quản lý phiên người dùng
+│   │   ├── baby/                     # Quản lý hồ sơ các em bé trong gia đình
+│   │   ├── growth_tracking/          # Nhật ký tăng trưởng & thuật toán bách phân vị WHO
+│   │   ├── health_records/           # Nhật ký bệnh trạng, theo dõi sốt & nhắc nhở an toàn
+│   │   ├── nutrition/                # Quản lý cữ bú, ăn dặm & lọc dị ứng theo AAP
+│   │   ├── cry/                      # Tiếp nhận âm thanh & kích hoạt suy luận tiếng khóc
+│   │   ├── sleep/                    # ⏱️ Dự đoán Wake Window Sweet Spot (LightGBM + LLM)
+│   │   ├── guardian/                 # Phân quyền giám hộ gia đình
+│   │   └── ai_agent/                 # Phòng trò chuyện AI, bóc tách giọng nói & xuất PDF
+│   ├── AI_agents/                    # 🤖 ĐA TÁC NHÂN AI LAYER (LangGraph Orchestrator)
+│   │   ├── orchestrator/             # StateGraph, TaskPlanner & Intent Router
+│   │   ├── workflows/                # Các Subgraphs (Chat, Report, Voice, Cry, OutOfScope)
+│   │   ├── agents/                   # Tác nhân chuyên trách (Health, Nutrition, Voice, Cry)
+│   │   ├── tools/                    # Công cụ chuyên biệt (RAG Tools, Search Tools, Cry Tools)
+│   │   ├── memory/                   # Quản lý bộ nhớ hội thoại & Firestore Checkpointer
+│   │   └── knowledge/                # Kho tri thức nhi khoa Hybrid RAG (FAISS + BM25)
+│   ├── ai/                           # 🔊 ML INFERENCE LAYER
+│   │   ├── models/                   # File mô hình Global LightGBM (wake window)
+│   │   ├── CRY/                      # Mô hình AST phân loại tiếng khóc PyTorch
+│   │   │   ├── inference.py          # Trích xuất Kaldi Filterbank & suy luận
+│   │   │   ├── models/ast_models.py  # Định nghĩa mạng nơ-ron Transformer
+│   │   │   └── weights/              # best_audio_model.pth (333 MB - quản lý ngoài Git)
+│   │   └── cry_detection/            # Ánh xạ kết quả tiếng khóc sang nhạc ru êm dịu
+│   └── static/                       # File tĩnh: ảnh avatar, âm thanh nhạc dỗ, báo cáo PDF
 │
-├── app/                              # 🐍 BACKEND LAYER (FastAPI)
-│   ├── core/                         # Cấu hình, middleware, lifespan, email service
-│   ├── infrastructure/               # Khởi tạo kết nối Firestore & Redis
-│   ├── modules/                      # Các module nghiệp vụ RESTful API
-│   │   ├── auth/                     # Xác thực JWT & quản lý người dùng
-│   │   ├── baby/                     # Hồ sơ em bé (CRUD)
-│   │   ├── growth_tracking/          # Tăng trưởng & bách phân vị WHO
-│   │   ├── health_records/           # Nhật ký bệnh trạng & triệu chứng sức khỏe
-│   │   ├── nutrition/                # Cữ bú, ăn dặm, dị ứng & hướng dẫn WHO/AAP
-│   │   ├── cry/                      # Upload & phân tích tiếng khóc AI
-│   │   ├── sleep/                    # ⏱️ Dự đoán Wake Window (LightGBM + LLM + Guardrails) & Sleep Timer
-│   │   ├── guardian/                 # Người giám hộ & phân quyền gia đình
-│   │   └── ai_agent/                 # Chat AI, giọng nói, báo cáo & sleep timer
-│   ├── AI_agents/                    # 🤖 MULTI-AGENT AI LAYER (LangGraph)
-│   │   ├── orchestrator/             # Agent Orchestrator + State Manager + Task Planner
-│   │   ├── workflows/                # Đồ thị tác nhân (Chat, Report, Voice, CryAnalysis, OutOfScope)
-│   │   ├── agents/                   # Các tác nhân chuyên biệt (Health, Nutrition, Voice, Cry)
-│   │   ├── tools/                    # Công cụ: WebSearch (Tavily/DuckDuckGo), RAG, CryTools
-│   │   ├── memory/                   # Bộ nhớ ngữ nghĩa HuggingFace + FAISS
-│   │   ├── knowledge/                # Cơ sở tri thức nhi khoa RAG (FAISS vector store + BM25)
-│   │   ├── prompts/                  # Hệ thống prompt chuyên biệt cho từng tác nhân
-│   │   ├── core/                     # Hằng số, mô hình suy luận (Gemini Pro/Flash, Provider Router)
-│   │   └── utils/                    # Các tiện ích hỗ trợ
-│   ├── ai/                           # 🔊 ML INFERENCE LAYER (PyTorch & LightGBM)
-│   │   ├── models/                   # Mô hình Global LightGBM (global_lightgbm_wake_window.txt)
-│   │   ├── CRY/                      # Mô hình AST nhận dạng tiếng khóc
-│   │   │   ├── inference.py          # Trích xuất đặc trưng Kaldi fbank + suy luận AST
-│   │   │   ├── models/ast_models.py  # Kiến trúc Audio Spectrogram Transformer
-│   │   │   ├── data/                 # Nhãn phân loại (esc_class_labels_indices.csv)
-│   │   │   └── weights/              # ⚠️ best_audio_model.pth (333 MB — không push Git)
-│   │   ├── cry_detection/            # Tiền xử lý âm thanh & ánh xạ nhãn khóc → nhạc dỗ
-│   │   └── voice_clone/              # Nhân bản giọng nói dỗ bé
-│   └── static/                       # File tĩnh phục vụ qua /static
-│       ├── img/                      # Avatar em bé (leo.png, bo.png)
-│       ├── cry/                      # File âm thanh upload (*.gitkeep)
-│       ├── reports/                  # Báo cáo PDF xuất bản (*.gitkeep)
-│       ├── sounds/                   # Nhạc ru & tiếng ồn trắng dỗ bé
-│       ├── samples/                  # Âm thanh mẫu kiểm thử
-│       └── voices/                   # Giọng nói nhân bản
-│
-├── airflow/                          # 🌪️ AIRFLOW MLOPS & INGESTION PIPELINES
-│   ├── airflow_project/dags/
-│   │   ├── ingest_documents_dag.py   # RAG Document Ingestion & Dual Indexing DAG
-│   │   └── train_wake_window_dag.py  # LightGBM Wake Window Retraining & Drift Check DAG
-│   └── shared/                       # Parsing, Deduplication & Vector Indexing tasks
-│
-├── frontend/                         # ⚛️ FRONTEND LAYER (React + Vite + TypeScript)
+├── frontend/                         # ⚛️ FRONTEND LAYER (React 18 + Vite + TypeScript)
 │   ├── src/
-│   │   ├── components/               # Các View đã Việt hóa mượt mà
-│   │   │   ├── DashboardView.tsx     # Tổng quan + Phân tích tiếng khóc AI
-│   │   │   ├── AiHubView.tsx         # Phòng Chat AI + Upload file
-│   │   │   ├── NutritionView.tsx     # Dinh dưỡng, dị ứng & cẩm nang an toàn
-│   │   │   ├── GrowthView.tsx        # Biểu đồ tăng trưởng WHO
-│   │   │   ├── HealthView.tsx        # Nhắc nhở sức khỏe & nhật ký liều thuốc
-│   │   │   ├── LogsView.tsx          # Nhật ký tổng hợp
-│   │   │   └── ProfileView.tsx       # Hồ sơ em bé & người giám hộ
-│   │   ├── App.tsx                   # Điều phối routing & trạng thái toàn cục
-│   │   ├── types.ts                  # Định nghĩa kiểu dữ liệu TypeScript
-│   │   └── data.ts                   # Dữ liệu mẫu khởi tạo
+│   │   ├── components/               # Giao diện tiếng Việt dịu nhẹ, chuẩn UX nhi khoa
+│   │   │   ├── DashboardView.tsx     # Trang tổng quan thích ứng, sinh hiệu & Wake Window
+│   │   │   ├── AiHubView.tsx         # Phòng trò chuyện AI trực quan & ghi âm giọng nói
+│   │   │   ├── NutritionView.tsx     # Nhật ký cữ sữa, dặm & cẩm nang an toàn ăn dặm
+│   │   │   ├── GrowthView.tsx        # Biểu đồ tăng trưởng đường cong chuẩn WHO
+│   │   │   ├── HealthView.tsx        # Nhật ký theo dõi sức khỏe & chốt chặn cữ thuốc
+│   │   │   ├── ProfileView.tsx       # Quản lý hồ sơ bé & người giám hộ
+│   │   │   └── SleepModal.tsx        # Cửa sổ chi tiết dự đoán cửa sổ thức tối ưu
+│   │   ├── App.tsx                   # Điều phối điều hướng & trạng thái toàn cục
+│   │   └── types.ts                  # Kiểu dữ liệu TypeScript
 │   └── package.json
 │
-├── tests/
-│   ├── unit/
-│   │   ├── test_ai_core.py           # 21 unit test tự động (AI Core, Memory, Tools)
-│   │   └── test_wake_window_system.py# 6 unit test hệ thống Wake Window (Patent US 20250292903)
-│   └── evaluation/                   # Đánh giá RAG Retriever & AST Models
+├── docker/                           # 🐳 CẤU HÌNH DOCKER & CONTAINER HOÁ
+│   ├── Dockerfile                    # Multi-stage build cho Backend FastAPI
+│   ├── docker-compose.yml            # Base compose (Backend, Frontend, Redis)
+│   ├── docker-compose.dev.yml        # Cấu hình mount volume phục vụ phát triển
+│   └── docker-compose.prod.yml       # Tối ưu tài nguyên, log rotation cho Production
 │
-├── scripts/                          # Công cụ seed data & huấn luyện Global LightGBM
-├── requirements.txt                  # Phụ thuộc Python
-├── .env.example                      # Mẫu biến môi trường
-├── .gitignore                        # Bỏ qua model weights, uploads, secrets
-└── pyproject.toml                    # Cấu hình pytest
+├── nginx/                            # 🌐 NGINX REVERSE PROXY GATEWAY
+│   ├── nginx.conf                    # Cấu hình chuyển hướng SSL/TLS & reverse proxy
+│   └── ec2.conf                      # Cấu hình tối ưu máy chủ Cloud
+│
+├── tests/                            # 🧪 BỘ KIỂM THỬ HỆ THỐNG
+│   ├── unit/                         # Unit tests (test_ai_core.py, test_wake_window_system.py)
+│   └── evaluation/                   # Đánh giá chỉ số bộ truy xuất RAG & mô hình AI
+│
+├── airflow/                          # 🌪️ PIPELINES HUẤN LUYỆN & NẠP DỮ LIỆU TỰ ĐỘNG
+├── requirements.txt                  # Thư viện Python phụ thuộc
+├── .env.example                      # File mẫu khai báo biến môi trường
+└── README.md                         # Tài liệu điều phối toàn diện của dự án
 ```
 
 ---
 
-## 🚀 Hướng Dẫn Cài Đặt & Khởi Chạy
+<a id="cai-dat-local"></a>
+## 🛠️ Hướng Dẫn Cài Đặt Môi Trường Local (Developer Guide)
 
-### Yêu Cầu Hệ Thống
+### Yêu Cầu Tiên Quyết
+- **Python**: Phiên bản `3.10` trở lên (Khuyến nghị `3.11+`)
+- **Node.js**: Phiên bản `18+` & npm
+- **Google Firebase**: Dự án Firestore và file Service Account key JSON
+- **Google Gemini API Key**: Dành cho mô hình suy luận đa tác tử
 
-- Python **3.11+**
-- Node.js **18+**
-- Tài khoản **Google Firebase** (Firestore)
-- API Key **Google Gemini** (bắt buộc)
-- API Key **Tavily** (tuỳ chọn — tự động fallback DuckDuckGo)
+---
 
-### 1. Cài Đặt Backend
-
+### Bước 1: Thiết Lập Môi Trường Backend (FastAPI)
 ```bash
-# Tạo và kích hoạt môi trường ảo Python
+# 1. Di chuyển vào thư mục dự án và tạo môi trường ảo Python
 python -m venv venv
-.\venv\Scripts\activate        # Windows PowerShell
-# source venv/bin/activate     # macOS / Linux
 
-# Cài đặt phụ thuộc
+# 2. Kích hoạt môi trường ảo
+# Trên Windows PowerShell:
+.\venv\Scripts\Activate.ps1
+# Trên macOS / Linux:
+# source venv/bin/activate
+
+# 3. Cài đặt các thư viện phụ thuộc
 pip install -r requirements.txt
 ```
 
-### 2. Cấu Hình Biến Môi Trường
+---
 
-Tạo file `.env` tại thư mục gốc từ file mẫu:
-
+### Bước 2: Cấu Hình Biến Môi Trường (`.env`)
+Tạo file `.env` tại thư mục gốc bằng cách sao chép từ file mẫu:
 ```bash
 cp .env.example .env
 ```
-
-Điền các giá trị vào `.env`:
-
+Cập nhật các thông số cần thiết trong `.env`:
 ```env
-# Google Gemini AI
-GEMINI_API_KEY=AIzaSy...
+# Môi trường chạy
+APP_ENV=development
+PORT=8000
+HOST=127.0.0.1
 
-# Firebase Admin SDK
-FIREBASE_CREDENTIALS_PATH=path/to/firebase-adminsdk.json
+# Trí tuệ nhân tạo (Google Gemini)
+GEMINI_API_KEY=AIzaSy...your-gemini-api-key
 
-# Tavily Web Search (tuỳ chọn)
+# Cơ sở dữ liệu Firebase Firestore
+FIREBASE_PROJECT_ID=baby-7d4a7
+FIREBASE_CREDENTIALS_PATH=./baby-7d4a7-firebase-adminsdk-fbsvc-12ba4419bc.json
+
+# Tra cứu thông tin bên ngoài (Tùy chọn - Tự động fallback DuckDuckGo)
 TAVILY_API_KEY=tvly-...
+
+# Khóa bảo mật phiên đăng nhập JWT
+SECRET_KEY=your-super-secure-secret-jwt-key
+ALGORITHM=HS256
 ```
 
-### 3. Tải Model Trọng Số AI Tiếng Khóc
+---
 
-> ⚠️ File trọng số `best_audio_model.pth` (333 MB) **không được push lên Git** do giới hạn kích thước.
-> Tải thủ công và đặt vào đúng thư mục:
-
-```bash
+### Bước 3: Đặt Model Trọng Số Tiếng Khóc (PyTorch AST)
+Do file trọng số `best_audio_model.pth` có dung lượng ~333MB, file được lưu trữ bảo mật và đặt tại:
+```text
 app/ai/CRY/weights/best_audio_model.pth
 ```
+*(Nếu chưa có file, hệ thống sẽ tự động sử dụng chế độ fallback an toàn để bảo đảm các luồng chức năng khác của ứng dụng vẫn hoạt động bình thường).*
 
-### 4. Khởi Chạy Backend (FastAPI)
+---
 
+### Bước 4: Khởi Chạy Backend
 ```bash
-fastapi dev app/main.py
-# Backend: http://localhost:8000
-# Swagger UI: http://localhost:8000/docs
+# Khởi chạy server FastAPI ở chế độ Auto-Reload
+uvicorn app.main:app --reload --port 8000
+
+# Endpoint kiểm tra:
+# ▫️ Backend API: http://localhost:8000
+# ▫️ Swagger API Docs: http://localhost:8000/docs
+# ▫️ Health Check: http://localhost:8000/api/v1/health
 ```
 
-### 5. Khởi Chạy Frontend (React + Vite)
+---
 
+### Bước 5: Cài Đặt & Khởi Chạy Frontend
+Mở một cửa sổ Terminal mới:
 ```bash
 cd frontend
+
+# Cài đặt thư viện Node.js
 npm install
+
+# Khởi chạy giao diện nhà phát triển
 npm run dev
-# Frontend: http://localhost:5173
+
+# ▫️ Giao diện ứng dụng: http://localhost:3000 (hoặc http://localhost:5173)
 ```
 
 ---
 
-## 🧪 Kiểm Thử Tự Động & Đánh Giá AI (Evaluation Benchmark)
-
-### 1. Unit Tests Hệ Thống
-
-```bash
-# Chạy toàn bộ 21 unit test tự động (AI Core, Memory, Tools)
-.\venv\Scripts\python.exe -m pytest tests/unit/test_ai_core.py -v
-
-# Kết quả: 21 passed (100% thành công)
-```
-
-### 2. Chỉ Số Đánh Giá Bộ Truy Xuất RAG Y Khoa (MedicalRetriever Evaluation)
-
-Báo cáo kiểm định chất lượng tự động của **MedicalRetriever (FAISS + BAAI/bge-m3)** trên tập dữ liệu chuẩn Golden Dataset (`tests/evaluation/local_retriever_report.md`):
-
-| Chỉ số Đánh Giá | Giá trị Trung bình | Mô tả Chi tiết |
-| :--- | :---: | :--- |
-| 🎯 **Mean Hit@3** | **`1.00` (100%)** | Tỷ lệ tìm thấy tài liệu y tế chuẩn trong Top 3 kết quả |
-| 🎯 **Mean Hit@5** | **`1.00` (100%)** | Tỷ lệ tìm thấy tài liệu y tế chuẩn trong Top 5 kết quả |
-| 🏆 **MRR (Mean Reciprocal Rank)** | **`0.92` (92%)** | Thứ hạng vị trí đúng trung bình trong kết quả tìm kiếm |
-| 🥇 **Mean Hit@1** | **`0.83` (83%)** | Tỷ lệ tìm thấy đúng ngay vị trí đầu tiên (#1) |
-
-#### 📝 Kết Quả Kiểm Thử Thực Tế Theo Các Kịch Bản Nhi Khoa Tiêu Biểu
-
-| STT | Kịch Bản Y Tế Phụ Huynh Hỏi | Từ Khóa Y Khoa Mong Đợi | Hit@1 | Hit@3 | Hit@5 | MRR |
-| :---: | :--- | :--- | :---: | :---: | :---: | :---: |
-| 1 | *Lời khuyên rèn bé sơ sinh tự ngủ* | `['quấy khóc', 'tự ngủ', 'buồn ngủ']` | **1.00** | **1.00** | **1.00** | **1.00** |
-| 2 | *Bé mấy tháng tuổi tập ngồi được* | `['phát triển', 'tháng', 'tập ngồi']` | **1.00** | **1.00** | **1.00** | **1.00** |
-| 3 | *Bé sốt nóng đầu 38.8 độ C làm sao* | `['sốt', 'Hapacol', 'nhiệt độ', 'Paracetamol']` | **1.00** | **1.00** | **1.00** | **1.00** |
-| 4 | *Uống Hapacol 150mg 8h, 11h sốt lại có uống tiếp được không* | `['Hapacol', 'Paracetamol', 'liều', 'tiếng']` | **1.00** | **1.00** | **1.00** | **1.00** |
-| 5 | *Thực đơn ăn dặm tuần đầu tiên* | `['ăn dặm', 'cháo rây', 'thực đơn', 'nhóm']` | **1.00** | **1.00** | **1.00** | **1.00** |
-
----
-
-## 🤖 Kiến Trúc Đa Agent — Phân Tích Chi Tiết (Multi-Agent System Architecture)
+<a id="langgraph-multi-agent"></a>
+## 🤖 Kiến Trúc Đa Agent (Multi-Agent System Architecture)
 
 <p align="center">
-  <img src="img/multi-agent-system-architecture.png" width="100%" alt="Sơ Đồ Kiến Trúc Đa Agent Multi-Agent System Architecture" />
+  <img src="img/multi-agent-system-architecture.png" width="100%" alt="Kiến Trúc Multi-Agent LangGraph" />
   <br>
-  <em>Sơ đồ Kiến trúc Chi tiết Đồ thị Đa Tác nhân (Multi-Agent System Architecture) & Các Subgraph Chuyên Biệt</em>
+  <em>Chi tiết đồ thị trạng thái Stateful Multi-Agent: Deterministic Bypass, Intent Router, Subgraphs chuyên trách và Human-in-the-loop</em>
 </p>
 
-<br>
-
-### ⚙️ Các Thành Phần Cốt Lõi Trong Đồ Thị Đa Tác Nhân:
-
-1. **Deterministic Bypass (Đường Tắt Định Tính)**:
-   - Khi phụ huynh thực hiện các tác vụ tra cứu thông thường (xem Dashboard, kiểm tra giờ bú gần nhất, lịch uống thuốc), hệ thống kích hoạt **Deterministic Bypass** để lấy dữ liệu trực tiếp từ **Google Firestore DB** trong **~15ms** với **chi phí 0$ LLM** (tiết kiệm ~65% chi phí gọi mô hình ngôn ngữ).
-
-2. **Routing & Dispatching Layer (Tầng Phân Luồng & Định Tuyến)**:
-   - **Capability Registry & Rule Engine**: Phân loại mục đích (Intent Classification) và ánh xạ năng lực xử lý tương ứng.
-   - **Model Router (Dynamic LLM Routing)**: Đánh giá độ phức tạp của câu hỏi để tự động chọn mô hình ngôn ngữ phù hợp nhằm tối ưu hiệu năng và kiểm soát chi phí.
-
-3. **LLM Execution Engine (Động Cơ Thực Thi LLM)**:
-   - **Gemini 1.5 Flash**: Đảm nhận các tác vụ phản hồi nhanh, giao tiếp giọng nói và bóc tách dữ liệu với độ trễ thấp và chi phí tối ưu.
-   - **Gemini 1.5 Pro**: Đảm nhận lập luận RAG y khoa phức tạp, phân tích triệu chứng sâu và tổng hợp báo cáo.
-
-4. **Stateful Multi-Agent Subgraphs (Các Đồ Thị Con Theo Trạng Thái)**:
-   - 🏥 **HealthAgent**: Theo dõi sốt, liều dùng Paracetamol an toàn (giữ khoảng cách 4-6h), kiểm tra tiền sử dị ứng và lưu nhật ký theo dõi sức khỏe cho bé.
-   - 🥑 **NutritionAgent**: Quản lý cữ bú, thiết kế thực đơn ăn dặm theo bách phân vị WHO và tự động cảnh báo nguyên liệu gây dị ứng (ví dụ: đậu nành).
-   - 😭 **CryAnalysisGraph**: Kết hợp mô hình nhận dạng phổ âm thanh với ký ức cữ bú/ngủ gần nhất để đưa ra lý do bé khóc dịu dàng và đề xuất nhạc ru.
-   - 🎤 **VoiceLoggingAgent**: Bóc tách nhật ký giọng nói từ phụ huynh thành dữ liệu cấu trúc chuẩn hóa cho bé.
-   - 🌐 **OutOfScopeGraph**: Tìm kiếm web thời gian thực khi thông tin nằm ngoài cơ sở tri thức nội bộ với luồng Interrupted Stream.
-
-5. **Memory & Checkpoint Persistence Layer (Tầng Bộ Nhớ & Lưu Trữ Trạng Thái)**:
-   - **Short-Term Memory (MemoryManager)**: Quản lý cửa sổ hội thoại (Conversation Buffer) và Token Pruning ($\le 4000$ tokens).
-   - **Long-Term Checkpointer (FirestoreCheckpointer)**: Lưu trữ trạng thái đồ thị LangGraph bền vững (Persistent Threads), cho phép phục hồi và tiếp tục hội thoại tại bất kỳ thời điểm nào.
-
-6. **Hybrid RAG & Context Compactor Layer**:
-   - Kết hợp **Dense Retriever (FAISS + BGE-M3)** và **Sparse Retriever (BM25)** qua thuật toán **RRF Merge (Reciprocal Rank Fusion)**. Sau đó, **Context Compactor (CrossEncoder Reranker `mxbai-rerank-xsmall`)** lọc nhiễu, nén ngữ cảnh và chọn Top-K đoạn văn tối ưu nhất cho LLM.
-
-7. **Response Formatter (Định Dạng Phản Hồi)**:
-   - Trích dẫn nguồn tài liệu y khoa rõ ràng (*Citation & Markdown Formatter*), phản hồi cấu trúc Rich Text chuẩn **văn phong Nhi khoa ấm áp, tinh tế và an toàn cho phụ huynh**.
+### Cơ Chế Vận Hành Thông Minh:
+1. **Deterministic Bypass (Đường Tắt Định Tính)**: Với các yêu cầu tra cứu dữ liệu cố định (kiểm tra giờ bú gần nhất, lịch uống thuốc đã ghi), hệ thống truy xuất thẳng từ Firestore trong **~15ms với chi phí 0$ LLM** (giảm thiểu 65% chi phí gọi mô hình ngôn ngữ).
+2. **Intent Classification & Router**: Phân tích ý định của phụ huynh để điều phối chính xác về một trong 7 đồ thị con chuyên trách:
+   - 🏥 `HealthGraph`: Quản lý nhật ký triệu chứng, chốt chặn hạ sốt an toàn.
+   - 🥑 `NutritionGraph`: Thực đơn ăn dặm theo lứa tuổi, lọc nguyên liệu dị ứng.
+   - 😭 `CryAnalysisGraph`: Kết hợp âm thanh tiếng khóc và nhật ký sinh hoạt để suy luận nguyên nhân.
+   - 🎤 `VoiceLoggingAgent`: Bóc tách thông tin từ giọng nói phụ huynh thành dữ liệu chuẩn.
+   - 📊 `ReportGraph`: Biên soạn báo cáo sức khỏe PDF.
+   - 🌐 `OutOfScopeGraph`: Tìm kiếm tri thức mở trên web khi nằm ngoài kho dữ liệu y khoa.
+3. **Mô Hình Suy Luận Phối Hợp**:
+   - **Gemini 1.5 Flash**: Đáp ứng các tương tác nhanh, bóc tách giọng nói với độ trễ tối thiểu.
+   - **Gemini 1.5 Pro**: Phân tích bệnh lý sâu, tổng hợp báo cáo và lập luận y tế phức tạp.
 
 ---
 
+<a id="rag-pipeline"></a>
 ## 🧠 Kiến Trúc RAG 2 Giai Đoạn (RAG Pipeline Analysis)
 
-Hệ thống RAG (Retrieval-Augmented Generation) y khoa được thiết kế theo chuẩn 2 giai đoạn: **Ingestion Pipeline** (Nạp & chỉ mục) và **Retrieval Engine** (Truy xuất & Re-ranking).
-
----
-
-### 📥 Giai Đoạn 1: Ingestion Pipeline — Quy Trình Nạp & Xây Dựng Chỉ Mục
-
 <p align="center">
-  <img src="img/ingestion.png" width="100%" alt="Sơ Đồ Giai Đoạn 1 - RAG Ingestion Pipeline" />
+  <img src="img/ingestion.png" width="49%" alt="RAG Ingestion Pipeline" />
+  <img src="img/retrival.png" width="49%" alt="RAG Retrieval & Reranking" />
   <br>
-  <em>Sơ đồ Chi tiết Quy trình Nạp, Làm giàu Ngữ cảnh và Xây dựng Chỉ mục Hybrid Search (RAG Ingestion Pipeline)</em>
+  <em>Giai đoạn 1: Ingestion & Dual Indexing (trái) | Giai đoạn 2: Hybrid Retrieval & CrossEncoder Re-ranking (phải)</em>
 </p>
 
-<br>
-
-#### Các Bước Thực Thi Trong Pipeline Ingestion:
-
-1. **Document Sources (Nguồn Tài Liệu)**: Tiếp nhận đa dạng định dạng tài liệu y khoa nhi khoa (*PDF, DOCX, HTML, Markdown, JSONL, Images*).
-2. **Document Parsing / OCR**: Sử dụng `PyMuPDF` / `pdfplumber` cho file PDF chuẩn, tích hợp OCR/VLM cho tài liệu quét và hình ảnh, cùng bộ phân tích HTML/Markdown.
-3. **Cleaning & Normalization (Làm Sạch & Chuẩn Hóa)**: Loại bỏ nhiễu, sửa lỗi OCR, chuẩn hóa Unicode, khôi phục cấu trúc văn bản và lọc nội dung trùng lặp.
-4. **Sentence-Aware Chunking (Phân Chunk Nhận Biết Câu)**: Kết hợp *Section-aware Chunking*, *Semantic Chunking* và *Sliding Window Overlap* để đảm bảo câu chữ không bị đứt đoạn giữa chừng.
-5. **Contextual Enrichment (Làm Giàu Ngữ Cảnh)**: Tự động bổ sung Tiêu đề đoạn/chương, Keyword chính, Tóm tắt do LLM tạo, Mô tả ngữ cảnh và Metadata (trang, nguồn, năm, chủ đề).
-6. **Xử Lý Song Song (Dual Pipeline)**:
-   - **6A. Embedding Generation**: Sử dụng mô hình `BAAI/bge-m3` tạo vector embedding 1024 chiều.
-   - **6B. Keyword Processing**: Tokenization, loại bỏ Stopwords và chuẩn hóa tiếng Việt cho BM25.
-7. **Xây Dựng Chỉ Mục Đôi (Dual Indexing)**:
-   - **7A. Vector Index**: Lưu trữ vector trong **FAISS Index** cho truy xuất ngữ nghĩa (Dense Retrieval).
-   - **7B. BM25 Index**: Lưu trữ bảng chỉ mục tần suất từ trong **BM25 Index** cho truy xuất từ khóa (Sparse Retrieval).
-8. **Hybrid Retrieval Index**: Hợp nhất hai chỉ mục thành bộ lưu trữ chỉ mục lai sẵn sàng phục vụ truy xuất.
+- **Dual Indexing**: Tài liệu y khoa được đánh chỉ mục đồng thời qua **Dense Vector (FAISS + BAAI/bge-m3)** và **Sparse Keyword (BM25)**.
+- **Reciprocal Rank Fusion (RRF)**: Thuật toán dung hợp thứ hạng $\text{RRF\_Score} = \sum \frac{1}{60 + \text{rank}_i}$ kết hợp ưu thế của cả hai phương pháp.
+- **CrossEncoder Re-ranking**: Mô hình `mxbai-rerank-xsmall` chấm điểm độ tương đồng ngữ nghĩa chính xác, chọn ra Top-3 đoạn tri thức chuẩn xác nhất phục vụ câu trả lời.
 
 ---
 
-### 🔍 Giai Đoạn 2: Retrieval Engine — Quy Trình Truy Xuất Hybrid & Re-ranking
+<a id="kiem-thu-benchmark"></a>
+## 🧪 Kiểm Thử Tự Động & Đánh Giá AI (Evaluation Benchmark)
 
-<p align="center">
-  <img src="img/retrival.png" width="100%" alt="Sơ Đồ Giai Đoạn 2 - RAG Hybrid Retrieval & Reranking Pipeline" />
-  <br>
-  <em>Sơ đồ Quy trình Truy xuất Lai (Hybrid Retrieval), Thuật toán Fusion RRF, CrossEncoder Re-ranking & Cơ chế Fallback An Toàn</em>
-</p>
+> **Quy Tắc Kiểm Thử Trong Dự Án (Testing Rule)**:  
+> Nhằm tiết kiệm tài nguyên và thời gian phát triển, hệ thống **chỉ thực hiện kiểm thử trọng tâm cho các module AI lõi, thuật toán suy luận và logic nghiệp vụ quan trọng**, hạn chế chạy lại toàn bộ test suite cho những thay đổi giao diện đơn lẻ.
 
-<br>
+### 1. Thực Thi Unit Tests Cốt Lõi
+```bash
+# Chạy bộ test kiểm thử tự động AI Core & Công cụ
+pytest tests/unit/test_ai_core.py -v
 
-#### Các Bước Thực Thi Trong Retrieval Engine:
+# Chạy kiểm thử hệ thống dự đoán cửa sổ thức Wake Window (US Patent 20250292903)
+pytest tests/unit/test_wake_window_system.py -v
+```
 
-1. **User Query & Domain Mapping**: Tiếp nhận thắc mắc từ cha mẹ, phân loại domain y tế (*health / nutrition / general*) và chuẩn hóa truy vấn.
-2. **Truy Xuất Song Song (Dense & Sparse Retrieval)**:
-   - **Dense Retrieval (FAISS)**: Tìm kiếm độ tương đồng vector bằng `BAAI/bge-m3`, áp dụng Metadata Filter theo domain, lấy **Top-10 Candidate Chunks**.
-   - **Sparse Retrieval (BM25)**: Trích xuất từ khóa y khoa tiếng Việt qua `SparseBM25Retriever`, lấy **Top-10 Candidate Chunks**.
-3. **Reciprocal Rank Fusion (RRF)**:
-   - Hợp nhất danh sách ứng viên từ Dense và Sparse.
-   - Tính điểm theo công thức: $\text{RRF\_Score} = \sum \frac{1}{60 + \text{rank}_i}$
-   - Khử trùng lặp nội dung dựa trên 100 ký tự đầu tiên và sắp xếp lại theo điểm RRF.
-4. **CrossEncoder Re-Ranker**:
-   - Sử dụng mô hình CrossEncoder **`mxbai-rerank-xsmall`** chấm điểm mức độ liên quan $[0, 1]$ cho từng cặp `(Query, Document Chunk)`.
-   - Sắp xếp và trích chọn **Top-3 Document Chunks** chính xác nhất.
-5. **Output Top-3 Chunks**: Chuyển giao các đoạn văn chuẩn hóa kèm trích dẫn nguồn, số trang và metadata cho LLM tổng hợp câu trả lời.
-6. **Cơ Chế Dự Phòng An Toàn (Fallback Mechanism)**:
-   - 🛡️ **Domain Fallback**: Nếu không tìm thấy kết quả phù hợp trong phạm vi hẹp, hệ thống tự động tìm kiếm mở rộng trên toàn bộ kho tri thức nhi khoa.
-   - 🔄 **Reranker Fallback**: Trong trường hợp mô hình CrossEncoder gặp sự cố hoặc thiếu tài nguyên, hệ thống tự động chuyển sang sử dụng trực tiếp kết quả RRF Top-K.
+### 2. Kết Quả Đánh Giá Bộ Truy Xuất RAG (Golden Dataset Benchmark)
+Kiểm định trên tập câu hỏi y khoa thực tế của phụ huynh (`tests/evaluation/local_retriever_report.md`):
+
+| Chỉ Số Đánh Giá | Kết Quả Đạt Được | Ý Nghĩa Thực Tế |
+| :--- | :---: | :--- |
+| 🎯 **Mean Hit@3** | **`1.00` (100%)** | 100% tìm thấy tài liệu y tế chuẩn ngay trong Top 3 kết quả |
+| 🎯 **Mean Hit@5** | **`1.00` (100%)** | 100% tài liệu y khoa chính xác xuất hiện trong Top 5 |
+| 🏆 **MRR (Mean Reciprocal Rank)** | **`0.92` (92%)** | Thứ hạng câu trả lời đúng nằm ở vị trí cao nhất trên bảng xếp hạng |
+| 🥇 **Mean Hit@1** | **`0.83` (83%)** | 83% tìm thấy chính xác văn bản hướng dẫn ngay vị trí đầu tiên (#1) |
 
 ---
 
-## 🛠️ Bộ Công Cụ Nghiệp Vụ (Tools Registry)
+<a id="quy-trinh-gitflow"></a>
+## 🌿 Quy Trình Phát Triển Gitflow & Đóng Góp (Contributing)
 
-| Tool | Chức năng |
-|---|---|
-| `baby_tools.py` | Đọc hồ sơ & chỉ số sinh học của em bé từ Firestore |
-| `health_tools.py` | Tra cứu nhật ký sức khỏe, triệu chứng & nhắc nhở an toàn |
-| `nutrition_tools.py` | Nhật ký cữ bú, ăn dặm & kiểm tra nguyên liệu dị ứng |
-| `growth_tools.py` | Số liệu tăng trưởng & đối chiếu bách phân vị WHO |
-| `cry_tools.py` | Kích hoạt suy luận phân loại tiếng khóc AST |
-| `web_search_tool.py` | Tavily Search → DuckDuckGo (fallback tự động) |
-| `rag_tools.py` | Tra cứu kho tri thức nhi khoa RAG (Hybrid Search) |
-| `calendar_tool.py` | Tiện ích lịch & tính toán mốc thời gian |
-| `email_tool.py` | Gửi email thông báo cho phụ huynh khi cần |
-| `tool_registry.py` | Tự động đăng ký & quản lý tập trung tất cả công cụ |
-
----
-
-## 🌐 Tổng Quan Các API Endpoint
-
-| Method | Endpoint | Chức Năng |
-|---|---|---|
-| `POST` | `/api/v1/auth/login` | Đăng nhập & cấp JWT Token |
-| `GET/POST` | `/api/v1/babies/` | Quản lý hồ sơ em bé |
-| `POST` | `/api/v1/babies/{id}/cry-prediction` | Phân tích tiếng khóc AI (upload .wav/.mp3) |
-| `GET/POST` | `/api/v1/growth/` | Nhật ký tăng trưởng & bách phân vị WHO |
-| `GET/POST` | `/api/v1/health/` | Nhắc nhở sức khỏe & nhật ký liều dùng thuốc |
-| `GET/POST` | `/api/v1/nutrition/feeds` | Cữ bú & ăn dặm |
-| `GET` | `/api/v1/nutrition/safety-guidelines` | Cảnh báo dị ứng & thực phẩm cấm theo tuổi |
-| `GET` | `/api/v1/nutrition/safety-handbook` | Cẩm nang an toàn y khoa WHO/AAP |
-| `GET` | `/api/v1/babies/{id}/sleep/next-wake-window` | ⏱️ **Dự đoán Wake Window & Sweet Spot** (Global LightGBM + 5-day history + Guardrails + LLM) |
-| `GET/POST` | `/api/v1/babies/{id}/sleep/records` | Quản lý nhật ký giấc ngủ của bé |
-| `POST` | `/api/v1/babies/{id}/sleep/timer` | Bật/tắt/kiểm tra đồng hồ bấm giờ giấc ngủ (`start` / `stop` / `status`) |
-| `GET/POST` | `/api/v1/ai/threads` | Quản lý phiên chat AI (giới hạn 6 gần nhất) |
-| `POST` | `/api/v1/ai/threads/{id}/messages` | Gửi tin nhắn & nhận phản hồi AI |
-| `POST` | `/api/v1/ai/voice-extract` | Bóc tách nhật ký từ giọng nói |
-| `POST` | `/api/v1/ai/reports/generate` | Tạo báo cáo PDF y khoa bằng AI |
-| `GET/POST` | `/api/v1/guardians/` | Quản lý người giám hộ & phân quyền |
+Để đảm bảo chất lượng mã nguồn khi làm việc nhóm:
+1. **Nhánh gốc**: Luôn tạo nhánh mới từ nhánh `develop`:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git checkout -b feature/ten-tinh-nang-moi
+   ```
+2. **Quy chuẩn Commit (Conventional Commits)**:
+   - `feat(module)`: Bổ sung tính năng mới (ví dụ: `feat(dashboard): bổ sung bảng điều phối sinh hiệu`).
+   - `fix(module)`: Sửa lỗi (ví dụ: `fix(health): căn chỉnh khoảng cách liều hạ sốt`).
+   - `refactor(module)`: Tái cấu trúc mã nguồn không thay đổi logic.
+3. **Mở Pull Request (PR)**: Đảm bảo code sạch, đã xác thực logic và mở PR hướng về nhánh `develop`.
 
 ---
 
-## 🔒 Bảo Mật & An Toàn Dữ Liệu
+# PHẦN III: 🚀 VẬN HÀNH & TRIỂN KHAI PRODUCTION (PRODUCTION BRANCH)
 
-- **JWT Authentication**: Mọi endpoint đều yêu cầu Bearer token xác thực (Firebase Auth).
-- **Firebase Firestore Rules**: Dữ liệu em bé được cách ly và phân quyền chặt chẽ theo `user_id`.
-- **Secrets Management**: Tất cả API Key và cấu hình được quản lý tập trung qua `.env` (không push lên Git).
-- **File Upload Safety**: Kiểm tra định dạng âm thanh (.wav/.mp3) và giới hạn dung lượng upload.
-- **Model Weights Protection**: File trọng số `.pth` (333 MB) được loại khỏi Git qua `.gitignore`.
+<a id="kien-truc-production"></a>
+## 🏢 Kiến Trúc Hạ Tầng Production (DevOps Guide)
+
+Hệ thống Production được thiết kế hướng tới tính sẵn sàng cao, bảo mật nhiều lớp và dễ dàng mở rộng:
+
+```text
+[ Người Dùng / Internet ]
+            │ (Port 80 HTTP / Port 443 HTTPS)
+            ▼
+┌────────────────────────────────────────────────────────┐
+│               NGINX REVERSE PROXY GATEWAY              │
+│  ▫️ Chuyển hướng tự động HTTP -> HTTPS (SSL/TLS)       │
+│  ▫️ Giới hạn tốc độ Rate-limiting ngăn ngừa tấn công    │
+│  ▫️ Phục vụ nén Gzip & Header an toàn (HSTS, CSP)      │
+└───────────┬────────────────────────────────┬───────────┘
+            │ Proxy Pass /                   │ Proxy Pass /api/
+            ▼                                ▼
+┌───────────────────────┐        ┌───────────────────────┐
+│     babycare-ui       │        │     babycare-api      │
+│  React SPA Container  │        │ FastAPI Production    │
+│  (Port nội bộ 3000)   │        │ (Port nội bộ 8000)    │
+└───────────────────────┘        └───────────┬───────────┘
+                                             │
+                                             ▼
+                                 ┌───────────────────────┐
+                                 │    babycare-redis     │
+                                 │ Redis Cache & Queue   │
+                                 │ (Khóa port nội bộ)    │
+                                 └───────────────────────┘
+```
 
 ---
 
-## 📜 Giấy Phép
+<a id="docker-compose-prod"></a>
+## 🐳 Triển Khai Production Với Docker Compose
 
-Dự án nghiên cứu & phát triển nội bộ — **BabyCare AI Team**.
+Toàn bộ dịch vụ được đóng gói độc lập qua cấu hình `docker/docker-compose.yml` kết hợp file override `docker/docker-compose.prod.yml`.
+
+### Các Bước Triển Khai Trên Máy Chủ:
+```bash
+# 1. Tải mã nguồn nhánh production
+git clone -b production https://github.com/nghiemmmm/Babycare-Platform.git
+cd Babycare-Platform
+
+# 2. Thiết lập cấu hình biến môi trường production
+cp .env.example .env.production
+# Điền đầy đủ thông tin Firebase, API Keys và Secret keys vào .env.production
+
+# 3. Khởi chạy toàn bộ hệ thống bằng Docker Compose Production
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml --env-file .env.production up -d --build
+
+# 4. Kiểm tra trạng thái các container đang hoạt động
+docker compose ps
+```
+
+---
+
+<a id="nginx-gateway"></a>
+## 🌐 Cổng Kết Nối NGINX Reverse Proxy & SSL/TLS
+
+File cấu hình Nginx chuẩn tại `nginx/nginx.conf` đảm bảo:
+- **Tự động chuyển hướng HTTP (80) sang HTTPS (443)**.
+- **Reverse Proxy thông minh**:
+  - Mọi request `/api/*` và `/docs` chuyển tiếp về `backend:8000`.
+  - Mọi request web giao diện chuyển tiếp về `frontend:3000`.
+- **Bảo Mật Máy Chủ**: Thiết lập chứng chỉ SSL qua Let's Encrypt Certbot, cấu hình TLS 1.2 / 1.3 và ẩn thông tin phiên bản máy chủ.
+
+---
+
+<a id="cicd-pipeline"></a>
+## 🔄 Quy Trình CI/CD Pipeline (`deploy.yml`)
+
+Dự án tích hợp luồng triển khai tự động qua **GitHub Actions**:
+1. **Kích hoạt tự động**: Khi có commit được merge vào nhánh `main` hoặc `production`.
+2. **Kiểm tra an toàn**: Chạy sanity check và build kiểm thử.
+3. **Đồng bộ máy chủ qua SSH**:
+   - Tự động SSH vào máy chủ Cloud (AWS EC2 / DigitalOcean).
+   - Kéo mã nguồn mới nhất (`git pull`).
+   - Tái tạo Docker image với cơ chế BuildKit caching tiết kiệm băng thông.
+   - Khởi động lại container mượt mà không làm gián đoạn dịch vụ.
+
+---
+
+<a id="giam-sat-healthcheck"></a>
+## 📊 Giám Sát Healthcheck & Nhật Ký Vận Hành
+
+### 1. Kiểm Tra Sức Khỏe Hệ Thống
+Hệ thống cung cấp endpoint giám sát phục vụ uptime monitor:
+```bash
+curl -f http://localhost:8000/api/v1/health
+```
+Phản hồi mẫu:
+```json
+{
+  "status": "healthy",
+  "database": "connected",
+  "redis": "ready",
+  "version": "1.0.0"
+}
+```
+
+### 2. Xem Nhật Ký Thời Gian Thực (Logs)
+Các container production đều được giới hạn dung lượng log rotation tối đa 50MB/file (lưu tối đa 3 file xoay vòng):
+```bash
+# Theo dõi log thời gian thực của backend
+docker compose logs -f --tail=100 backend
+
+# Theo dõi log của Nginx Reverse Proxy
+docker compose logs -f --tail=50 nginx
+```
+
+---
+
+<a id="rollback-runbook"></a>
+## 🚨 Ứng Phó Sự Cố & Khôi Phục Khẩn Cấp (Rollback Runbook)
+
+Khi phát hiện sự cố nghiêm trọng sau đợt cập nhật:
+```bash
+# 1. Quay trở lại Git Tag hoặc commit ổn định gần nhất
+git checkout <tag-phien-ban-truoc-do>
+
+# 2. Khởi động lại container với bản dựng trước đó
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d --build
+
+# 3. Xác thực lại sức khỏe hệ thống
+curl -I https://your-domain.com/api/v1/health
+```
+
+---
+
+## 📜 Giấy Phép & Bản Quyền
+
+Dự án thuộc quyền phát triển của **BabyCare AI Engineering Team**.  
+Giấy phép phân phối mã nguồn mở theo tiêu chuẩn **MIT License**. Mọi đóng góp nhằm mang lại những điều tốt đẹp nhất cho sức khỏe trẻ sơ sinh luôn được chào đón nồng nhiệt!
