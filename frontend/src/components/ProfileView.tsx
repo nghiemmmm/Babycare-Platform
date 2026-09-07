@@ -152,59 +152,6 @@ export default function ProfileView({
     }
   }, [activeBaby, isCreating]);
 
-  // Real-time Activity Stream state
-  const [recentActivities, setRecentActivities] = useState<Array<{ id: string; user: string; action: string; time: string; color: string }>>([]);
-
-  useEffect(() => {
-    if (!activeBaby?.id) return;
-    let isMounted = true;
-    apiFetch(`/api/v1/care-coordination/overview?baby_id=${activeBaby.id}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!isMounted || !data) return;
-        const events = data.recent_events || [];
-        const mapped = events.map((ev: any, idx: number) => {
-          const timeStr = ev.occurred_at ? new Date(ev.occurred_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "";
-          let action = "đã ghi nhận hoạt động";
-          let color = "bg-teal-50 text-teal-600";
-          if (ev.event_type === "feeding") {
-            const amt = ev.actual_value?.amount ? `${ev.actual_value.amount}ml ` : "";
-            const feedType = ev.actual_value?.feed_type === "Formula" ? "Sữa công thức" : (ev.actual_value?.feed_type === "Breast" ? "Sữa mẹ" : "");
-            action = `đã ghi nhận cữ bú ${amt}${feedType}`.trim();
-            color = "bg-sky-50 text-sky-600";
-          } else if (ev.event_type === "sleep") {
-            const dur = ev.actual_value?.duration_minutes ? ` (${ev.actual_value.duration_minutes} phút)` : "";
-            action = `đã ghi nhận giấc ngủ${dur}`;
-            color = "bg-purple-50 text-purple-600";
-          } else if (ev.event_type === "medication") {
-            const med = ev.actual_value?.medicine ? ` (${ev.actual_value.medicine})` : "";
-            action = `đã cho bé uống vi chất/thuốc${med}`;
-            color = "bg-rose-50 text-rose-600";
-          } else if (ev.event_type === "diaper") {
-            action = "đã thay tã sạch sẽ cho bé";
-            color = "bg-amber-50 text-amber-600";
-          } else if (ev.notes) {
-            action = ev.notes;
-          }
-          return {
-            id: ev.id || `act_${idx}`,
-            user: ev.recorded_by_name || ev.logged_by_name || "Người chăm sóc",
-            action,
-            time: timeStr || "Hôm nay",
-            color
-          };
-        });
-        setRecentActivities(mapped);
-      })
-      .catch((err) => {
-        console.error("Failed to load profile activities:", err);
-        if (isMounted) setRecentActivities([]);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [activeBaby?.id]);
 
   const handleSaveBaby = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -556,39 +503,6 @@ export default function ProfileView({
                 </div>
               </div>
 
-              {/* Real-time Activity stream */}
-              <div className="bg-white/60 backdrop-blur-xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.05)] rounded-[32px] p-6 space-y-4">
-                <div className="flex items-center justify-between border-b border-white/20 pb-2">
-                  <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                    <Clock className="w-4.5 h-4.5 text-slate-400" />
-                    Dòng hoạt động thời gian thực
-                  </h3>
-                </div>
-
-                {recentActivities.length > 0 ? (
-                  <div className="space-y-3">
-                    {recentActivities.map((act) => (
-                      <div key={act.id} className="p-3 bg-white/40 border border-white/20 rounded-2xl flex items-center justify-between gap-3 text-xs">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${act.color}`}>
-                            {act.user.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-slate-700">
-                              <span className="font-bold text-slate-800">{act.user}</span> {act.action}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-medium text-slate-400">{act.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 text-slate-400 text-xs font-medium">
-                    Chưa có hoạt động nào được ghi nhận hôm nay cho bé {activeBaby.name}.
-                  </div>
-                )}
-              </div>
 
             </div>
 
