@@ -42,13 +42,24 @@ export default function GrowthView({
   const [selectedLog, setSelectedLog] = useState<Measurement | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  // New Measurement Form State
+  // New Measurement Form State - prefill theo hồ sơ bé + số đo gần nhất, không dùng số demo cứng
   const [date, setDate] = useState("");
-  const [ageMonths, setAgeMonths] = useState(6);
-  const [weight, setWeight] = useState(7.2);
-  const [height, setHeight] = useState(66);
-  const [headCirc, setHeadCirc] = useState(42.5);
+  const [ageMonths, setAgeMonths] = useState<number | "">("");
+  const [weight, setWeight] = useState<number | "">("");
+  const [height, setHeight] = useState<number | "">("");
+  const [headCirc, setHeadCirc] = useState<number | "">("");
   const [notes, setNotes] = useState("");
+
+  // Tính tuổi (tháng) từ ngày sinh của bé đến ngày đo
+  const computeAgeMonths = (birthDate?: string, onDate?: string): number => {
+    if (!birthDate) return 0;
+    const b = new Date(birthDate);
+    const d = onDate ? new Date(onDate) : new Date();
+    if (isNaN(b.getTime()) || isNaN(d.getTime())) return 0;
+    let months = (d.getFullYear() - b.getFullYear()) * 12 + (d.getMonth() - b.getMonth());
+    if (d.getDate() < b.getDate()) months -= 1;
+    return Math.max(0, months);
+  };
 
   const isBoy = activeBaby.gender !== "Girl";
   const whoRef = isBoy ? WHO_BOY_STANDARDS : WHO_GIRL_STANDARDS;
@@ -76,12 +87,20 @@ export default function GrowthView({
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const ageNum = Number(ageMonths) || 0;
+    const weightNum = Number(weight) || 0;
+    const heightNum = Number(height) || 0;
+    const headNum = Number(headCirc) || 0;
+
+    // Chuẩn WHO chỉ có 0-12 tháng: lấy mốc gần nhất; ngoài 12 tháng thì không tự gắn cảnh báo.
     let status = "Normal";
-    if (metricToggle === "height" || true) {
-      const matchStandard = whoRef.find(r => r.month === Number(ageMonths)) || whoRef[3];
-      if (height < (matchStandard.heightMedian - 1.5)) {
+    if (ageNum <= 12) {
+      const matchStandard =
+        whoRef.find(r => r.month === ageNum) ||
+        whoRef.reduce((a, b) => (Math.abs(b.month - ageNum) < Math.abs(a.month - ageNum) ? b : a));
+      if (heightNum && heightNum < matchStandard.heightMedian - 1.5) {
         status = "Height Alert (Risk of Stunting)";
-      } else if (weight < (matchStandard.weightMedian - 1.5)) {
+      } else if (weightNum && weightNum < matchStandard.weightMedian - 1.5) {
         status = "Weight Alert (Underweight)";
       }
     }
@@ -89,10 +108,10 @@ export default function GrowthView({
     onAddMeasurement({
       babyId: activeBaby.id,
       date: date || new Date().toISOString().split("T")[0],
-      ageInMonths: Number(ageMonths),
-      weight: Number(weight),
-      height: Number(height),
-      headCircumference: Number(headCirc),
+      ageInMonths: ageNum,
+      weight: weightNum,
+      height: heightNum,
+      headCircumference: headNum,
       status,
       notes
     });
@@ -119,6 +138,13 @@ export default function GrowthView({
           onClick={() => {
             const today = new Date().toISOString().split("T")[0];
             setDate(today);
+            // Prefill theo hồ sơ bé: tuổi tính từ ngày sinh; cân nặng/chiều cao/vòng đầu
+            // lấy số đo gần nhất (nếu có) để bố mẹ chỉnh từ mốc đã biết.
+            setAgeMonths(computeAgeMonths(activeBaby.birthDate, today));
+            setWeight(latestMeasure ? latestMeasure.weight : "");
+            setHeight(latestMeasure ? latestMeasure.height : "");
+            setHeadCirc(latestMeasure ? latestMeasure.headCircumference : "");
+            setNotes("");
             setShowAddModal(true);
           }}
           className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-full text-xs font-bold transition-all shadow-md shadow-primary/20 cursor-pointer"
@@ -392,7 +418,10 @@ export default function GrowthView({
                     type="date"
                     required
                     value={date}
-                    onChange={(e) => setDate(e.target.value)}
+                    onChange={(e) => {
+                      setDate(e.target.value);
+                      if (activeBaby.birthDate) setAgeMonths(computeAgeMonths(activeBaby.birthDate, e.target.value));
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 focus:border-primary/40 focus:bg-white focus:outline-hidden rounded-xl px-3.5 py-2 text-sm text-slate-800 transition-colors"
                   />
                 </div>
@@ -401,10 +430,10 @@ export default function GrowthView({
                   <input
                     type="number"
                     min="0"
-                    max="24"
+                    max="36"
                     required
                     value={ageMonths}
-                    onChange={(e) => setAgeMonths(Number(e.target.value))}
+                    onChange={(e) => setAgeMonths(e.target.value === "" ? "" : Number(e.target.value))}
                     className="w-full bg-slate-50 border border-slate-200 focus:border-primary/40 focus:bg-white focus:outline-hidden rounded-xl px-3.5 py-2 text-sm text-slate-800 transition-colors"
                   />
                 </div>
@@ -417,8 +446,9 @@ export default function GrowthView({
                     type="number"
                     step="0.01"
                     required
+                    placeholder="kg"
                     value={weight}
-                    onChange={(e) => setWeight(Number(e.target.value))}
+                    onChange={(e) => setWeight(e.target.value === "" ? "" : Number(e.target.value))}
                     className="w-full bg-slate-50 border border-slate-200 focus:border-primary/40 focus:bg-white focus:outline-hidden rounded-xl px-2 py-2 text-sm text-slate-800 text-center transition-colors"
                   />
                 </div>
@@ -428,8 +458,9 @@ export default function GrowthView({
                     type="number"
                     step="0.1"
                     required
+                    placeholder="cm"
                     value={height}
-                    onChange={(e) => setHeight(Number(e.target.value))}
+                    onChange={(e) => setHeight(e.target.value === "" ? "" : Number(e.target.value))}
                     className="w-full bg-slate-50 border border-slate-200 focus:border-primary/40 focus:bg-white focus:outline-hidden rounded-xl px-2 py-2 text-sm text-slate-800 text-center transition-colors"
                   />
                 </div>
@@ -439,8 +470,9 @@ export default function GrowthView({
                     type="number"
                     step="0.1"
                     required
+                    placeholder="cm"
                     value={headCirc}
-                    onChange={(e) => setHeadCirc(Number(e.target.value))}
+                    onChange={(e) => setHeadCirc(e.target.value === "" ? "" : Number(e.target.value))}
                     className="w-full bg-slate-50 border border-slate-200 focus:border-primary/40 focus:bg-white focus:outline-hidden rounded-xl px-2 py-2 text-sm text-slate-800 text-center transition-colors"
                   />
                 </div>
