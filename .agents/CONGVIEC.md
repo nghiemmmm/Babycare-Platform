@@ -203,3 +203,426 @@ Khi `CareEvent` được tạo, hệ thống tự động đồng bộ sang các
 ### 📌 Giai đoạn 3 (Nâng cao)
 * [ ] Cân bằng khối lượng công việc (Workload Visibility) giữa các thành viên.
 * [ ] Tự động chuyển giao task (Escalation) cho người dự phòng (Backup Caregiver) khi người chính không phản hồi.
+
+Các loại thông tin và nhiệm vụ caregiver phải quản lý
+💊 Medication
+   └─ Thuốc gì, liều lượng, thời gian uống, đã uống/chưa uống
+
+📅 Appointments
+   └─ Lịch khám, giờ khám, bác sĩ, địa điểm
+
+❤️ Symptoms / Health status
+   └─ Triệu chứng, thay đổi sức khỏe, tình trạng hằng ngày
+
+📈 Health progress
+   └─ Cân nặng, huyết áp, chỉ số sức khỏe, tiến triển bệnh
+
+🍽️ Nutrition
+   └─ Bữa ăn, lượng ăn/uống, chế độ dinh dưỡng
+
+🛏️ Daily care activities
+   └─ Ăn uống, ngủ nghỉ, vệ sinh, vận động...
+
+📄 Medical documents
+   └─ Hồ sơ bệnh án, kết quả xét nghiệm, đơn thuốc
+
+📝 Care notes
+   └─ Ghi chú những thay đổi hoặc sự kiện quan trọng
+
+👥 Caregiver coordination
+   └─ Ai đang chăm sóc, ai phụ trách nhiệm vụ nào,
+      cần bàn giao thông tin gì
+
+💬 Communication
+   └─ Trao đổi thông tin giữa các caregiver
+      và với healthcare providers
+
+Centralized Information Management — Quản lý thông tin tập trung
+❤️ Symptoms
+   └─ Triệu chứng hiện tại
+   └─ Triệu chứng mới xuất hiện
+   └─ Mức độ thay đổi theo thời gian
+
+💊 Medication
+   └─ Thuốc đang sử dụng
+   └─ Liều lượng
+   └─ Thời điểm sử dụng
+   └─ Phản ứng / thay đổi sau khi dùng
+
+📈 Health Progress
+   └─ Các chỉ số sức khỏe
+   └─ Thay đổi tình trạng theo thời gian
+   └─ Xu hướng cải thiện / xấu đi
+
+📅 Appointments
+   └─ Lịch khám
+   └─ Kết quả / thông tin cần theo dõi
+   └─ Những việc cần thực hiện sau lần khám
+   Thứ 2
+↓
+Symptoms: đau mức độ 6/10
+
+Thứ 3
+↓
+Medication: bắt đầu sử dụng thuốc
+
+Thứ 4
+↓
+Symptoms: đau 4/10
+
+Thứ 5
+↓
+Symptoms: đau 2/10
+
+Thứ 6
+↓
+Appointment
+↓
+Caregiver có thể cung cấp diễn biến cho bác sĩ
+caregiver không chỉ ghi nhận một sự kiện riêng lẻ, mà có thể hình thành một bức tranh về diễn biến sức khỏe theo thời gian.
+Theo dõi Health Progress
+
+Caregiver không chỉ cần biết các nhiệm vụ phải thực hiện, mà còn phải theo dõi diễn biến sức khỏe theo thời gian.
+
+
+
+entralized information management” không chỉ là lưu dữ liệu vào một app, mà là giải quyết tình trạng thông tin chăm sóc bị phân tán giữa nhiều người, nhiều công cụ và nhiều định dạng.
+
+2. Centralized Information Management — Quản lý thông tin tập trung
+
+Vấn đề: thông tin chăm sóc bị phân mảnh
+
+Trong một gia đình có nhiều caregiver, mỗi người có thể tự quản lý thông tin theo cách khác nhau:
+
+Mom
+ └── Messenger / Zalo
+      └── "Hôm nay mẹ đã uống thuốc chưa?"
+
+Dad
+ └── Notes / giấy
+      └── Ghi chú tình trạng sức khỏe
+
+Grandma
+ └── Memory
+      └── Nhớ các thông tin cần chăm sóc
+
+Appointments
+ └── Calendar
+      └── Lịch khám
+
+Medical documents
+ └── Phone / Google Drive / Files
+      └── Kết quả xét nghiệm, đơn thuốc...
+
+Điều này tạo ra một vấn đề lớn:
+
+Không có một “single source of truth” cho toàn bộ quá trình chăm sóc.
+
+Ví dụ:
+
+Mom biết → thuốc đã uống
+Dad biết → lịch khám ngày mai
+Grandma biết → hôm nay sức khỏe có thay đổi
+             ↓
+        Nhưng thông tin không được
+        tập trung ở một nơi
+
+Khi cần biết “Tình trạng hiện tại của người được chăm sóc là gì?”, caregiver có thể phải hỏi nhiều người hoặc tìm kiếm ở nhiều nơi.
+
+CareMobi giải quyết như thế nào?
+
+CareMobi đưa những thông tin quan trọng về một không gian quản lý chung:
+
+                    CareMobi
+                       │
+       ┌───────────────┼────────────────┐
+       ↓               ↓                ↓
+   Calendar          Health            Files
+   /Tasks           Progress           /Docs
+       │               │                │
+       ↓               ↓                ↓
+ Appointments      Symptoms         Medical records
+ Tasks             Health data      Prescriptions
+ Reminders         Progress         Test results
+
+Thay vì:
+
+Messenger + Notes + Calendar + Files + Memory
+                    ↓
+              ❌ Phân tán
+
+thì:
+
+              CareMobi
+                  ↓
+      ┌─────────────────────┐
+      │  Care information   │
+      │  Care tasks         │
+      │  Health progress    │
+      │  Documents          │
+      │  Appointments       │
+      └─────────────────────┘
+                  ↓
+          ✅ Tập trung
+Giá trị thực sự nằm ở đâu?
+
+Có 3 lợi ích chính:
+
+1. Dễ tìm kiếm thông tin
+
+Caregiver không phải nhớ:
+
+“Thông tin này nằm trong Messenger hay trong Notes?”
+
+Mà có thể tìm trong một hệ thống chăm sóc chung.
+
+2. Giảm mất mát thông tin khi bàn giao
+
+Ví dụ:
+
+Mom chăm sóc buổi sáng
+        ↓
+Ghi nhận thông tin
+        ↓
+CareMobi
+        ↓
+Dad tiếp quản buổi chiều
+        ↓
+Biết được:
+- Đã uống thuốc chưa
+- Đã ăn chưa
+- Tình trạng sức khỏe
+- Có appointment nào
+- Có task nào cần làm
+
+Điều này đặc biệt quan trọng khi nhiều người cùng tham gia chăm sóc.
+
+3. Tạo shared context giữa các caregiver
+
+Thay vì mỗi caregiver có một “phiên bản thông tin” riêng:
+
+Mom's information
+Dad's information
+Grandma's information
+        ↓
+       ❌
+
+CareMobi hướng tới:
+
+             Shared Care Information
+                       ↓
+          ┌────────────┼────────────┐
+          ↓            ↓            ↓
+         Mom          Dad        Grandma
+
+Mọi người cùng dựa trên một nguồn thông tin chung để phối hợp chăm sóc.
+
+
+
+
+Medication + Symptoms không chỉ là hai loại dữ liệu được ghi lại, mà giá trị chính nằm ở việc liên kết chúng để caregiver cùng theo dõi diễn biến sức khỏe.
+
+5. Theo dõi Medication + Symptoms
+
+Trong quá trình chăm sóc, caregiver cần biết đồng thời:
+
+💊 Medication
+   ├── Đang sử dụng thuốc gì?
+   ├── Liều lượng bao nhiêu?
+   ├── Khi nào sử dụng?
+   └── Đã sử dụng hay chưa?
+
+🩺 Symptoms
+   ├── Triệu chứng gì?
+   ├── Mức độ như thế nào?
+   ├── Xuất hiện khi nào?
+   └── Có thay đổi theo thời gian không?
+
+❤️ Health Information
+   ├── Tình trạng sức khỏe
+   ├── Các chỉ số liên quan
+   └── Những thay đổi đáng chú ý
+Điểm quan trọng: liên kết Medication ↔ Symptoms
+
+Ví dụ:
+
+        Medication
+             ↓
+       Uống thuốc
+             ↓
+      Theo dõi Symptoms
+             ↓
+   ┌─────────┴─────────┐
+   ↓                   ↓
+Symptoms giảm      Symptoms không giảm
+   ↓                   ↓
+Theo dõi tiếp       Cần chú ý / follow-up
+
+Như vậy, caregiver có thể theo dõi diễn biến trước và sau khi sử dụng medication, thay vì chỉ ghi nhận riêng lẻ từng thông tin.
+
+Vấn đề khi có nhiều caregiver
+
+Nếu không có hệ thống chung:
+
+Mom
+ └── Ghi medication vào Notes
+
+Dad
+ └── Ghi symptoms vào Messenger
+
+Grandma
+ └── Nhớ tình trạng bằng trí nhớ
+
+Khi đó:
+
+        ❌ Information fragmented
+                   ↓
+      Không biết thông tin nào mới nhất
+                   ↓
+      Khó bàn giao giữa các caregiver
+                   ↓
+      Dễ bỏ sót hoặc ghi nhận trùng lặp
+
+CareMobi chuyển thành:
+
+                    CareMobi
+                       │
+          ┌────────────┼────────────┐
+          ↓            ↓            ↓
+      Medication    Symptoms    Health Info
+          │            │            │
+          └────────────┼────────────┘
+                       ↓
+                Shared Information
+                       ↓
+          ┌────────────┼────────────┐
+          ↓            ↓            ↓
+         Mom          Dad        Grandma
+Ý nghĩa thực tế
+
+Ví dụ Mom chăm sóc buổi sáng, sau đó Dad tiếp quản buổi tối:
+
+08:00 — Mom
+↓
+Medication: đã uống
+Symptoms: ho nhẹ
+↓
+        CareMobi
+↓
+20:00 — Dad
+↓
+Xem lại:
+- Thuốc đã uống
+- Triệu chứng buổi sáng
+- Tình trạng hiện tại
+
+Dad không cần hỏi lại Mom hoặc dựa vào trí nhớ, vì thông tin đã được ghi nhận trong hệ thống chung.
+
+6. Calendar / Appointment Tracking
+
+Vấn đề:
+Caregiver phải theo dõi nhiều lịch hẹn và hoạt động chăm sóc:
+
+📅 Doctor appointment
+🏥 Hospital visit
+💊 Medication schedule
+🧪 Lab / test
+👨‍⚕️ Follow-up appointment
+📝 Other care activities
+
+Nếu mỗi người tự quản lý lịch của mình:
+
+Mom → Google Calendar
+Dad → Notes
+Grandma → nhớ trong đầu
+        ↓
+❌ Không có lịch chăm sóc chung
+
+Có thể xảy ra tình huống:
+
+Monday
+   ↓
+Doctor appointment
+   ↓
+Mom biết
+   ↓
+Dad không biết
+   ↓
+Không ai sắp xếp người đưa đi
+CareMobi giải quyết như thế nào?
+
+CareMobi đưa appointment và calendar vào cùng không gian chăm sóc, giúp thông tin về lịch hẹn trở thành một phần của quá trình care coordination:
+
+                    CareMobi
+                       │
+                    Calendar
+                       │
+          ┌────────────┼────────────┐
+          ↓            ↓            ↓
+      Appointment    Tasks       Reminders
+          │            │            │
+          ↓            ↓            ↓
+       Khi nào?      Làm gì?      Nhắc ai?
+          │            │            │
+          └────────────┼────────────┘
+                       ↓
+              Caregiver coordination
+
+Ví dụ:
+
+📅 10/09 — 09:00
+Doctor Appointment
+
+        ↓
+
+CareMobi
+
+        ↓
+
+Mom ────── biết lịch
+Dad ────── biết lịch
+        ↓
+Có thể phối hợp:
+- Ai đưa đi?
+- Ai đi cùng?
+- Cần chuẩn bị tài liệu gì?
+- Sau appointment cần làm gì?
+Tại sao Appointment Tracking lại quan trọng?
+
+Appointment là một mốc thời gian quan trọng trong quá trình chăm sóc.
+
+Nó có thể kết nối nhiều hoạt động khác:
+
+                 Appointment
+                      │
+          ┌───────────┼───────────┐
+          ↓           ↓           ↓
+      Preparation   Attendance   Follow-up
+          │           │           │
+          ↓           ↓           ↓
+     Documents      Caregiver    Medication
+     Medical info   Transport    New tasks
+
+Ví dụ:
+
+Appointment
+     ↓
+Khám bác sĩ
+     ↓
+Bác sĩ thay đổi medication
+     ↓
+Caregiver cập nhật medication
+     ↓
+Theo dõi symptoms
+     ↓
+Health progress
+
+Như vậy, Calendar không đứng độc lập mà có thể trở thành điểm kết nối giữa:
+
+Appointment → Care Task → Medication → Symptoms → Health Progress
+
+Bằng chứng từ nghiên cứu
+
+Trong khảo sát 51 người dùng, appointment/calendar tracking có 32 lượt lựa chọn, là tính năng được đánh giá cao nhất trong số các chức năng được hỏi; tiếp theo là health progress monitoring (30) và file storage (20).
+
+Điều này khá đáng chú ý: caregiver đánh giá cao khả năng quản lý thời gian và lịch chăm sóc, chứ không chỉ các chức năng theo dõi sức khỏe.

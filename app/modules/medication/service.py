@@ -207,8 +207,12 @@ class MedicationService:
                     )
                 )
 
-        # Sắp xếp theo giờ uống
-        today_items.sort(key=lambda x: x.scheduled_time)
+        # Sắp xếp cữ thuốc: Cữ chưa uống / sắp đến lịch (pending, snoozed) đẩy lên trên; cữ đã uống / bỏ qua (taken, skipped) đẩy xuống dưới
+        def _dose_sort_key(item: TodayDoseItem):
+            is_completed = 1 if item.status in ["taken", "skipped"] else 0
+            return (is_completed, item.scheduled_time)
+
+        today_items.sort(key=_dose_sort_key)
         return today_items
 
     # =========================================================================
@@ -253,6 +257,30 @@ class MedicationService:
             )
         except Exception as e:
             logger.warning(f"Failed to sync legacy medication log: {e}")
+
+        # Tự động đồng bộ cữ uống thuốc sang Active Health Episode (nếu bé đang có đợt theo dõi mở)
+        if log_in.status == "taken":
+            try:
+                from app.modules.health_records.repository import HealthEpisodeRepository, HealthEventRepository
+                ep_repo = HealthEpisodeRepository(baby_id)
+                active_ep = ep_repo.get_active_episode()
+                if active_ep and active_ep.id:
+                    ev_repo = HealthEventRepository(baby_id, active_ep.id)
+                    ev_ref = ev_repo.db.collection(ev_repo.collection_name).document()
+                    ev_data = {
+                        "id": ev_ref.id,
+                        "episode_id": active_ep.id,
+                        "event_type": "medication",
+                        "recorded_at": log_in.taken_at or now_iso,
+                        "recorded_by_name": log_in.administered_by or "Phụ huynh",
+                        "action_or_med_name": f"{log_in.medication_name} ({log_in.dose_taken})",
+                        "descriptor": f"Đã uống cữ thuốc theo lịch",
+                        "notes": log_in.notes or "Cữ uống tự động ghi nhận từ Tủ thuốc"
+                    }
+                    ev_ref.set(ev_data)
+                    logger.info(f"[Medication] Auto-synced dose {log_in.medication_name} to active episode {active_ep.id}")
+            except Exception as sync_err:
+                logger.warning(f"[Medication] Non-critical auto-sync to health episode failed: {sync_err}")
 
         return created
 
