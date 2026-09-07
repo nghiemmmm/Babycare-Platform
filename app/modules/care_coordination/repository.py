@@ -19,42 +19,72 @@ class CareCoordinationRepository:
     # ─── 1. HANDOVER NOTES ───────────────────────────────────────────────────
 
     def get_handover_by_date(self, baby_id: str, date_str: str) -> Optional[dict]:
-        """Lấy lời dặn bàn giao của bé trong ngày cụ thể (YYYY-MM-DD)."""
+        """Lấy lời dặn bàn giao mới nhất của bé trong ngày cụ thể (YYYY-MM-DD)."""
+        notes = self.list_handovers_by_date(baby_id, date_str)
+        return notes[0] if notes else None
+
+    def list_handovers_by_date(self, baby_id: str, date_str: str) -> List[dict]:
+        """Lấy toàn bộ danh sách lời dặn bàn giao của bé trong ngày (YYYY-MM-DD)."""
         db = get_firestore_db()
         docs = (
             db.collection(self.HANDOVER_COLLECTION)
             .where(filter=FieldFilter("baby_id", "==", baby_id))
             .where(filter=FieldFilter("date", "==", date_str))
-            .limit(1)
             .stream()
         )
+        items = []
         for doc in docs:
             d = doc.to_dict()
             d["id"] = doc.id
-            return d
-        return None
+            items.append(d)
+        
+        # Sắp xếp giảm dần theo thời gian tạo (mới nhất lên trên)
+        items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return items
+
+    def get_handover_by_id(self, note_id: str) -> Optional[dict]:
+        """Lấy chi tiết một lời dặn bàn giao theo ID."""
+        db = get_firestore_db()
+        doc = db.collection(self.HANDOVER_COLLECTION).document(note_id).get()
+        if not doc.exists:
+            return None
+        d = doc.to_dict()
+        d["id"] = doc.id
+        return d
+
+    def create_handover(self, data: dict) -> str:
+        """Tạo một lời dặn bàn giao mới trong ngày (không ghi đè)."""
+        db = get_firestore_db()
+        doc_id = f"ho_{uuid.uuid4().hex[:8]}"
+        created_at = data.get("created_at") or datetime.now(timezone.utc).isoformat()
+        db.collection(self.HANDOVER_COLLECTION).document(doc_id).set({
+            **data,
+            "created_at": created_at
+        })
+        return doc_id
+
+    def update_handover(self, note_id: str, updates: dict) -> bool:
+        """Cập nhật một lời dặn bàn giao."""
+        db = get_firestore_db()
+        doc_ref = db.collection(self.HANDOVER_COLLECTION).document(note_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            return False
+        doc_ref.update({
+            **updates,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        })
+        return True
+
+    def delete_handover(self, note_id: str) -> bool:
+        """Xóa một lời dặn bàn giao."""
+        db = get_firestore_db()
+        db.collection(self.HANDOVER_COLLECTION).document(note_id).delete()
+        return True
 
     def create_or_update_handover(self, data: dict) -> str:
         """Tạo mới hoặc cập nhật lời dặn bàn giao trong ngày."""
-        db = get_firestore_db()
-        baby_id = data.get("baby_id")
-        date_str = data.get("date")
-
-        existing = self.get_handover_by_date(baby_id, date_str)
-        if existing:
-            doc_id = existing["id"]
-            db.collection(self.HANDOVER_COLLECTION).document(doc_id).update({
-                **data,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            })
-            return doc_id
-        else:
-            doc_id = f"ho_{uuid.uuid4().hex[:8]}"
-            db.collection(self.HANDOVER_COLLECTION).document(doc_id).set({
-                **data,
-                "created_at": datetime.now(timezone.utc).isoformat()
-            })
-            return doc_id
+        return self.create_handover(data)
 
     # ─── 2. CARE TASKS ───────────────────────────────────────────────────────
 

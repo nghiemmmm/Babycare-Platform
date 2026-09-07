@@ -44,6 +44,13 @@ class HandoverNoteCreate(BaseModel):
     photo_urls: Optional[List[str]] = Field(default_factory=list)
 
 
+class HandoverNoteUpdate(BaseModel):
+    content: Optional[str] = None
+    recipient_name: Optional[str] = None
+    voice_note_url: Optional[str] = None
+    photo_urls: Optional[List[str]] = None
+
+
 class HandoverNoteResponse(BaseModel):
     id: str
     baby_id: str
@@ -209,6 +216,7 @@ class CareTimelineSummary(BaseModel):
     completed_tasks: int
     overdue_tasks: int
     handover_note: Optional[HandoverNoteResponse] = None
+    handover_notes: List[HandoverNoteResponse] = Field(default_factory=list)
     tasks: List[CareTaskResponse] = Field(default_factory=list)
     recent_events: List[CareEventResponse] = Field(default_factory=list)
     ai_summary_text: Optional[str] = None

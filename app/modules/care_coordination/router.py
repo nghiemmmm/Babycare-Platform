@@ -8,6 +8,7 @@ from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.schemas import UserRecord
 from app.modules.care_coordination.schemas import (
     HandoverNoteCreate,
+    HandoverNoteUpdate,
     HandoverNoteResponse,
     CareTaskCreate,
     CareTaskUpdate,
@@ -36,8 +37,18 @@ async def get_today_handover(
     date: Optional[str] = Query(None, description="Ngày cần tra cứu (YYYY-MM-DD), mặc định hôm nay"),
     current_user: UserRecord = Depends(get_current_user)
 ):
-    """Lấy lời dặn bàn giao trong ngày của bé từ phụ huynh."""
+    """Lấy lời dặn bàn giao mới nhất trong ngày của bé từ phụ huynh."""
     return service.get_today_handover(baby_id, current_user.uid, date)
+
+
+@router.get("/handover/list", response_model=List[HandoverNoteResponse])
+async def list_handovers(
+    baby_id: str = Query(..., description="Mã ID của bé"),
+    date: Optional[str] = Query(None, description="Ngày cần tra cứu (YYYY-MM-DD), mặc định hôm nay"),
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """Lấy toàn bộ danh sách lời dặn bàn giao trong ngày của bé."""
+    return service.get_today_handovers(baby_id, current_user.uid, date)
 
 
 @router.post("/handover", response_model=HandoverNoteResponse, status_code=status.HTTP_201_CREATED)
@@ -45,9 +56,29 @@ async def save_handover_note(
     note_in: HandoverNoteCreate,
     current_user: UserRecord = Depends(get_current_user)
 ):
-    """Tạo hoặc cập nhật lời dặn bàn giao buổi sáng cho người chăm sóc."""
+    """Tạo lời dặn bàn giao mới trong ngày cho người chăm sóc."""
     author_name = current_user.name or "Phụ huynh"
     return service.save_handover_note(note_in, current_user.uid, author_name)
+
+
+@router.put("/handover/{note_id}", response_model=HandoverNoteResponse)
+async def update_handover_note(
+    note_id: str = Path(..., description="Mã ID của lời dặn"),
+    note_in: HandoverNoteUpdate = ...,
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """Chỉnh sửa lời dặn bàn giao trong ngày."""
+    return service.update_handover_note(note_id, note_in, current_user.uid)
+
+
+@router.delete("/handover/{note_id}")
+async def delete_handover_note(
+    note_id: str = Path(..., description="Mã ID của lời dặn"),
+    current_user: UserRecord = Depends(get_current_user)
+):
+    """Xóa lời dặn bàn giao khỏi sổ theo dõi."""
+    service.delete_handover_note(note_id, current_user.uid)
+    return {"success": True, "message": "Đã xóa lời dặn thành công"}
 
 
 # ─── 2. CARE TASKS ───────────────────────────────────────────────────────────
